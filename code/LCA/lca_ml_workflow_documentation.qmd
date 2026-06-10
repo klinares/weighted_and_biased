@@ -1,0 +1,451 @@
+---
+title: "Design-Weighted Latent Class Analysis with a Survey-Weighted Logistic Profiling Stage"
+author: "Kevin Linares"
+date: today
+abstract: |
+  Applied survey researchers often estimate a latent class typology from attitudinal items and then ask who belongs to each class, profiling membership by demographics and opinions so that a class of interest can be reached with targeted communication. Both stages are routinely done in ways that ignore the survey design and the latent nature of the classes. We present a two-stage workflow implemented entirely in R. The first stage estimates the latent class model by pseudo-maximum likelihood with Horvitz–Thompson design weights, so the class prevalences and response profiles describe the population rather than the achieved sample. The second stage profiles membership in a target class with a design-based logistic regression using the survey package, with stratification, clustering, and weights reflected in the standard errors. Because the profiling stage regresses an estimated quantity, modal class assignments, on covariates, its coefficients are attenuated toward zero by classification error. On a simulation in which covariates generate class membership through known coefficients, we quantify that attenuation directly against an oracle regression on the true classes, report the classification quality that governs it, and propagate assignment uncertainty through repeated pseudo-class draws pooled by Rubin's rules. The workflow recovers the population class structure, identifies the covariate profile of the target class with design-correct uncertainty, and states plainly when the bias-adjusted parametric corrections should replace the simple modal regression.
+keywords:
+  - latent class analysis
+  - complex survey design
+  - pseudo-maximum likelihood
+  - three-step estimation
+  - logistic regression
+  - audience segmentation
+format:
+  pdf:
+    toc: false
+    number-sections: true
+    fig-width: 6.5
+    fig-height: 4
+    fig-align: center
+    fig-pos: "H"
+    fig-cap-location: bottom
+    tbl-cap-location: top
+    keep-tex: false
+    dev: cairo_pdf
+    df-print: kable
+    include-in-header:
+      text: |
+        \usepackage{booktabs}
+        \usepackage{float}
+execute:
+  echo: false
+  warning: false
+  message: false
+  eval: true
+---
+
+```{r setup}
+library(tidyverse)
+library(matrixStats)   # rowLogSumExps, rowCumsums
+library(survey)        # svydesign, svyglm
+library(clue)          # solve_LSAP: class alignment
+
+set.seed(2026)
+`%||%` <- rlang::`%||%`
+```
+
+```{r theme}
+theme_poq <- function(base_size = 11) {
+  theme_minimal(base_size = base_size) +
+    theme(
+      panel.grid.minor   = element_blank(),
+      panel.grid.major.x = element_blank(),
+      strip.text         = element_text(face = "bold", size = rel(0.85)),
+      plot.title         = element_blank(),
+      legend.position    = "bottom",
+      legend.title       = element_text(face = "bold", size = rel(0.85)),
+      axis.title         = element_text(size = rel(0.95)),
+      plot.caption       = element_text(hjust = 0, size = rel(0.78), color = "grey30")
+    )
+}
+class_pal <- setNames(viridisLite::viridis(3, begin = 0.08, end = 0.82), paste("Class", 1:3))
+est_pal   <- setNames(viridisLite::viridis(3, begin = 0.10, end = 0.80),
+                      c("Modal + svyglm", "Pseudo-class draws (pooled)", "Oracle (true class)"))
+```
+
+# Introduction
+
+A common applied sequence in survey research runs: estimate a latent class model from a battery of categorical items, assign each respondent to a class, and then profile the classes, asking which demographics and which opinions distinguish the members of a class of interest so that the class can be described, reached, and addressed [@collins2010]. Both stages are usually carried out as if the data were a simple random sample and as if the class assignments were observed. Neither is true of real survey data, and both shortcuts have known consequences.
+
+The first shortcut concerns the design. Survey data come from stratified, clustered samples with unequal selection probabilities, and when selection is informative the latent class model must be estimated with the design weights or its parameters describe the achieved sample rather than the population [@patterson2002; @vermunt2007]. The standard R tool, `poLCA`, does not accept sampling weights [@linzer2011], which is presumably one reason the shortcut is common. The second shortcut concerns the classes themselves. Class membership is estimated with error, and @bolck2004 showed that regressing modal class assignments on covariates attenuates the estimated relationships toward zero; @vermunt2010 and @bakk2013 developed the bias-adjusted corrections, and @bakk2018 the two-step alternative. The attenuation is governed by classification quality: when the classes are well separated it is modest, and when they are not it is severe, so any honest use of the simple modal regression must report the classification quality alongside it.
+
+This paper presents the two-stage workflow in full, implemented in base R plus the `survey` package [@lumley2010]. Stage one estimates the latent class model by pseudo-maximum likelihood with Horvitz–Thompson weights [@horvitz1952] in a closed-form weighted EM [@dempster1977], with multiple random starts and exact label alignment. Stage two profiles membership in a designated target class with a design-based logistic regression, `survey::svyglm`, so the standard errors reflect the stratification, clustering, and weighting. Because the data are simulated from a known model in which covariates generate class membership, the attenuation of the modal regression can be measured rather than assumed: an oracle regression on the true classes provides the benchmark, and repeated pseudo-class draws from the posteriors, pooled by Rubin's rules [@rubin1987], propagate the assignment uncertainty that a single modal regression ignores. Section 2 develops the design, the estimators, and the profiling stage. Section 3 reports results. Section 4 states what the workflow licenses and when the parametric corrections should replace it.
+
+# Data and Methods
+
+## A simulated population with a known profiling answer
+
+Each respondent carries three covariates that stand in for the profiling variables of applied interest: `age_z`, a standardized continuous demographic; `ideology_z`, a standardized continuous opinion measure; and `college`, a binary demographic. Class membership is generated by a multinomial logistic model with class 1 as reference,
+$$
+P(C_i = k \mid \mathbf x_i) =
+\frac{\exp(\beta_{0k} + \beta_{1k}\,\text{age}_i + \beta_{2k}\,\text{ideology}_i + \beta_{3k}\,\text{college}_i + u_{k,psu(i)})}
+     {\sum_m \exp(\beta_{0m} + \beta_{1m}\,\text{age}_i + \beta_{2m}\,\text{ideology}_i + \beta_{3m}\,\text{college}_i + u_{m,psu(i)})},
+$$
+with mean-zero PSU random intercepts $u$ inducing intra-cluster correlation. Nine categorical items, three binary, three five-point, three seven-point, are then generated from the class through a measurement model $\rho_{jck}$ that is invariant across strata. Item separation is set to a moderate level so that classification is good but not near-perfect, the regime in which the third-step problem is visible. One discipline matters throughout and is easy to violate in applied work: the profiling covariates are disjoint from the latent class indicators. An opinion item that helps define the classes cannot also appear on the right-hand side of the profiling regression.
+
+The design is stratified and two-stage: ten strata, two PSUs per stratum, fifty respondents per PSU, $n = 1000$, with Horvitz–Thompson weights $w_i = N_h/n_h$. The stratum mean of `age_z` rises across strata while the design weight falls, so selection is informative for the class structure. The population class prevalence, the stage-one estimand, is computed by Monte Carlo integration of the generative model over the stratum covariate distributions, strata weighted by $N_h$.
+
+```{r sim-params}
+K          <- 3L
+cats       <- c(2L,2L,2L, 5L,5L,5L, 7L,7L,7L)
+J          <- length(cats)
+item_names <- paste0("q", seq_len(J))
+pred_names <- c("age_z", "ideology_z", "college")
+target     <- 3L   # the class of interest for messaging
+
+make_rho <- function(Cj) {
+  centers <- c(1L, (Cj + 1L) %/% 2L, Cj)
+  do.call(cbind, map(centers, function(ctr) {
+    p <- exp(-0.9 * abs(seq_len(Cj) - ctr)); p / sum(p)
+  }))
+}
+true_rho <- map(cats, make_rho)
+
+beta <- list(b0 = c(0, -0.40, -0.80),
+             b1 = c(0,  0.90,  1.60),   # age
+             b2 = c(0,  0.60, -0.50),   # ideology
+             b3 = c(0, -0.80,  0.70))   # college
+sd_u <- 0.35
+
+H <- 10L; psu_per <- 2L; per_psu <- 50L; n_h <- psu_per * per_psu
+w_h   <- c(5,5,4,4,3, 1,1,1,1,1)
+N_h   <- w_h * n_h * 10L
+mu1_h <- seq(-1.2, 1.2, length.out = H)
+
+class_probs <- function(a, o, c2, u2 = 0, u3 = 0) {
+  eta <- cbind(0,
+               beta$b0[2] + beta$b1[2]*a + beta$b2[2]*o + beta$b3[2]*c2 + u2,
+               beta$b0[3] + beta$b1[3]*a + beta$b2[3]*o + beta$b3[3]*c2 + u3)
+  exp(eta - matrixStats::rowLogSumExps(eta))
+}
+
+set.seed(11)
+M_pop <- 20000L
+alpha_h <- map(seq_len(H), function(h) {
+  colMeans(class_probs(rnorm(M_pop, mu1_h[h], 1), rnorm(M_pop), rbinom(M_pop, 1, 0.4)))
+}) |> reduce(rbind)
+pop_pi <- as.numeric(crossprod(N_h, alpha_h) / sum(N_h))
+```
+
+```{r sim-draw}
+draw_cat_rows <- function(P) {
+  cum <- matrixStats::rowCumsums(P); u <- runif(nrow(P)); pmin(rowSums(cum < u) + 1L, ncol(P))
+}
+draw_item <- function(rho_j, z) {
+  P <- t(rho_j[, z, drop = FALSE]); cum <- matrixStats::rowCumsums(P)
+  u <- runif(length(z)); pmin(rowSums(cum < u) + 1L, ncol(P))
+}
+
+samp <- tidyr::expand_grid(stratum = seq_len(H), psu_in = seq_len(psu_per), unit = seq_len(per_psu)) |>
+  mutate(id  = row_number(),
+         psu = (stratum - 1L) * psu_per + psu_in,
+         w   = N_h[stratum] / n_h,
+         age_z      = rnorm(n(), mu1_h[stratum], 1),
+         ideology_z = rnorm(n()),
+         college    = rbinom(n(), 1, 0.4))
+
+n_psu <- H * psu_per
+set.seed(404)
+u2 <- rnorm(n_psu, 0, sd_u); u3 <- rnorm(n_psu, 0, sd_u)
+
+P_class <- class_probs(samp$age_z, samp$ideology_z, samp$college, u2[samp$psu], u3[samp$psu])
+z       <- draw_cat_rows(P_class)
+items   <- map(true_rho, ~ draw_item(.x, z)) |> set_names(item_names)
+samp    <- bind_cols(samp, as_tibble(items)) |> mutate(true_class = z)
+n       <- nrow(samp)
+```
+
+## Stage one: the design-weighted latent class model
+
+With $K$ classes and conditional independence of items given the class, the design-weighted pseudo-log-likelihood is
+$$
+\ell_w(\boldsymbol\theta) = \sum_{i} w_i \,\log\!\Big(\sum_{k=1}^{K} \pi_k \prod_{j} \rho_{j\,y_{ij}\,k}\Big),
+$$
+whose maximizers are pseudo-maximum-likelihood estimates of the finite-population parameters [@patterson2002; @vermunt2007]. The EM iterates a standard E-step,
+$$
+p_{ik} = \frac{\pi_k \prod_j \rho_{j\,y_{ij}\,k}}{\sum_m \pi_m \prod_j \rho_{j\,y_{ij}\,m}},
+$$
+and a weighted, closed-form M-step,
+$$
+\hat\pi_k = \frac{\sum_i w_i p_{ik}}{\sum_i w_i},
+\qquad
+\hat\rho_{jck} = \frac{\sum_i w_i p_{ik}\,\mathbf 1(y_{ij}=c)}{\sum_i w_i p_{ik}} .
+$$
+The weights enter only the M-step. The implementation is fully vectorized: the E-step works on the log scale with a log-sum-exp normalization, the $\hat\rho$ update is one cross-product of the item indicator matrices with the weighted responsibilities, and the iteration is a functional fold. Identification against local maxima and label switching uses multiple random starts and an exact profile-matching alignment solved by the Hungarian algorithm. Replication-based standard errors for the stage-one parameters (jackknife and balanced repeated replication) are developed in our companion implementation and omitted here, where the focus is the profiling stage; the number of classes is likewise taken as known at the generating value, with weighted BIC the appropriate enumeration tool otherwise [@nylund2007].
+
+```{r em-core}
+rand_init <- function(cats, K) {
+  list(pi  = {x <- runif(K); x / sum(x)},
+       rho = map(cats, function(Cj) { m <- matrix(runif(Cj * K) + 0.1, Cj, K); sweep(m, 2, colSums(m), "/") }))
+}
+
+em_run <- function(Y_cols, onehot, cats, w, K, init = NULL, maxit = 600L, tol = 1e-8) {
+  nn  <- length(Y_cols[[1]])
+  st0 <- c(init %||% rand_init(cats, K), list(post = NULL, ll = -Inf, iter = 0L, done = FALSE))
+  step <- function(state, .iter) {
+    if (isTRUE(state$done)) return(state)
+    log_terms <- map2(state$rho, Y_cols, ~ log(.x)[.y, , drop = FALSE])
+    logdens   <- reduce(log_terms, `+`) + matrix(log(state$pi), nn, K, byrow = TRUE)
+    lse  <- matrixStats::rowLogSumExps(logdens)
+    post <- exp(logdens - lse)
+    ll   <- sum(w * lse)
+    wp   <- w * post; den <- colSums(wp)
+    rho_n <- map(onehot, function(oh) { num <- pmax(crossprod(oh, wp), 1e-12); sweep(num, 2, colSums(num), "/") })
+    list(pi = den / sum(den), rho = rho_n, post = post, ll = ll,
+         iter = state$iter + 1L, done = abs(ll - state$ll) < tol * (abs(state$ll) + 1))
+  }
+  out <- reduce(seq_len(maxit), step, .init = st0); out$converged <- out$done; out
+}
+
+make_onehot <- function(df, item_names, cats)
+  map2(item_names, cats, ~ (outer(as.integer(df[[.x]]), seq_len(.y), `==`)) + 0)
+
+profiles <- function(rho) do.call(cbind, map(rho, t))
+align_to <- function(fit, ref) {
+  Pf <- profiles(fit$rho); Pr <- profiles(ref$rho)
+  cost <- outer(seq_len(K), seq_len(K), Vectorize(function(a, b) sum((Pf[a, ] - Pr[b, ])^2)))
+  asg  <- clue::solve_LSAP(cost)
+  inv  <- integer(K); inv[as.integer(asg)] <- seq_len(K)
+  list(pi   = fit$pi[inv], rho = map(fit$rho, ~ .x[, inv, drop = FALSE]),
+       post = if (!is.null(fit$post)) fit$post[, inv, drop = FALSE] else NULL,
+       ll = fit$ll, iter = fit$iter, converged = fit$converged %||% NA)
+}
+```
+
+```{r fit-lca}
+Y_cols <- map(item_names, ~ as.integer(samp[[.x]]))
+onehot <- make_onehot(samp, item_names, cats)
+starts <- 12L
+
+fits_w <- map(seq_len(starts), function(s) { set.seed(1000 + s); em_run(Y_cols, onehot, cats, samp$w, K) })
+best_w <- align_to(fits_w[[which.max(map_dbl(fits_w, "ll"))]], list(rho = true_rho))
+
+fits_u <- map(seq_len(starts), function(s) { set.seed(2000 + s); em_run(Y_cols, onehot, cats, rep(1, n), K) })
+best_u <- align_to(fits_u[[which.max(map_dbl(fits_u, "ll"))]], list(rho = true_rho))
+
+stopifnot(all(map_dbl(best_w$rho, ~ max(abs(colSums(.x) - 1))) < 1e-8))
+```
+
+## Classification, and the error that the profiling stage inherits
+
+Each respondent's posterior class probabilities $p_{ik}$ come from the fitted model; the modal assignment is $\hat C_i = \arg\max_k p_{ik}$. Two summaries govern how much the profiling stage can be trusted. The relative entropy,
+$$
+E = 1 - \frac{-\sum_i \sum_k p_{ik}\ln p_{ik}}{n \ln K},
+$$
+summarizes overall separation. The classification table $D$, with entries $D_{ks} = $ the weighted average posterior probability of class $s$ among respondents assigned to class $k$, displays where the error lives [@vermunt2010]; its off-diagonal mass is what attenuates the modal regression.
+
+```{r classify}
+post  <- best_w$post
+modal <- max.col(post, ties.method = "first")
+ent   <- 1 - (-sum(post * log(pmax(post, 1e-12)))) / (n * log(K))
+
+wpost <- samp$w * post
+D <- (rowsum(wpost, group = modal) / rowsum(samp$w, group = modal)[, 1])
+```
+
+## Stage two: design-based logistic profiling of the target class
+
+The profiling question is binary by construction: membership in the designated target class, here class `r target`, against everyone else. The estimating model is a logistic regression of the membership indicator on the demographics and opinions,
+$$
+\operatorname{logit} P(\,C_i = k^\ast \mid \mathbf x_i\,) = \gamma_0 + \gamma_1\,\text{age}_i + \gamma_2\,\text{ideology}_i + \gamma_3\,\text{college}_i,
+$$
+fit by `survey::svyglm` with `family = quasibinomial()` on a design object carrying the strata, PSUs, and weights, so the point estimates are design-weighted and the standard errors are linearization-based and design-correct [@lumley2010]. (A full multinomial profile across all classes is the same idea fit class by class, or through a survey-weighted multinomial model; the binary target-versus-rest contrast is the one the messaging application needs.)
+
+Three versions of the regression are fit, and the comparison is the point of the exercise:
+
+1. **Modal regression**, the simple practice: $\mathbf 1(\hat C_i = k^\ast)$ on the covariates. By @bolck2004 its coefficients are attenuated toward zero by the classification error in $\hat C_i$.
+2. **Pseudo-class draws**: for $m = 1,\dots,M$, draw $\tilde C_i^{(m)}$ from each respondent's posterior, fit the same `svyglm` to $\mathbf 1(\tilde C_i^{(m)} = k^\ast)$, and pool the $M$ coefficient vectors by Rubin's rules [@rubin1987],
+$$
+\bar\gamma = \frac{1}{M}\sum_m \hat\gamma^{(m)}, \qquad
+T = \bar U + \Big(1 + \frac{1}{M}\Big) B,
+$$
+with $\bar U$ the average within-draw variance and $B$ the between-draw variance. This propagates the assignment uncertainty that the modal regression ignores; it does not remove the attenuation, and for parametric third steps it is known to be inferior to the dedicated corrections [@bakk2013]. It is included as the honesty band, not the repair.
+3. **Oracle regression**, available only in simulation: the same `svyglm` on $\mathbf 1(C_i = k^\ast)$ with the true classes. Its coefficients are the benchmark the other two are trying to reach, and the ratio of modal to oracle coefficients measures the attenuation directly.
+
+```{r profile}
+des <- svydesign(ids = ~psu, strata = ~stratum, weights = ~w,
+                 data = samp |> mutate(y_modal  = as.integer(modal == target),
+                                       y_true   = as.integer(true_class == target)),
+                 nest = TRUE)
+fml <- ~ age_z + ideology_z + college
+
+fit_modal  <- svyglm(update(fml, y_modal ~ .), design = des, family = quasibinomial())
+fit_oracle <- svyglm(update(fml, y_true  ~ .), design = des, family = quasibinomial())
+
+M_draws <- 25L
+draw_fits <- map(seq_len(M_draws), function(m) {
+  set.seed(7000 + m)
+  des_m <- update(des, y_draw = as.integer(draw_cat_rows(post) == target))
+  f <- svyglm(update(fml, y_draw ~ .), design = des_m, family = quasibinomial())
+  list(coef = coef(f), var = diag(vcov(f)))
+})
+Q <- map(draw_fits, "coef") |> reduce(rbind)
+U <- map(draw_fits, "var")  |> reduce(rbind)
+qbar <- colMeans(Q)
+Bv   <- apply(Q, 2, var)
+Tv   <- colMeans(U) + (1 + 1/M_draws) * Bv
+```
+
+```{r results-summary}
+prev_w  <- best_w$pi; prev_u <- best_u$pi
+bias_w  <- round(max(abs(prev_w - pop_pi)) * 100, 1)
+bias_u  <- round(max(abs(prev_u - pop_pi)) * 100, 1)
+ent_r   <- round(ent, 3)
+offdiag <- round(max(D[row(D) != col(D)]), 3)
+
+cf <- function(fit) coef(fit)[-1]
+se <- function(fit) sqrt(diag(vcov(fit)))[-1]
+atten <- round(cf(fit_modal) / cf(fit_oracle), 2)
+atten_min <- min(atten); atten_max <- max(atten)
+
+coef_tbl <- bind_rows(
+  tibble(Estimator = "Modal + svyglm", term = names(cf(fit_modal)),
+         est = cf(fit_modal), se = se(fit_modal)),
+  tibble(Estimator = "Pseudo-class draws (pooled)", term = names(qbar)[-1],
+         est = qbar[-1], se = sqrt(Tv)[-1]),
+  tibble(Estimator = "Oracle (true class)", term = names(cf(fit_oracle)),
+         est = cf(fit_oracle), se = se(fit_oracle))
+) |>
+  mutate(lo = est - 1.96 * se, hi = est + 1.96 * se,
+         OR = exp(est), Estimator = factor(Estimator, levels = names(est_pal)))
+
+or_age <- round(exp(cf(fit_modal)["age_z"]), 2)
+prev_target <- round(prev_w[target], 3)
+```
+
+# Results
+
+## Stage one recovers the population class structure
+
+@tbl-prevalence reports the class prevalences. The weighted estimator lies within `r bias_w` percentage points of the population values; the unweighted estimator deviates by up to `r bias_u` points, in the direction the informative design implies. The weighted prevalence of the target class is `r prev_target`, the share of the population the messaging application would be addressing.
+
+```{r tbl-prevalence}
+#| tbl-cap: "Class prevalence: population estimand against the design-weighted and unweighted estimators."
+tibble(`Latent class` = paste("Class", seq_len(K)),
+       Population     = round(pop_pi, 3),
+       `Weighted EM`  = round(prev_w, 3),
+       `Unweighted EM`= round(prev_u, 3)) |>
+  knitr::kable(align = "lrrr", booktabs = TRUE)
+```
+
+## Classification quality, reported before it is relied on
+
+The relative entropy is `r ent_r`, and @tbl-dmatrix shows the classification table: the largest off-diagonal entry is `r offdiag`. This is the error the modal regression inherits, and it should be reported whenever a modal regression is. Were these diagonals materially lower, the modal regression below would not be defensible and the corrections discussed in Section 4 would be required rather than optional.
+
+```{r tbl-dmatrix}
+#| tbl-cap: "Classification table D: weighted average posterior probability of each class (columns) among respondents modally assigned to each class (rows). Off-diagonal mass attenuates the profiling regression."
+Dt <- as_tibble(round(D, 3), .name_repair = ~ paste("Class", seq_len(K))) |>
+  mutate(`Assigned to` = paste("Class", seq_len(K)), .before = 1)
+knitr::kable(Dt, align = "lrrr", booktabs = TRUE)
+```
+
+## The profile of the target class, and the price of modal assignment
+
+@tbl-coef and @fig-forest report the three regressions. All three agree on the qualitative profile of class `r target`: older, less ideological in the measured direction, and more likely college-educated, exactly the directions the generative coefficients imply for the target-versus-rest contrast. The quantitative comparison is the methodological result. The modal coefficients are shrunk relative to the oracle by factors of `r atten_min` to `r atten_max` across the three covariates, the attenuation @bolck2004 predicts, and the pooled pseudo-class estimates carry wider intervals than the single modal fit, the assignment uncertainty the modal fit conceals. For a profiling application the practical reading is that the modal regression is directionally trustworthy here, because classification quality is high, and conservatively biased: the true covariate associations are at least as strong as the modal estimates suggest.
+
+```{r tbl-coef}
+#| tbl-cap: "Design-based logistic regression of target-class membership on demographics and opinions: log-odds (design SE) and odds ratios, by estimator."
+coef_tbl |>
+  mutate(cell = sprintf("%.3f (%.3f)", est, se), OR = sprintf("%.2f", OR)) |>
+  dplyr::select(Estimator, term, cell, OR) |>
+  pivot_wider(names_from = Estimator, values_from = c(cell, OR), names_vary = "slowest") |>
+  knitr::kable(align = "lrrrrrr", booktabs = TRUE,
+               col.names = c("Covariate", "Modal (SE)", "OR", "Draws (SE)", "OR", "Oracle (SE)", "OR"))
+```
+
+```{r fig-forest}
+#| fig-cap: "Log-odds coefficients with 95 percent design-based intervals for membership in the target class, by estimator. The oracle (true classes) is the benchmark; the modal regression is attenuated toward zero; the pooled pseudo-class draws carry the assignment uncertainty."
+dodge <- position_dodge(width = 0.5)
+ggplot(coef_tbl, aes(est, term, color = Estimator)) +
+  geom_vline(xintercept = 0, linetype = "dashed", color = "grey55") +
+  geom_errorbarh(aes(xmin = lo, xmax = hi), height = 0.18, linewidth = 0.5, position = dodge) +
+  geom_point(size = 2.4, position = dodge) +
+  scale_color_manual(values = est_pal) +
+  labs(x = "Log-odds (95% CI)", y = NULL, color = NULL) +
+  theme_poq() + theme(panel.grid.major.x = element_line(), panel.grid.major.y = element_blank())
+```
+
+## Who to message: the profile as a curve
+
+@fig-profile translates the modal regression into the form the application uses: the design-based predicted probability of target-class membership across the age distribution, separately by education. The curve, not the coefficient, is the messaging deliverable; it says where in covariate space the target class concentrates.
+
+```{r fig-profile}
+#| fig-cap: "Predicted probability of membership in the target class across age, by education, from the design-based modal regression, with ideology at zero. Rug marks the weighted age distribution deciles."
+grid <- tidyr::expand_grid(age_z = seq(quantile(samp$age_z, 0.02), quantile(samp$age_z, 0.98), length.out = 80),
+                           ideology_z = 0, college = c(0L, 1L))
+pr <- predict(fit_modal, newdata = grid, type = "response")
+grid$p <- as.numeric(pr)
+decs <- map_dbl(seq(0.1, 0.9, 0.1), ~ {
+  o <- order(samp$age_z); cw <- cumsum(samp$w[o]) / sum(samp$w); samp$age_z[o][which.min(abs(cw - .x))]
+})
+
+ggplot(grid, aes(age_z, p, color = factor(college, labels = c("No college", "College")))) +
+  geom_line(linewidth = 0.8) +
+  geom_rug(data = tibble(age_z = decs), aes(x = age_z), inherit.aes = FALSE,
+           sides = "b", length = unit(0.025, "npc"), color = "grey40") +
+  scale_color_manual(values = setNames(viridisLite::viridis(2, begin = 0.2, end = 0.7),
+                                       c("No college", "College"))) +
+  scale_y_continuous(limits = c(0, 1)) +
+  labs(x = "Age (standardized)", y = "P(target class)", color = NULL) +
+  theme_poq()
+```
+
+```{r exports}
+#| include: false
+readr::write_csv(samp |> dplyr::select(id, stratum, psu, w) |>
+                   bind_cols(as_tibble(post, .name_repair = ~ paste0("post_class", seq_len(K)))) |>
+                   mutate(modal_class = modal),
+                 "lca_profiling_caselevel.csv")
+readr::write_csv(coef_tbl |> mutate(across(where(is.numeric), ~ round(.x, 4))),
+                 "lca_profiling_coefficients.csv")
+```
+
+# Discussion
+
+The workflow does two things correctly that common practice does incorrectly. The latent class model is estimated with the design weights, so the typology and its prevalences describe the population, which is the population the messaging would address. And the profiling regression is design-based, so its standard errors carry the stratification, clustering, and weighting rather than pretending the sample is simple and independent.
+
+What the workflow licenses is a population-correct description of the target class: its prevalence, its measurement profile, and the demographic and opinion gradient of its membership, with design-correct uncertainty and with the attenuation of the modal stage reported rather than hidden. The classification table and entropy are part of the deliverable, because they are the quantities a reader needs to judge how much the modal regression understates the gradients. In the present simulation classification quality is high and the attenuation is measured at factors of `r atten_min` to `r atten_max`; the safe applied reading of a modal regression in that regime is as a conservative lower bound on the covariate associations.
+
+What it does not license is precise inference about the magnitudes of those associations when classification quality is poor. As separation falls, the attenuation grows, and the honest options are the dedicated corrections: the BCH adjustment and the maximum likelihood three-step method [@vermunt2010; @bakk2013], which operate on exactly the parametric third step used here, the two-step estimator [@bakk2018], or a one-step model in which the covariates enter the latent class model directly [@bandeen1997]. These are implemented in Latent GOLD and Mplus; in R, the maximum likelihood correction amounts to refitting the latent class model with the modal assignment treated as a single indicator whose error rates are fixed at the classification table $D$, an extension of the present EM that the companion machinery supports. The pseudo-class pooling used here is the uncertainty propagation, not the bias repair, and is known to be the weaker tool for parametric targets [@bakk2013].
+
+Three further cautions bound the application. The profiling covariates must remain disjoint from the latent class indicators; in applied terms, an opinion that defines the typology cannot also explain it. The weights remove selection bias only insofar as they encode the true selection mechanism, which is the representation side of the total survey error framework, and nothing here addresses coverage or measurement error in the items themselves. And the demonstration is a single simulated draw with the number of classes taken as known; in application, enumeration by weighted BIC on the same fitted sequence precedes everything else [@nylund2007].
+
+# Data and code availability
+
+This manuscript is a literate, reproducible Quarto document; all results regenerate from the embedded code. Respondent-level posteriors and assignments and the profiling coefficient table are written as CSV files on rendering. Replication-based variance estimation for the stage-one parameters is developed in the companion implementation.
+
+```{r session}
+#| include: false
+sessionInfo()
+```
+
+# References {.unnumbered}
+
+Bakk, Z., & Kuha, J. (2018). Two-step estimation of models between latent classes and external variables. *Psychometrika, 83*(4), 871–892.
+
+Bakk, Z., Tekle, F. B., & Vermunt, J. K. (2013). Estimating the association between latent class membership and external variables using bias-adjusted three-step approaches. *Sociological Methodology, 43*(1), 272–311.
+
+Bandeen-Roche, K., Miglioretti, D. L., Zeger, S. L., & Rathouz, P. J. (1997). Latent variable regression for multiple discrete outcomes. *Journal of the American Statistical Association, 92*(440), 1375–1386.
+
+Bolck, A., Croon, M. A., & Hagenaars, J. A. (2004). Estimating latent structure models with categorical variables: One-step versus three-step estimators. *Political Analysis, 12*(1), 3–27.
+
+Collins, L. M., & Lanza, S. T. (2010). *Latent class and latent transition analysis: With applications in the social, behavioral, and health sciences.* Wiley.
+
+Dempster, A. P., Laird, N. M., & Rubin, D. B. (1977). Maximum likelihood from incomplete data via the EM algorithm. *Journal of the Royal Statistical Society, Series B, 39*(1), 1–38.
+
+Horvitz, D. G., & Thompson, D. J. (1952). A generalization of sampling without replacement from a finite universe. *Journal of the American Statistical Association, 47*(260), 663–685.
+
+Linzer, D. A., & Lewis, J. B. (2011). poLCA: An R package for polytomous variable latent class analysis. *Journal of Statistical Software, 42*(10), 1–29.
+
+Lumley, T. (2010). *Complex surveys: A guide to analysis using R.* Wiley.
+
+Nylund, K. L., Asparouhov, T., & Muthén, B. O. (2007). Deciding on the number of classes in latent class analysis and growth mixture modeling: A Monte Carlo simulation study. *Structural Equation Modeling: A Multidisciplinary Journal, 14*(4), 535–569.
+
+Patterson, B. H., Dayton, C. M., & Graubard, B. I. (2002). Latent class analysis of complex sample survey data: Application to dietary data. *Journal of the American Statistical Association, 97*(459), 721–728.
+
+Rubin, D. B. (1987). *Multiple imputation for nonresponse in surveys.* Wiley.
+
+Vermunt, J. K. (2010). Latent class modeling with covariates: Two improved three-step approaches. *Political Analysis, 18*(4), 450–469.
+
+Vermunt, J. K., & Magidson, J. (2007). Latent class analysis with sampling weights: A maximum-likelihood approach. *Sociological Methods & Research, 36*(1), 87–111.

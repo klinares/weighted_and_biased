@@ -1,0 +1,10 @@
+Estimator,term,est,se,lo,hi,OR
+Modal + svyglm,age_z,1.2332,0.1045,1.0284,1.438,3.4322
+Modal + svyglm,ideology_z,-0.8128,0.0903,-0.9897,-0.6358,0.4436
+Modal + svyglm,college,0.5473,0.2595,0.0386,1.056,1.7285
+Pseudo-class draws (pooled),age_z,1.2279,0.1009,1.0301,1.4257,3.414
+Pseudo-class draws (pooled),ideology_z,-0.8204,0.0887,-0.9941,-0.6466,0.4403
+Pseudo-class draws (pooled),college,0.5363,0.2532,0.0401,1.0325,1.7097
+Oracle (true class),age_z,1.2438,0.0991,1.0496,1.4381,3.4689
+Oracle (true class),ideology_z,-0.8717,0.0794,-1.0273,-0.7162,0.4182
+Oracle (true class),college,0.6012,0.2619,0.0878,1.1145,1.8243
