@@ -54,6 +54,8 @@ theme_set(theme_minimal(base_size = 11))
 set.seed(20140101)   # global seed; chunk-level seeds set where stochastic
 ```
 
+
+
 # Purpose and analytic framing
 
 This document specifies a reproducible pipeline for studying **how the policy topics and the sentiment in a politician's public commentary change over time**. The text-mining methods follow Silge & Robinson, *Text Mining with R: A Tidy Approach* (the tidytext book).
@@ -74,6 +76,8 @@ On real found-text data the ground truth is unknown, so you cannot tell whether 
 # Reproducibility: package installation
 
 This document renders to PDF through Quarto's built-in **Typst** engine, so no LaTeX distribution (TeX Live / tinytex) is required — `quarto render` compiles the PDF directly. It needs Quarto \>= 1.4 (Typst is bundled). Figures use a PNG device because Typst embeds raster and SVG images but not PDF figures.
+
+
 
 ```{r}
 #| label: install
@@ -98,9 +102,13 @@ install.packages(c("ellmer", "irr"))
 #  - Confirm the exact local tag from R with ellmer::models_ollama().
 ```
 
+
+
 # Simulation design (the data-generating process)
 
 All structural parameters live in one place so the simulation is fully specified and tunable.
+
+
 
 ```{r}
 #| label: dgp-params
@@ -123,9 +131,13 @@ topic_names <- c(
 )
 ```
 
+
+
 ## Topic vocabularies and sentence templates
 
 Each latent topic is a small bank of distinctive content words; overlap between banks is minimized so recovery is unambiguous (on real data, topics overlap and recovery is harder, a limitation noted in the Limitations section). Sentences are assembled from templates carrying realistic function-word noise so the downstream stop-word removal has something to do.
+
+
 
 ```{r}
 #| label: dgp-vocab
@@ -159,6 +171,8 @@ templates <- c(
 )
 ```
 
+
+
 ## Time-varying topic prevalence (ground truth)
 
 Each topic gets an unnormalized intensity as a smooth function of the year index $t = 0, 1, \dots$, mapped to a prevalence vector $\pi(t)$ via a softmax:
@@ -166,6 +180,8 @@ Each topic gets an unnormalized intensity as a smooth function of the year index
 $$\pi_k(t) = \frac{\exp(\eta_k(t))}{\sum_{j=1}^{K} \exp(\eta_j(t))} .$$
 
 Planted trajectories: **Economy** declining, **Healthcare** and **Climate** rising, **Immigration** spiking mid-period, **Security** with a later bump, **Education** roughly flat. These are the curves the pipeline must recover.
+
+
 
 ```{r}
 #| label: dgp-prevalence
@@ -218,6 +234,8 @@ truth_prevalence |>
         axis.text.x = element_text(angle = 45, hjust = 1))
 ```
 
+
+
 ## Time-varying sentiment / valence (ground truth)
 
 Sentiment is planted separately from topic, and **each topic gets its own tone trajectory** — some souring, some improving, some flat — so the per-topic sentiment shape is a genuine, discriminating signal to recover rather than one common trend shared by every topic. For a sentence on topic $k$ in year-index $t$, the latent valence is
@@ -225,6 +243,8 @@ Sentiment is planted separately from topic, and **each topic gets its own tone t
 $$m_k(t) = v_k + \delta_k (t - \bar t),$$
 
 with intercept $v_k$ and a **topic-specific** slope $\delta_k$. The sentence is drawn positive / neutral / negative from a softmax in $m_k(t)$; positive sentences append a word from a positive bank, negative ones from a negative bank. Both banks are chosen to live in the Bing and AFINN lexicons so the lexical measurement can recover them.
+
+
 
 ```{r}
 #| label: dgp-valence
@@ -287,9 +307,13 @@ valence_truth |>
         axis.text.x = element_text(angle = 45, hjust = 1))
 ```
 
+
+
 ## Generating the corpus
 
 Each post's topic mixture $\theta_d$ perturbs the year's prevalence vector on the log scale; each sentence draws a topic from $\theta_d$ and a valence from the topic-and-year valence probabilities. Construction is vectorized with `purrr` (no `for`/`while` loops).
+
+
 
 ```{r}
 #| label: dgp-generate
@@ -326,9 +350,13 @@ glue("Corpus (all comments): {nrow(corpus)} posts across ",
      "{min(dgp$years)}-{max(dgp$years)}.")
 ```
 
+
+
 # Text preprocessing with tidytext
 
 From here the code is **identical to what it would be on real data**: it operates on `corpus$text`, never on the hidden truth columns. Tokenization uses one-token-per-row form, drops stop words via an anti-join, and removes numeric tokens, following the tidytext book.
+
+
 
 ```{r}
 #| label: tokenize
@@ -343,6 +371,8 @@ glue("Vocabulary after cleaning: {n_distinct(tokens$word)} terms; ",
      "{nrow(tokens)} tokens.")
 ```
 
+
+
 ::: callout-warning
 ## Processing-error checkpoint
 
@@ -356,6 +386,8 @@ Before any model, tf-idf gives a transparent first look at how emphasis shifts. 
 $$\mathrm{tfidf}(w, y) = \mathrm{tf}(w, y) \cdot \log\frac{N}{\mathrm{df}(w)},$$
 
 where $\mathrm{tf}(w,y)$ is the count of term $w$ in year $y$, $N$ is the number of years, and $\mathrm{df}(w)$ is the number of years containing $w$. Terms that appear every year (low signal) are down-weighted; year-distinctive terms float to the top. The chunk counts terms by year, applies `bind_tf_idf()`, and plots the top six terms per year (book Ch. 3).
+
+
 
 ```{r}
 #| label: fig-tfidf
@@ -378,6 +410,8 @@ tokens |>
   theme(axis.text.y = element_text(size = 6))
 ```
 
+
+
 # Topic model 1: Latent Dirichlet Allocation (book Ch. 6)
 
 LDA's generative story is
@@ -391,6 +425,8 @@ with $\theta_d$ the document-topic mixture (gamma) and $\beta_k$ the topic-word 
 ## Choosing the number of topics
 
 $K$ is the key tuning parameter. The documented procedure is a held-out perplexity sweep plus interpretability review; it is shown but not executed in the render. We proceed with $K = 6$ because the simulation planted six topics; on real data, **choose** $K$ via this procedure, not by assumption.
+
+
 
 ```{r}
 #| label: lda-k-sweep
@@ -411,7 +447,11 @@ map_dfr(4:9, function(k) {
   labs(title = "Held-out perplexity by K (lower = better)")
 ```
 
+
+
 ## Fitting LDA and extracting topics
+
+
 
 ```{r}
 #| label: lda-fit
@@ -445,9 +485,13 @@ lda_beta |>
   labs(x = expression(beta), y = NULL, title = "LDA topic-term distributions")
 ```
 
+
+
 ## Aligning estimated topics to ground truth (Hungarian algorithm)
 
 Topic models return topics in arbitrary order. We align recovered topics to the planted ones by solving a linear assignment problem (Hungarian algorithm) on a term-overlap cost matrix.
+
+
 
 ```{r}
 #| label: align-lda
@@ -488,7 +532,11 @@ lda_topic_map <- lda_beta |>
 lda_topic_map
 ```
 
+
+
 ## LDA-based prevalence over time and validation
+
+
 
 ```{r}
 #| label: fig-lda-trend
@@ -526,6 +574,8 @@ lda_prev |>
   summarise(correlation = cor(est_prev, true_prev), .groups = "drop")
 ```
 
+
+
 # Topic model 2: Structural Topic Model (time-aware, recommended)
 
 LDA's post-hoc aggregation has no principled standard error on a trend. The **Structural Topic Model** lets topic prevalence depend on covariates; here, smoothly on year:
@@ -534,6 +584,8 @@ $$\theta_d \sim \mathrm{LogisticNormal}(\Gamma' x_d, \Sigma),
 \quad x_d = [1, s(\mathrm{year}_d)].$$
 
 This is the cleaner tool for "how do topics evolve over time," estimating the time effect jointly with the topics. STM extends beyond the SURV727 core toolkit. One processing wrinkle to record: `textProcessor()` applies tm's stop-word list and its own tokenizer, which differs slightly from the tidytext path above (`get_stopwords()`), so the LDA and STM vocabularies are close but not identical — a small processing-error source, not a bug.
+
+
 
 ```{r}
 #| label: stm-fit
@@ -604,7 +656,11 @@ stm_prev |>
         axis.text.x = element_text(angle = 45, hjust = 1, size = 6))
 ```
 
+
+
 The averaged-`theta` plot above uses one estimator shared with LDA, for comparability. The **formal** time effect comes from `estimateEffect`, which regresses each topic's prevalence on the year spline and returns a fitted curve with a 95% confidence band — the defensible way to state that a topic's share rose or fell rather than wobbled by chance. Below are the two non-monotone topics; the same call serves any topic.
+
+
 
 ```{r}
 #| label: fig-stm-effect
@@ -631,9 +687,13 @@ walk(sel, \(k)
        topics = k, xlab = "Year", main = label_for(k), printlegend = FALSE))
 ```
 
+
+
 How to read it: the solid line is the model's expected topic proportion at each year; the shaded band is the 95% CI. Where the band over one period does not overlap the level of another, the change is unlikely to be noise. Because `prevalence = ~ s(year)`, these curves can bend (capturing the spike and the bump) instead of being forced straight — which is why STM is the right tool for a non-linear time trend.
 
 Each document's dominant STM topic (used to condition sentiment in Section 8):
+
+
 
 ```{r}
 #| label: stm-dominant
@@ -644,6 +704,8 @@ doc_dominant <- stm_gamma |>
   ungroup() |>
   dplyr::select(doc_id, year, dominant_topic = planted_name)
 ```
+
+
 
 ## Recovery, measured on the natural scales
 
@@ -656,6 +718,8 @@ $$\mathrm{accuracy} = \frac{1}{N}\sum_{d=1}^{N} I(\hat{k}_d = k_d).$$
 **Prevalence MAE** is the mean absolute gap between recovered and realized topic shares across topic-years:
 
 $$\mathrm{MAE} = \frac{1}{KT}\sum_{k,t} |\hat{q}_{k,t} - q_{k,t}|.$$
+
+
 
 ```{r}
 #| label: recovery-metrics
@@ -687,6 +751,8 @@ glue("STM recovery -- dominant-topic accuracy = {percent(stm_accuracy, 0.1)}; ",
      "prevalence MAE = {round(stm_mae, 4)} share points.")
 ```
 
+
+
 What this tells you: a high accuracy means most posts were assigned to the right topic; a small MAE means the recovered yearly shares sit close to the realized ones. Together with the trajectory plots, these are the primary evidence that the pipeline recovered the planted structure — the correlations are supporting only.
 
 # Sentiment analysis (book Ch. 2 and Ch. 4)
@@ -694,6 +760,8 @@ What this tells you: a high accuracy means most posts were assigned to the right
 Sentiment is treated as an error-prone **measurement** of latent tone. We start with the reliable, fully reproducible lexicon method, then quantify its known failure mode (negation), then (Section 9) cross-check against a local LLM.
 
 The natural unit here is the **document (a paragraph)**, which the book notes works better than very large chunks. The Bing lexicon ships with tidytext and needs no license; AFINN/NRC require `textdata` plus a one-time acceptance, so the negation diagnostic below uses AFINN magnitudes when available and otherwise falls back to Bing (collapsed to +/-1), needing no `textdata` setup.
+
+
 
 ```{r}
 #| label: sentiment-bing
@@ -740,9 +808,13 @@ doc_sent_bing |>
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
 ```
 
+
+
 ## Sentiment by topic over time, validated against truth
 
 Joining each document's net sentiment to its dominant STM topic gives a sentiment trajectory per policy area. The lexical score (a signed word count) and the planted net valence (a probability difference) are on **different scales**, so we compare *shape*, not level: both are z-scored within topic, and recovery is judged by whether the estimated trajectory moves with the planted one. Because the planted slopes now differ across topics (some rising, some falling, some flat), this is a genuine per-topic test — a topic whose true tone improves should show a rising estimated trajectory, a souring one a falling trajectory.
+
+
 
 ```{r}
 #| label: fig-sent-topic
@@ -784,11 +856,15 @@ sent_topic |>
   summarise(correlation = cor(mean_net, net), .groups = "drop")
 ```
 
+
+
 A positive per-topic correlation means the lexical tone moved with the planted tone; a value near zero or negative flags a topic the lexicon failed to track — usually because that topic's posts carry few lexicon words, or because words from other topics leak into mixed documents (a "dominant topic" post still contains off-topic sentences). Read this as direction-of-trend recovery, not as a precise sentiment level.
 
 ## Negation diagnostic (book Ch. 4): how much does unigram sentiment misread?
 
 Unigram lexicons score "good" and "support" as positive even in "not good" or "never support." Tokenizing into bigrams and finding sentiment words preceded by a negator quantifies the exposure. It uses AFINN magnitudes when available and otherwise Bing (+/-1), so it runs with or without `textdata`.
+
+
 
 ```{r}
 #| label: afinn-available
@@ -837,6 +913,8 @@ if (nrow(negated) == 0) {
 }
 ```
 
+
+
 ::: callout-warning
 ## Lexicon caveats (stated by the book)
 
@@ -846,6 +924,8 @@ Lexicon sentiment is **unigram-based** and ignores qualifiers ("no good", "not t
 # Optional: AI-assisted module with a local model (Gemma via Ollama)
 
 You can run a local LLM through ellmer's Ollama backend, so no data leaves your machine and there is no API cost. LLMs can match or exceed crowd annotators on text-labeling tasks (Gilardi et al. 2023), but they remain error-prone measurements, so the two uses below — topic labeling and sentiment — are each cross-checked, never treated as truth. All AI chunks are `eval: false` so the PDF renders without Ollama running; flip to `eval: true` once `ollama serve` is up and the model is pulled. Swapping to a hosted model is a one-line change (`chat_anthropic()`, `chat_openai()`, ...).
+
+
 
 ```{r}
 #| label: ai-setup
@@ -867,9 +947,13 @@ make_chat <- function(system_prompt) {
 }
 ```
 
+
+
 ## Use 1 - LLM topic labeling
 
 Turning each topic's top terms into a human-readable label is low risk: the model sees only anonymized term lists, and a human reviews the output.
+
+
 
 ```{r}
 #| label: ai-label
@@ -894,9 +978,13 @@ ai_labels <- stm_top |>
 ai_labels
 ```
 
+
+
 ## Use 2 - LLM sentiment, cross-checked against the lexicon
 
 Classify each post's sentiment with the local model, then compare to the Bing score: Spearman correlation on the continuous signal and Cohen's kappa on the sign. Agreement is convergent-validity evidence; disagreement flags uncertain measurements. **Process one post per call** — Ollama's default context length is often 2048 tokens (model- and version-dependent; check `ollama show <model>`), so a paragraph fits comfortably but a batch may be truncated.
+
+
 
 ```{r}
 #| label: ai-sentiment
@@ -946,6 +1034,8 @@ list(spearman = spearman, raw_agreement = raw_agreement, kappa = kappa)
 table(LLM = sign_table$ai, Bing = sign_table$lex)         # sign confusion
 ```
 
+
+
 ## Reading the cross-check, and why kappa has no fixed thresholds
 
 These two statistics measure *agreement between two fallible instruments*, not accuracy against truth — so moderate agreement is the healthy, expected result; perfect agreement would mostly mean one measure is redundant.
@@ -990,6 +1080,8 @@ The two uses above are deliberately conservative. Several richer applications fi
 
 Document-level sentiment is contaminated when a post touches several topics: a "dominant topic = Climate" post still contains economy and security sentences. Asking the model for sentiment **toward a named policy area** within the post removes that confound and matches the per-topic estimand directly — a fix for the mixture leakage noted in Section 8.
 
+
+
 ```{r}
 #| label: ai-aspect-sentiment
 #| eval: false
@@ -1016,9 +1108,13 @@ aspect_sent <- corpus |>
   filter(label != "absent")
 ```
 
+
+
 ## Embedding-based topics and semantic-drift detection
 
 Embeddings give a model-light alternative to LDA/STM and, more usefully here, a direct handle on the **temporal non-invariance** flagged in the Limitations: if a topic's language drifts over a decade, the embedding of its posts moves. Embed each post with a local embedding model, summarize a topic-year by its mean vector (centroid), and track the cosine similarity of consecutive years' centroids; a falling similarity is measurable drift. Cosine similarity is the dot product over the product of norms (1 = same direction, 0 = orthogonal).
+
+
 
 ```{r}
 #| label: ai-embeddings
@@ -1046,9 +1142,13 @@ drift <- emb |>
   ungroup()
 ```
 
+
+
 ## Few-shot classification seeded by a codebook
 
 Once topics are discovered (by STM) you can turn their FREX terms into a short codebook and have the model classify each post into those fixed categories — a second, independent rater for the topic assignment. Keep this *measurement into a pre-defined schema* strictly separate from discovery: the LLM is not finding topics, it is applying a codebook, and it should stay **blind to the year** so it cannot infer the very trend it is meant to help measure.
+
+
 
 ```{r}
 #| label: ai-codebook-classify
@@ -1075,6 +1175,8 @@ ai_topic <- corpus |>
   unnest_wider(res)
 # Then compare ai_topic$category to the STM dominant topic (a second-rater check).
 ```
+
+
 
 ## Briefly, three more
 
@@ -1118,8 +1220,11 @@ Per standing practice, confirm every citation against its primary source. The li
 - Chang, J., Gerrish, S., Wang, C., Boyd-Graber, J., & Blei, D. (2009). Reading Tea Leaves: How Humans Interpret Topic Models. *NeurIPS*.
 - Gilardi, F., Alizadeh, M., & Kubli, M. (2023). ChatGPT Outperforms Crowd Workers for Text-Annotation Tasks. *PNAS*, 120(30).
 
+
+
 ```{r}
 #| label: session
 #| include: false
 sessionInfo()
 ```
+
