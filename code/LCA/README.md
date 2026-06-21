@@ -1,6 +1,8 @@
 # weighted_and_biased
 
-![Design-weighted latent class analysis](images/banner.svg)
+![](images/clipboard-2943011998.png)
+
+![](banner.svg)
 
 A single, adaptable R/Quarto script for **latent class analysis of complex survey data** that respects the sampling design while estimating the classes and reports **design-based uncertainty**, not the simple-random-sample kind.
 
