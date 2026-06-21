@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 430" font-family="'Helvetica Neue', Arial, sans-serif">
+  <rect x="1" y="1" width="758" height="428" rx="14" fill="#fbfaf7" stroke="#e4e0d8" stroke-width="2"/>
+  <text x="380" y="42" text-anchor="middle" font-size="22" font-weight="700" fill="#2b2b2b">Topic Modeling: Expectation vs. Reality</text>
+  <line x1="380" y1="66" x2="380" y2="352" stroke="#ddd8cf" stroke-width="2" stroke-dasharray="4 5"/>
+
+  <!-- EXPECTATION -->
+  <text x="190" y="90" text-anchor="middle" font-size="14" font-weight="700" letter-spacing="3" fill="#6b6b6b">EXPECTATION</text>
+  <circle cx="115" cy="168" r="43" fill="#443983" opacity="0.9"/>
+  <text x="115" y="173" text-anchor="middle" font-size="13" font-weight="600" fill="#ffffff">Economy</text>
+  <circle cx="258" cy="158" r="43" fill="#21918c" opacity="0.9"/>
+  <text x="258" y="163" text-anchor="middle" font-size="13" font-weight="600" fill="#ffffff">Health</text>
+  <circle cx="180" cy="258" r="43" fill="#35b779" opacity="0.9"/>
+  <text x="180" y="263" text-anchor="middle" font-size="13" font-weight="600" fill="#ffffff">Climate</text>
+  <!-- happy face -->
+  <circle cx="305" cy="288" r="27" fill="#fde725" stroke="#c9b400" stroke-width="2"/>
+  <circle cx="296" cy="282" r="3.6" fill="#333333"/>
+  <circle cx="314" cy="282" r="3.6" fill="#333333"/>
+  <path d="M293 293 q12 11 24 0" stroke="#333333" stroke-width="2.6" fill="none" stroke-linecap="round"/>
+
+  <!-- REALITY -->
+  <text x="568" y="90" text-anchor="middle" font-size="14" font-weight="700" letter-spacing="3" fill="#6b6b6b">REALITY</text>
+  <circle cx="520" cy="178" r="48" fill="#7e7a70" opacity="0.5"/>
+  <circle cx="590" cy="158" r="52" fill="#8a6d5a" opacity="0.5"/>
+  <circle cx="565" cy="232" r="46" fill="#6a7d6f" opacity="0.5"/>
+  <text x="512" y="150" text-anchor="middle" font-size="11.5" font-weight="700" fill="#2b2b2b">Topic 4:</text>
+  <text x="512" y="166" text-anchor="middle" font-size="11" fill="#2b2b2b">"the, a, of, will"</text>
+  <text x="612" y="214" text-anchor="middle" font-size="13" font-weight="700" fill="#2b2b2b">Topic 2: ???</text>
+  <!-- confused face -->
+  <circle cx="665" cy="290" r="27" fill="#fde725" stroke="#c9b400" stroke-width="2"/>
+  <circle cx="656" cy="284" r="3.6" fill="#333333"/>
+  <circle cx="674" cy="284" r="3.6" fill="#333333"/>
+  <path d="M654 297 q6 -7 12 0 q6 7 12 0" stroke="#333333" stroke-width="2.6" fill="none" stroke-linecap="round"/>
+  <text x="697" y="266" font-size="22" font-weight="700" fill="#3573b9">?</text>
+  <!-- sweat drop -->
+  <path d="M690 282 q5 9 0 14 q-6 -4 0 -14 Z" fill="#5fb0e6"/>
+
+  <!-- caption -->
+  <text x="380" y="392" text-anchor="middle" font-size="14.5" fill="#444444">...so this repo grades the model against a corpus where we <tspan font-weight="700" fill="#443983">planted the answer key</tspan>.</text>
+  <text x="380" y="414" text-anchor="middle" font-size="12" font-style="italic" fill="#8a8a8a">known ground truth in, recovery metrics out -- no vibes required</text>
+</svg>
