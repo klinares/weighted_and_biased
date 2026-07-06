@@ -1,6 +1,5 @@
 ---
 title: "Design-Weighted Latent Class Analysis of Survey Data: An Adaptable Analysis Script"
-subtitle: "Openness to government negotiations as a worked example"
 author: "Kevin"
 date: today
 format:
@@ -48,11 +47,11 @@ library(matrixStats)   # numerically stable row-wise log-sum-exp and cumulative 
 library(survey)        # complex-design objects, replicate weights, svyglm
 library(poLCA)         # unweighted benchmark latent class model
 library(clue)          # solve_LSAP: optimal label alignment across fits
-library(nnet)          # multinom: multinomial profiling (ships with base R)
+library(furrr)         # future_map_*: parallel model fits (enumeration, screen, poLCA)
 
 # All reusable machinery lives in one annotated source file: the plotting and
-# data-prep helpers, the weighted EM engine, the BCH three-step correction, and
-# the worked-example simulator. Keep survey_lca_source.R in the same folder as
+# data-prep helpers, the weighted EM engine and label alignment, and the
+# worked-example simulator. Keep survey_lca_source.R in the same folder as
 # this document; the render fails if it is not on the path. Sourcing it here, after
 # the libraries, means every function is available to the analysis chunks below.
 source("survey_lca_source.R")
@@ -82,11 +81,18 @@ cfg <- list(
 
   # --- analysis choices -----------------------------------------------------
   K_range = 2:6,                # candidate numbers of latent classes to compare
+  K_force = NULL,               # force a specific number of classes, overriding the BIC pick;
+                                # leave NULL to select K by BIC (Section 8). Set to an integer
+                                # within K_range to pin K (e.g. when BIC prefers more classes
+                                # than are interpretable). The enumeration still prints either way.
   n_starts = 20L,               # random starts per fit (guards against local maxima)
   seed = 2026L,                 # master random seed: fix it and the classes (and their
                                 # labels) are identical on every run of the same data
-  ref_class = 1L,               # baseline class for the multinomial profile; set to ANY
-                                # class in 1..K (every odds ratio is "Class k vs this one")
+  parallel = TRUE,              # fit the candidate-K models, the indicator screen, and the
+                                # poLCA sweep in parallel via furrr. Output is identical to
+                                # serial because every fit re-seeds itself from `seed`.
+  workers  = NULL,              # parallel workers; NULL uses availableCores() - 1. Ignored
+                                # when parallel = FALSE.
   na_codes = NULL,              # response code(s) to treat as MISSING, e.g. 9 for "Don't know";
                                 # leave NULL if your data already uses NA for missing/DK
 
@@ -107,6 +113,19 @@ A note on the **`items` coding requirement**, which the script checks: each indi
 # document's labels, is defined here.
 wu_pal <- setNames(viridisLite::viridis(2, begin = 0.2, end = 0.75),
                    c("Weighted (population)", "Unweighted (poLCA)"))
+```
+
+```{r parallel-plan}
+# Parallel backend for the repeated model fits below (enumeration, indicator
+# screen, poLCA sweep), read from cfg. multisession works on Windows and macOS.
+# A sequential plan reproduces the serial result exactly, because every fit
+# re-seeds itself from cfg$seed; parallelism changes timing, not output.
+if (isTRUE(cfg$parallel)) {
+  future::plan(future::multisession,
+               workers = cfg$workers %||% max(1L, future::availableCores() - 1L))
+} else {
+  future::plan(future::sequential)
+}
 ```
 
 # The latent class model
@@ -169,7 +188,7 @@ if (length(missing_cols) > 0)
 
 # Map any configured missing/DK codes to NA, then recode each item to consecutive
 # integers from 1 over its substantive responses (NA preserved). Coerce profiling
-# covariates to factors so the multinomial and its predictions behave consistently.
+# covariates to factors so their levels drive the demographic domain estimates.
 # (to_na() and recode_consecutive() are defined in survey_lca_source.R.)
 dat_all <- dat |>
   mutate(across(all_of(cfg$items), ~ recode_consecutive(to_na(as.integer(.x), cfg$na_codes))),
@@ -217,19 +236,13 @@ The estimator is implemented in `survey_lca_source.R`, where the code is annotat
 
 The number of classes $K$ is not known in advance and is chosen by comparing a sequence of models. Three quantities guide that choice, and because they are routinely misread, each is explained here in the terms you would use with an analyst.
 
-**BIC (Bayesian Information Criterion)** scores a model by its fit, penalized for the number of parameters it uses:
-$$\mathrm{BIC} = -2\,\hat{\ell} + \mathrm{df}\cdot\ln n, \qquad \mathrm{df} = (K-1) + K\textstyle\sum_j (C_j - 1).$$
-The first term rewards fit (a higher log-likelihood $\hat\ell$ makes it smaller), and the second term charges a price for every additional parameter, a price that grows with the sample size $n$. **Lower BIC is better.** You read the column down the candidate values of $K$ and look for the **minimum**; often the values fall steeply, reach a low point, and rise again, and that low point is the recommended number of classes. The interpretation is "the number of classes that explains the response patterns well without adding classes that only fit noise." BIC is the primary tool for this decision in latent class analysis.
+**BIC (Bayesian Information Criterion)** scores a model by its fit, penalized for the number of parameters it uses: $$\mathrm{BIC} = -2\,\hat{\ell} + \mathrm{df}\cdot\ln n, \qquad \mathrm{df} = (K-1) + K\textstyle\sum_j (C_j - 1).$$ The first term rewards fit (a higher log-likelihood $\hat\ell$ makes it smaller), and the second term charges a price for every additional parameter, a price that grows with the sample size $n$. **Lower BIC is better.** You read the column down the candidate values of $K$ and look for the **minimum**; often the values fall steeply, reach a low point, and rise again, and that low point is the recommended number of classes. The interpretation is "the number of classes that explains the response patterns well without adding classes that only fit noise." BIC is the primary tool for this decision in latent class analysis.
 
-**AIC (Akaike Information Criterion)** has the same form with a smaller, fixed penalty ($2$ per parameter instead of $\ln n$):
-$$\mathrm{AIC} = -2\,\hat{\ell} + 2\,\mathrm{df}.$$
-It is reported for completeness, but because its penalty is lighter it tends to **favor too many classes**, so when AIC and BIC disagree, prefer BIC for a parsimonious, interpretable solution.
+**AIC (Akaike Information Criterion)** has the same form with a smaller, fixed penalty ($2$ per parameter instead of $\ln n$): $$\mathrm{AIC} = -2\,\hat{\ell} + 2\,\mathrm{df}.$$ It is reported for completeness, but because its penalty is lighter it tends to **favor too many classes**, so when AIC and BIC disagree, prefer BIC for a parsimonious, interpretable solution.
 
-**Relative entropy** answers a different question. BIC and AIC ask "how many classes?"; entropy asks "once we have them, how cleanly are respondents sorted into them?"
-$$E \;=\; 1 - \frac{-\sum_i \sum_k p_{ik}\ln p_{ik}}{n \ln K}.$$
-It runs from 0 to 1. A value near 1 means most respondents have a posterior probability close to 1 for a single class, so the classification is sharp; a value near 0 means respondents are spread across classes with no clear home. A common rule of thumb treats values above about 0.8 as good separation. Entropy is **not** a measure of fit and must **not** be used to choose $K$ on its own: a two-class model almost always has higher entropy than a five-class model simply because fewer classes are easier to separate. Read it alongside BIC as a description of how usable the resulting classification is, not as a selection criterion.
+**Relative entropy** answers a different question. BIC and AIC ask "how many classes?"; entropy asks "once we have them, how cleanly are respondents sorted into them?" $$E \;=\; 1 - \frac{-\sum_i \sum_k p_{ik}\ln p_{ik}}{n \ln K}.$$ It runs from 0 to 1. A value near 1 means most respondents have a posterior probability close to 1 for a single class, so the classification is sharp; a value near 0 means respondents are spread across classes with no clear home. A common rule of thumb treats values above about 0.8 as good separation. Entropy is **not** a measure of fit and must **not** be used to choose $K$ on its own: a two-class model almost always has higher entropy than a five-class model simply because fewer classes are easier to separate. Read it alongside BIC as a description of how usable the resulting classification is, not as a selection criterion.
 
-All enumeration here uses the **weighted** fit, so the chosen $K$ describes the population, not the achieved sample. To keep the criteria honest, the weighted pseudo-log-likelihood is put on the sample-size scale before $\hat\ell$ enters BIC and AIC: the weights are normalized to sum to $n$, so the fit term and the $\ln n$ penalty are measured in the same units. Without this the fit term would be inflated by the average weight and the criteria would lean toward too many classes. The script reports all three quantities across the candidate range and selects the $K$ that minimizes the weighted BIC. *Why this section matters:* $K$ is the one modeling choice with no default, and every later result is conditional on it, so a well-calibrated, defensible selection here is what keeps the prevalences and profiles from being artifacts of an over- or under-fit class structure.
+All enumeration here uses the **weighted** fit, so the chosen $K$ describes the population, not the achieved sample. To keep the criteria honest, the weighted pseudo-log-likelihood is put on the sample-size scale before $\hat\ell$ enters BIC and AIC: the weights are normalized to sum to $n$, so the fit term and the $\ln n$ penalty are measured in the same units. Without this the fit term would be inflated by the average weight and the criteria would lean toward too many classes. The script reports all three quantities across the candidate range and selects the $K$ that minimizes the weighted BIC. One standard companion to BIC is deliberately absent: the **bootstrapped likelihood ratio test** (BLRT), the usual complement for comparing $K$ against $K+1$ classes because the ordinary likelihood ratio statistic is not chi-square distributed for that comparison. The BLRT's parametric bootstrap simulates independent observations from the smaller model, and that premise does not carry over to a design-weighted pseudo-likelihood on a stratified, clustered sample, so applying it here would attach an invalid reference distribution to the decision. Enumeration therefore rests on the weighted BIC, read alongside entropy and the unweighted `poLCA` comparison in Section 12. *Why this section matters:* $K$ is the one modeling choice with no default, and every later result is conditional on it, so a well-calibrated, defensible selection here is what keeps the prevalences and profiles from being artifacts of an over- or under-fit class structure.
 
 ```{r enumerate}
 # df_k() and entropy_R2() are defined in survey_lca_source.R.
@@ -244,7 +257,7 @@ w_vec <- dat_prepared[[cfg$weight]]
 # selection, which otherwise leans toward too many classes.
 scale_ic <- nrow(dat_prepared) / sum(w_vec)
 
-enum <- map_dfr(cfg$K_range, function(K) {
+enum <- furrr::future_map_dfr(cfg$K_range, function(K) {
   fit  <- fit_lca(dat_prepared, w_vec, cats, cfg$items, K, cfg$n_starts)
   ll_n <- fit$ll * scale_ic                       # log-likelihood on the sum-to-n scale
   tibble(K = K,
@@ -254,9 +267,21 @@ enum <- map_dfr(cfg$K_range, function(K) {
          BIC = -2 * ll_n + df_k(K, cats) * log(nrow(dat_prepared)),
          entropy = entropy_R2(fit$post, K),
          converged = fit$converged)
-})
+}, .options = furrr::furrr_options(seed = TRUE,
+     packages = c("matrixStats", "clue", "purrr", "dplyr", "tidyr")))
 
-K_star <- enum |> slice_min(BIC, n = 1) |> pull(K) |> first()
+# K is chosen by minimum weighted BIC, unless cfg$K_force pins a specific number
+# of classes. A forced K must be one of the fitted candidates in cfg$K_range so
+# the enumeration table (and every downstream fit) actually contains it.
+if (is.null(cfg$K_force)) {
+  K_star <- enum |> slice_min(BIC, n = 1) |> pull(K) |> first()
+} else {
+  if (!(cfg$K_force %in% cfg$K_range))
+    stop("cfg$K_force is ", cfg$K_force, ", which is not in cfg$K_range (",
+         paste(range(cfg$K_range), collapse = ":"), "). Add it to cfg$K_range ",
+         "or choose a value within it.")
+  K_star <- as.integer(cfg$K_force)
+}
 
 enum |>
   mutate(across(c(logLik, AIC, BIC), ~ round(.x, 1)),
@@ -265,7 +290,7 @@ enum |>
                caption = "Weighted fit statistics by number of classes. Selection is by minimum BIC.")
 ```
 
-The selected solution has **`r K_star` classes**. The figure shows BIC and entropy across the candidate range; BIC is read for selection and entropy for separation.
+The selected solution has **`r K_star` classes** (`r if (is.null(cfg$K_force)) "chosen by minimum weighted BIC" else "forced through cfg$K_force, overriding the BIC pick"`). The figure shows BIC and entropy across the candidate range; BIC is read for selection and entropy for separation.
 
 ```{r fig-enum}
 #| fig-cap: "Weighted BIC and relative entropy across candidate numbers of classes. The chosen K minimizes BIC; entropy describes how cleanly respondents are classified."
@@ -417,6 +442,8 @@ The item-response (conditional) probabilities are shown as a heatmap, which is f
 ```{r fig-rho}
 #| fig-width: 8
 #| fig-height: 5.5
+#| fig-format: png
+#| dpi: 200
 #| fig-cap: "Population item-response (conditional) probabilities by class. Each panel is a class; rows are items, columns are response categories. Items of different lengths leave the higher columns blank. Cell shade and label give P(response | class). Class labels are arbitrary."
 rho_plot <- ci_tbl |>
   filter(kind == "rho") |>
@@ -507,13 +534,14 @@ marginal_ll <- function(item) {
 }
 
 bic_screen <- tibble(item = cfg$items) |>
-  mutate(delta_bic = map_dbl(cfg$items, function(j) {
+  mutate(delta_bic = furrr::future_map_dbl(cfg$items, function(j) {
     keep     <- setdiff(cfg$items, j)
     fit_wo   <- fit_lca(dat_prepared, w_vec, cats[keep], keep, K_star, cfg$n_starts)
     ll_restr <- (fit_wo$ll + marginal_ll(j)) * scale_ic            # sum-to-n scale, as above
     df_restr <- df_k(K_star, cats[keep]) + (cats[[j]] - 1)         # item j: one shared distribution
     (-2 * ll_restr + df_restr * log(n_eff)) - (-2 * ll_full + df_full * log(n_eff))
-  }))
+  }, .options = furrr::furrr_options(seed = TRUE,
+       packages = c("matrixStats", "clue", "purrr", "dplyr", "tidyr"))))
 
 # Combine the effect size and the decision into one ranked, flagged table.
 item_screen <- item_discrim |>
@@ -530,7 +558,26 @@ item_screen |>
 
 Treat a flag as a prompt, not a verdict. An item can be statistically weak yet worth keeping for face validity, and a binary item tends to score lower simply because it has less room to separate classes. Drop the items that are both flagged and substantively dispensable, set `cfg$items` to the survivors, refit, and confirm the prevalences and class profiles are essentially unchanged; if they move a lot, the item was carrying real information and belongs in the model.
 
-A different item-set question is whether two items are *locally dependent*, more associated with each other than the shared classes explain. That is a model-fit diagnostic, the **bivariate residual**, not a contribution screen: it flags redundant or dependent *pairs* (where you might drop one of the pair, or model the dependence directly), not weak single items. It complements the screen above rather than replacing it, and a design-correct version needs a replicate-based reference distribution rather than the usual chi-square cutoff.
+## Local independence: the bivariate residual
+
+The screen above asks whether each item *contributes* to the classes. A different failure is two items being *locally dependent*: more associated with each other than shared class membership explains, which violates the conditional-independence assumption the whole model is built on. The **bivariate residual (BVR)** diagnoses this per item pair. For items $a$ and $b$ it compares the weighted observed two-way table with the table the fitted model implies, $$p^{\mathrm{exp}}_{rs} \;=\; \sum_{k=1}^{K} \pi_k\, \rho_{a,rk}\, \rho_{b,sk},$$ as a Pearson $X^2$ scaled by $n$ and divided by the table's $(C_a-1)(C_b-1)$ degrees of freedom, so pairs with different category counts are comparable.
+
+Two honesty notes before the table. First, under a weighted pseudo-likelihood on a complex design the usual chi-square reference for $X^2$ does not hold, so the BVR here is a **descriptive ranking index, not a test**; read the *relative* sizes. Absolute cutoffs from the simple-random-sampling literature (values above roughly 3) do not transfer here, because unequal weights inflate the index above its nominal scale by roughly the weight-variation design effect; the operative signal is a pair standing well above the rest of its own table. Second, the residual is computed against the fitted $K$-class model, so it inherits that choice: a pair can look dependent simply because $K$ is too small.
+
+```{r bvr}
+# bvr_pairs() is defined in survey_lca_source.R; fit$rho is positional in cfg$items
+# order, so the items are passed in exactly that order.
+bvr_tab <- bvr_pairs(dat_prepared, w_vec, cfg$items, fit_w)
+
+bvr_tab |>
+  mutate(bvr = round(bvr, 2)) |>
+  slice_head(n = 10) |>
+  knitr::kable(align = "llrr",
+               col.names = c("Item A", "Item B", "Pair df", "BVR"),
+               caption = "Largest bivariate residuals (BVR), a per-pair local-independence index: the design-weighted observed two-way table against the model-implied table, as Pearson X2 / (n-scaled) per degree of freedom. Descriptive ranking only; no chi-square test applies under the weighted pseudo-likelihood. Pairs standing well above the rest of the table mark associations the classes do not explain; absolute SRS cutoffs do not transfer under unequal weights.")
+```
+
+How to act on it, in order of preference. A pair that stands far above the rest and is *substantively* redundant (two near-identical wordings of one question) is a case for dropping one of the pair; rerun the indicator screen after, since removing one member changes the other's contribution. If the pair is substantively distinct, the dependence may instead be a sign that $K$ is too small, so check whether the pair's BVR falls at $K+1$ before removing anything; a residual that melts away with one more class was class structure, not item redundancy. Only if it persists and both items must stay for content reasons does it become a documented limitation, a known local-independence violation whose main cost is overstated classification certainty for respondents whose pattern rides on that pair. A flat BVR table with no outlying pairs is affirmative evidence for the conditional-independence assumption and worth stating in the write-up.
 
 # Benchmark against `poLCA`, and a validation check
 
@@ -550,12 +597,12 @@ pl_aligned <- align_to(list(pi = as.numeric(pl$P),
                             post = pl$posterior), fit_w)
 
 # --- poLCA's own BIC-selected K across the candidate range ---
-polca_bic <- map_dfr(cfg$K_range, function(K) {
+polca_bic <- furrr::future_map_dfr(cfg$K_range, function(K) {
   set.seed(cfg$seed + 10L + K)
   m <- poLCA(polca_f, data = polca_df, nclass = K, nrep = 5,
              maxiter = 5000, na.rm = TRUE, verbose = FALSE)
   tibble(K = K, poLCA_BIC = m$bic)
-})
+}, .options = furrr::furrr_options(seed = TRUE, packages = "poLCA"))
 polca_K <- polca_bic |> slice_min(poLCA_BIC, n = 1) |> pull(K) |> first()
 
 # --- validation: weighted EM with all weights = 1 should match poLCA ---
@@ -682,163 +729,90 @@ Here `r n_out` respondents who were not in the fit are assigned a class this way
 
 # Profiling class membership on demographics
 
-The posterior class probabilities and the modal class were written back onto the data in Section 9, so each respondent now carries their most likely type and the full posterior. Per the analysis plan, **no posterior threshold is applied**: every respondent is kept, so the profiling sample is the full design sample and the weights retain their meaning. The task now is to describe *who* falls in each class, in terms of demographics.
+The posterior class probabilities were written back onto the data in Section 9, so each respondent now carries a full posterior over the classes. Per the analysis plan, no posterior threshold is applied: every respondent is kept, so the profiling sample is the full design sample and the weights retain their meaning. The task now is to describe *who* falls in each class, by demographics, in a way that is design-correct and reads directly as a campaign-usable quantity.
 
-## Can a demographic used in the weighting also be a predictor here?
+## Which demographics belong here
 
-Yes. A variable such as age that was used to construct the survey weights can also appear as a predictor in this regression, and doing so is not double-counting. The weights and the covariate play different roles: the weights make the sample represent the population, and the covariate measures an association *within* that represented population. In fact, including the variables that drive the design as predictors is often the *better* choice. Pfeffermann (1993, *International Statistical Review* 61(2):317–337) and Gelman (2007, *Statistical Science* 22(2):153–164) make the underlying point: when the model conditions on the variables related to selection, the sampling becomes (approximately) ignorable, the weighted and unweighted estimates converge, and the analysis is less sensitive to the weights. So if age shaped the weights, putting age in the model is a feature, not a violation, and it generally improves efficiency.
+Any demographic may appear here except the survey items that defined the classes. A variable used to build the survey weights, such as age, is fine to profile on and is not double-counting: the weights make each subpopulation estimate represent the population, and the demographic simply describes that represented population. The circularity to avoid is a different one: a variable used as an **indicator** of the latent classes must not also be profiled as if it described them, because that would explain the classes with the very items that built them. Demographics used in weighting are fine; the survey items that built the typology are not.
 
-Two qualifications. First, interpret the coefficient conditionally: it is the association of age with class membership *holding the other predictors fixed*, not a marginal effect. Second, the design-based standard errors (from the replicate weights below) remain the correct ones whether or not a predictor overlaps with the weighting variables. The circularity that genuinely must be avoided is a different one, raised earlier: a variable used as an **indicator** of the latent classes must not also be a **predictor** of them, because then you are explaining the classes with the very items that defined them. Demographics used in weighting are fine; the survey items that built the typology are not.
+## Design-based class prevalence by demographic
 
-## A design-based multinomial model for more than two classes
+Rather than model class membership with a multinomial regression on the demographics, the profile reports, for each demographic level, the **design-based prevalence of each class within that subpopulation**: the share of that group estimated to belong to each type. This is a domain (subpopulation) estimate, the most standard quantity in survey sampling, and it is the right tool when a demographic coincides with the design. In particular it yields **regional estimates even when region is the stratum**, because a within-region prevalence is a well-defined quantity, whereas a regression coefficient for region would be confounded with the stratification and unstable.
 
-Because membership has more than two categories, the profile uses a **multinomial logistic regression**: it models the log-odds of each class against a reference class (here Class `r cfg$ref_class`) as a function of the demographics. This generalizes the two-class logistic to the full set of classes in one model.
+The class-membership target is the **posterior probability** of each class, not a hard modal assignment. The design-weighted mean of the posterior within a subpopulation is that subpopulation's class prevalence, and because the design-weighted posterior mean over the whole sample reproduces the overall prevalences $\pi_k$ from Section 9, the demographic breakdown is coherent with the headline numbers rather than attenuated by hard classification. Uncertainty is design-based from the same JKn replicate weights used everywhere else: the prevalences are recomputed on each replicate and `survey::withReplicates` turns the spread into standard errors.
 
-Getting design-correct uncertainty for a multinomial under a complex design is the same problem solved for the measurement model, and it is solved the same way. Within each jackknife replicate the coefficients are estimated by weighted multinomial likelihood (`nnet::multinom` with the replicate weights), and `survey::withReplicates` aggregates the spread of those replicate estimates into design-based standard errors, using the **same JKn replicate weights** built in Section 10. This keeps the whole analysis on one coherent variance footing rather than mixing methods.
+*Why this section matters: this is the campaign-facing output. A class prevalence by demographic level, with a design-correct interval, is exactly what targeting needs ("this group is more this type than that group"), and computing it as a domain estimate keeps it stable and interpretable where a regression on a stratifying demographic would not be. The interval respects the design's degrees of freedom, so a breakdown built on few PSUs per group reports honestly wide bands rather than false precision.*
 
-The same two cautions apply and are not hidden. The outcome is the *modal* class, an estimated quantity, so regressing it on covariates **attenuates** the coefficients toward zero relative to the true class-covariate association; this is a conservative, descriptive profile, not unbiased inference. For genuinely inferential statements, the bias-adjusted three-step methods (BCH and the maximum-likelihood correction) replace the modal regression while keeping this design-based variance, as the BCH subsection at the end of this section does. A simpler alternative, if a single segment is the whole question, is a binary design-based logistic regression (`svyglm` with `family = quasibinomial()`) of that one class against the rest.
+```{r domain-setup}
+# The class-membership target is the soft posterior, already on dat_prepared and
+# carried by the Section 10 replicate design (rep_des). post_cols are the K
+# posterior columns in class order. The design objects des (the sampling design)
+# and rep_des (its JKn replicates) are reused from Section 10 unchanged.
+post_cols <- paste0("post_class", seq_len(K_star))
 
-```{r profile}
-# The baseline class for every odds ratio below is cfg$ref_class (set in the configuration
-# block). It can be ANY class in 1..K_star: each comparison is then "Class k versus this
-# class". Because the labels are reproducible once cfg$seed is fixed, the choice is stable
-# from run to run. Guard against a value the selected number of classes cannot support,
-# since K_star is chosen by BIC and may be smaller than you expect.
-if (!(cfg$ref_class %in% seq_len(K_star)))
-  stop("cfg$ref_class is ", cfg$ref_class, ", but only classes 1..", K_star,
-       " exist (the number of classes is chosen by BIC). Set cfg$ref_class within 1..", K_star, ".")
+# Fixed layout for the flattened statistic: every (demographic, level, class) cell,
+# levels in factor order, class varying fastest within a level. dom_meta names and
+# orders the estimate vector so nothing is recovered by string parsing later.
+dom_meta <- map_dfr(cfg$aux, function(v)
+  expand_grid(plevel = levels(dat_prepared[[v]]), class = seq_len(K_star)) |>
+    mutate(pvar = v)) |>
+  dplyr::select(pvar, plevel, class) |>
+  mutate(idx = row_number())
 
-# Put the reference level first so nnet::multinom uses it as the baseline.
-ref_lvls <- c(cfg$ref_class, setdiff(seq_len(K_star), cfg$ref_class))
-dat_prepared <- dat_prepared |>
-  mutate(modal_class = factor(as.integer(as.character(modal_class)), levels = ref_lvls))
-
-# Rebuild the design so its data carry the releveled outcome, then JKn replicates.
-prof_des <- svydesign(ids = as.formula(paste0("~", cfg$psu)),
-                      strata = as.formula(paste0("~", cfg$strata)),
-                      weights = as.formula(paste0("~", cfg$weight)),
-                      data = dat_prepared, nest = TRUE)
-prof_rep <- as.svrepdesign(prof_des, type = "JKn")
-prof_formula <- reformulate(cfg$aux, response = "modal_class")
-
-# Statistic that survey::withReplicates evaluates on each replicate. It refits the
-# weighted multinomial and returns the coefficients as ONE named numeric vector, because
-# withReplicates needs a vector (it then forms the covariance matrix across replicates).
-# Names are "<class>::<term>", laid out one class at a time. To see the layout, run this
-# on the full sample directly: multinom_theta(weights(prof_des), dat_prepared).
-multinom_theta <- function(w_rep, data) {
-  data[[".w"]] <- as.numeric(w_rep)              # inject the weights so multinom finds them in `data`
-  m  <- nnet::multinom(prof_formula, data = data, weights = .w, trace = FALSE, maxit = 1000)
-  cf <- coef(m)                                  # (K-1) x terms matrix; a plain named vector if K = 2
-  if (is.null(dim(cf)))
-    cf <- matrix(cf, nrow = 1, dimnames = list(m$lev[2], names(cf)))
-  flat <- as.vector(t(cf))                       # unroll class by class
-  names(flat) <- as.vector(t(outer(rownames(cf), colnames(cf), paste, sep = "::")))
-  flat
+# The statistic survey::withReplicates evaluates on each replicate. For each
+# demographic it forms a level-indicator matrix, then the weighted mean of each
+# class posterior within each level: crossprod(M, w * P) / crossprod(M, w). The
+# result is flattened to ONE named numeric vector in dom_meta's order (level-major,
+# class-minor), because withReplicates needs a vector to build the covariance.
+domain_theta <- function(w_rep, data) {
+  P  <- as.matrix(data[, post_cols, drop = FALSE])      # n x K, fixed across replicates
+  wP <- w_rep * P                                       # n x K, weighted posteriors
+  flat <- map(cfg$aux, function(v) {
+    f   <- factor(data[[v]], levels = levels(dat_prepared[[v]]))
+    M   <- model.matrix(~ f - 1)                        # n x L, one column per level
+    num <- crossprod(M, wP)                             # L x K: weighted class sums per level
+    den <- as.numeric(crossprod(M, w_rep))              # L: weighted total per level
+    as.vector(t(num / den))                             # level-major, class-minor
+  })
+  unlist(flat, use.names = FALSE)
 }
-mn_rep  <- withReplicates(prof_rep, multinom_theta)
-mn_est  <- multinom_theta(weights(prof_des), dat_prepared)  # named full-sample estimates
-mn_se   <- sqrt(diag(vcov(mn_rep)))                          # design SEs, same order
-stopifnot(length(mn_est) == length(mn_se))
 
-mn_tbl <- tibble(coef = names(mn_est),
-                 estimate = as.numeric(mn_est),
-                 se = as.numeric(mn_se)) |>
-  separate(coef, into = c("class", "term"), sep = "::") |>
-  filter(term != "(Intercept)") |>
-  mutate(comparison = paste0("Class ", class, " vs ", cfg$ref_class),
-         OR = exp(estimate),
-         lo = exp(estimate - 1.96 * se),
-         hi = exp(estimate + 1.96 * se))
+dom_rep <- withReplicates(rep_des, domain_theta)        # design-based covariance of every cell
+dom_est <- domain_theta(weights(des), dat_prepared)     # full-sample point estimates
+dom_V   <- vcov(dom_rep)                                # full covariance, for the contrasts below
+dom_se  <- sqrt(diag(dom_V))
+stopifnot(length(dom_est) == nrow(dom_meta))
 ```
 
-```{r tbl-profile}
-mn_tbl |>
-  transmute(Comparison = comparison, Predictor = term,
-            `Log-odds` = round(estimate, 3), SE = round(se, 3),
-            `Odds ratio` = round(OR, 2),
-            `OR 95% CI` = sprintf("[%.2f, %.2f]", lo, hi)) |>
-  knitr::kable(align = "llrrrr",
-               caption = paste0("Design-based multinomial profile of class membership on demographics, each class against Class ",
-                                cfg$ref_class, ". Coefficients are descriptive and attenuated by classification error."))
+```{r domain-prevalence}
+# Per-level class prevalence with a design-based interval. The interval is formed
+# on the logit scale and back-transformed so it stays inside [0, 1]; the standard
+# error is mapped through the delta method, se_logit = se / (p (1 - p)). Estimates
+# are clamped a hair off 0 and 1 only to keep the transform finite.
+dom_tbl <- dom_meta |>
+  mutate(p = as.numeric(dom_est), se = as.numeric(dom_se)) |>
+  mutate(p_c = pmin(pmax(p, 1e-6), 1 - 1e-6),
+         gse = se / (p_c * (1 - p_c)),
+         lo  = plogis(qlogis(p_c) - 1.96 * gse),
+         hi  = plogis(qlogis(p_c) + 1.96 * gse)) |>
+  dplyr::select(pvar, plevel, class, p, se, lo, hi)
 ```
 
-```{r fig-profile}
-#| fig-width: 7.5
-#| fig-height: 5
-#| fig-cap: "Design-based odds ratios with 95% intervals from the multinomial profile, each non-reference class versus the reference class, by predictor. Points right of 1 indicate higher odds of that class (versus reference) for that demographic level. Read as a descriptive, design-correct profile, attenuated by classification error."
-ggplot(mn_tbl, aes(OR, term, color = comparison)) +
-  geom_vline(xintercept = 1, linetype = "dashed", color = "grey55") +
-  geom_pointrange(aes(xmin = lo, xmax = hi), size = 0.35, linewidth = 0.4,
-                  position = position_dodge(width = 0.5)) +
-  facet_wrap(~ comparison) +
-  scale_x_log10() +
-  scale_color_manual(values = setNames(viridisLite::viridis(max(1, K_star - 1), begin = 0.1, end = 0.75),
-                                       unique(mn_tbl$comparison)), guide = "none") +
-  labs(x = "Odds ratio versus reference class (log scale)", y = NULL) +
-  theme_lca()
-```
-
-## Predicted probabilities of class membership by demographic
-
-Odds ratios answer "how do the odds of this class versus the reference change with a predictor," but they are awkward to read directly and say nothing about the reference class itself. The more legible summary, and the one asked for here, is the **predicted probability** of each class at given demographic values. The model already implies these: for any covariate profile the multinomial returns a full set of class probabilities that sum to one. The grid below varies each predictor across its levels while holding the others at their reference level, so each row isolates one demographic's association with class membership. Predicted probabilities are recomputed on every jackknife replicate, so their confidence intervals are design-based, exactly like the odds ratios.
-
-```{r profile-probs}
-# Build the profile grid in two readable steps.
-# Step 1: a one-row template with every predictor at its reference (first) level.
-ref_row <- dat_prepared |>
-  summarise(across(all_of(cfg$aux), ~ factor(levels(.x)[1], levels = levels(.x))))
-# Step 2: for each predictor, repeat that template once per level and overwrite that one
-# predictor with its levels. pvar/plevel record which predictor and level each row shows.
-prof_grid <- map_dfr(cfg$aux, function(v) {
-  lv <- levels(dat_prepared[[v]])
-  ref_row |>
-    slice(rep(1L, length(lv))) |>
-    mutate(!!v := factor(lv, levels = lv), pvar = v, plevel = lv)
-}) |>
-  mutate(prow = row_number())
-
-# Statistic for withReplicates: refit the multinomial, then predict the class
-# probabilities at every grid row. predict() returns a (grid rows x classes) matrix, or a
-# plain vector when there are only two classes, which we widen back to two columns. We
-# flatten it column by column into a named vector "<grid row>@@<class>" so withReplicates
-# can attach one variance to each (grid row, class); pp_tbl splits the names back out.
-prob_theta <- function(w_rep, data) {
-  data[[".w"]] <- as.numeric(w_rep)
-  m  <- nnet::multinom(prof_formula, data = data, weights = .w, trace = FALSE, maxit = 1000)
-  pp <- predict(m, newdata = prof_grid, type = "probs")
-  if (is.null(dim(pp))) pp <- cbind(1 - pp, pp)      # K = 2: vector P(2nd class) -> two columns
-  colnames(pp) <- m$lev
-  flat <- as.vector(pp)
-  names(flat) <- as.vector(outer(seq_len(nrow(pp)), colnames(pp), paste, sep = "@@"))
-  flat
-}
-pp_rep <- withReplicates(prof_rep, prob_theta)            # design-based variance of every predicted prob
-pp_est <- prob_theta(weights(prof_des), dat_prepared)     # point estimates (full-sample fit)
-pp_se  <- sqrt(diag(vcov(pp_rep)))
-
-# Split the names back into grid row + class, attach the CI, and label each row.
-pp_tbl <- tibble(key = names(pp_est), p = as.numeric(pp_est), se = as.numeric(pp_se)) |>
-  separate(key, into = c("prow", "class"), sep = "@@", convert = TRUE) |>
-  mutate(lo = pmax(0, p - 1.96 * se), hi = pmin(1, p + 1.96 * se)) |>
-  left_join(dplyr::select(prof_grid, prow, pvar, plevel), by = "prow")
-```
-
-```{r tbl-probs}
-pp_tbl |>
+```{r tbl-domain}
+dom_tbl |>
   transmute(Variable = pvar, Level = plevel, Class = paste("Class", class),
-            `P(class)` = round(p, 3),
+            Prevalence = round(p, 3),
             `95% CI` = sprintf("[%.3f, %.3f]", lo, hi)) |>
   arrange(Variable, Level, Class) |>
   knitr::kable(align = "lllrr",
-               caption = "Design-based predicted probability of membership in each class by demographic level, holding the other predictors at their reference level. Intervals are from the JKn replicate weights.")
+               caption = "Design-based prevalence of each latent class within each demographic level (the design-weighted mean posterior in that subpopulation). Region is estimated even though it is the stratum, because a within-region prevalence is a well-defined domain quantity. Intervals are design-based from the JKn replicate weights, formed on the logit scale.")
 ```
 
-```{r fig-probs}
+```{r fig-domain}
 #| fig-width: 8
 #| fig-height: 5
-#| fig-cap: "Design-based predicted probabilities of class membership by demographic level, each panel a predictor, with 95% intervals. Within a level the probabilities sum to one across classes. Other predictors are held at their reference level."
-pp_tbl |>
+#| fig-cap: "Design-based prevalence of each latent class within each demographic level, one panel per demographic, with 95% intervals from the JKn replicate weights. Within a level the prevalences sum to one across classes. Wide bands reflect few PSUs in that group, not a coding artifact."
+dom_tbl |>
   mutate(Class = factor(paste("Class", class), levels = paste("Class", seq_len(K_star)))) |>
   ggplot(aes(plevel, p, color = Class)) +
   geom_pointrange(aes(ymin = lo, ymax = hi), size = 0.35, linewidth = 0.4,
@@ -846,101 +820,49 @@ pp_tbl |>
   facet_wrap(~ pvar, scales = "free_x") +
   scale_color_viridis_d(begin = 0.1, end = 0.8) +
   scale_y_continuous(limits = c(0, NA)) +
-  labs(x = NULL, y = "Predicted probability of class membership", color = NULL) +
+  labs(x = NULL, y = "Prevalence of class membership", color = NULL) +
   theme_lca() +
   theme(axis.text.x = element_text(angle = 20, hjust = 1))
 ```
 
-## A bias-corrected three-step profile (BCH)
+## Differences between groups
 
-The profile above is honest but conservative. Its outcome is the *modal* class, and because the modal class is an estimate of the true class rather than the true class itself, regressing it on demographics pulls every coefficient toward zero. How much it attenuates depends on how cleanly the classes separate. When inference about the class-demographic association is the goal, the **Bolck-Croon-Hagenaars (BCH) correction** removes this bias while keeping the design-based variance machinery already in place (Bolck, Croon & Hagenaars 2004, *Political Analysis* 12(1):3–27; Vermunt 2010, *Political Analysis* 18(4):450–469).
+For targeting, the operative quantity is often the **gap** between groups: how much more prevalent a class is at one demographic level than at a reference level. Each demographic's first level is the reference, and the difference in class prevalence (a risk difference on the probability scale) carries a design-based interval taken from the same replicate covariance, so the contrast sits on the identical variance footing as the prevalences above. A difference whose interval excludes zero is a group distinction the design can actually support; the interval width again reflects the available PSUs.
 
-The correction has three pieces. First, summarise the classification error in a $K \times K$ matrix $D$ with $D_{ts} = \Pr(\text{assigned} = s \mid \text{true} = t)$, estimated from the posteriors and the modal assignments. A near-diagonal $D$ means clean classification; off-diagonal mass is the error that causes attenuation. Second, turn each respondent's modal class into a vector of **soft labels** given by the matching row of $D^{-1}$. These rows sum to one but can contain negative entries, which is exactly the correction undoing the misclassification. Third, fit the multinomial of class on demographics using those soft labels as the response, weighted by the survey weights.
+```{r domain-contrasts}
+# Reference level = each demographic's first level. The difference in class
+# prevalence between a level and its reference, with a design-based SE from the
+# replicate covariance dom_V: Var(a - b) = Var(a) + Var(b) - 2 Cov(a, b). All
+# vectorised through matrix indexing; no loops.
+ref_idx <- dom_meta |>
+  group_by(pvar, class) |>
+  slice(1) |>
+  ungroup() |>
+  dplyr::select(pvar, class, ref = idx, ref_level = plevel)
 
-A natural worry is that negative response weights make the fit unstable. They do not. The curvature of the weighted multinomial log-likelihood depends only on the positive survey weights and the fitted probabilities, not on the signed soft labels, so the objective stays concave with a single maximum and a standard quasi-Newton solver finds it. That is why the BCH coefficients are well defined even though the implied expanded-data weights are partly negative.
-
-Two assumptions deserve to be stated plainly. BCH assumes **non-differential measurement**: the classification error does not depend on the demographics once the true class is fixed. And it needs the classes **separated enough that** $D$ is invertible; with very poorly separated classes (low entropy) $D^{-1}$ is unstable and BCH, like every three-step correction, becomes unreliable (Vermunt 2010; Bakk, Tekle & Vermunt 2013, *Sociological Methodology* 43(1):272–311). The code checks the full-sample $D$ and stops with a clear message if a class is never modal or $D$ is near-singular, so a degenerate solution is refused rather than reported.
-
-Design-based uncertainty rides on the **same JKn replicate weights** used everywhere else. On each replicate the classification matrix is recomputed with the replicate weights and the corrected multinomial is refit, holding the posteriors and modal assignments fixed; `survey::withReplicates` turns the spread across replicates into design-based standard errors. One limitation is explicit: this propagates the design variance of the *third step* but treats the latent class fit as given, so it does not carry the step-one uncertainty in the measurement model itself. Propagating that as well would mean refitting the whole model inside a design bootstrap, a heavier exercise not done here.
-
-Because the BCH machinery is reusable across studies, it lives in `survey_lca_source.R` alongside the rest of the engine, already sourced in the setup chunk; its functions are dataset-agnostic and take all inputs as arguments.
-
-```{r bch-profile}
-post_cols <- paste0("post_class", seq_len(K_star))
-
-# BCH needs the K x K classification matrix to be invertible, which requires
-# every class to be some respondent's modal class and the classes to be
-# separated enough. Check on the full sample first and stop with a readable
-# message rather than failing cryptically inside the replicates.
-D_full <- classification_matrix(as.matrix(dat_prepared[, post_cols]),
-                                as.integer(as.character(dat_prepared$modal_class)),
-                                weights(prof_des))
-if (any(!is.finite(D_full)) || any(colSums(D_full) < 1e-10))
-  stop("At least one class is empty or never the modal class, so the ",
-       "classification matrix is singular and BCH cannot run. This signals a ",
-       "degenerate class; revisit the number of classes.")
-if (rcond(D_full) < 1e-8)
-  stop("The classification matrix is near-singular (very poorly separated ",
-       "classes). BCH is unreliable here; report the modal profile and treat ",
-       "the classes as weakly identified.")
-
-# Statistic for withReplicates: with the replicate weights, recompute D, the
-# soft labels, and the corrected multinomial, holding the posteriors and modal
-# assignments fixed (the measurement model is treated as given at step three).
-# To inspect the layout, call it on the full sample directly:
-# bch_theta(weights(prof_des), dat_prepared).
-bch_theta <- function(w_rep, data)
-  bch_flatten(bch_fit(data, cfg$aux, post_cols, "modal_class",
-                      w = as.numeric(w_rep), ref = cfg$ref_class))
-
-bch_rep <- withReplicates(prof_rep, bch_theta)              # design-based variance of the BCH coefs
-bch_est <- bch_theta(weights(prof_des), dat_prepared)       # full-sample point estimates
-bch_se  <- sqrt(diag(vcov(bch_rep)))                        # design SEs, same order
-stopifnot(length(bch_est) == length(bch_se))
-
-bch_tbl <- tibble(coef = names(bch_est),
-                  estimate = as.numeric(bch_est),
-                  se = as.numeric(bch_se)) |>
-  separate(coef, into = c("class", "term"), sep = "::") |>
-  filter(term != "(Intercept)") |>
-  mutate(comparison = paste0("Class ", class, " vs ", cfg$ref_class),
-         OR = exp(estimate),
-         lo = exp(estimate - 1.96 * se),
-         hi = exp(estimate + 1.96 * se))
+dom_diff <- dom_meta |>
+  inner_join(ref_idx, by = c("pvar", "class")) |>
+  filter(plevel != ref_level) |>
+  mutate(diff = dom_est[idx] - dom_est[ref],
+         var  = diag(dom_V)[idx] + diag(dom_V)[ref] - 2 * dom_V[cbind(idx, ref)],
+         se   = sqrt(pmax(var, 0)),
+         lo   = diff - 1.96 * se,
+         hi   = diff + 1.96 * se)
 ```
 
-```{r tbl-bch}
-mn_tbl |>
-  transmute(class, term, OR_modal = OR) |>
-  inner_join(dplyr::select(bch_tbl, class, term, OR_bch = OR, lo, hi),
-             by = c("class", "term")) |>
-  transmute(Comparison = paste0("Class ", class, " vs ", cfg$ref_class),
-            Predictor = term,
-            `OR (modal)` = round(OR_modal, 2),
-            `OR (BCH)` = round(OR_bch, 2),
-            `BCH 95% CI` = sprintf("[%.2f, %.2f]", lo, hi)) |>
-  knitr::kable(align = "llrrr",
-               caption = paste0("Naive modal versus BCH bias-corrected odds ratios, each class against Class ",
-                                cfg$ref_class, ". BCH removes the classification-error attenuation, so its odds ratios sit farther from 1; the intervals are design-based from the JKn replicates and are wider, the price of the correction."))
+```{r tbl-contrasts}
+dom_diff |>
+  transmute(Variable = pvar,
+            Comparison = paste0(plevel, " vs ", ref_level),
+            Class = paste("Class", class),
+            Difference = round(diff, 3),
+            `95% CI` = sprintf("[%.3f, %.3f]", lo, hi)) |>
+  arrange(Variable, Comparison, Class) |>
+  knitr::kable(align = "lllrr",
+               caption = "Design-based difference in class prevalence between each demographic level and its reference (first) level, on the probability scale. A risk difference whose interval excludes zero is a group distinction the design supports. Intervals are from the JKn replicate weights.")
 ```
 
-```{r fig-bch}
-#| fig-width: 8
-#| fig-height: 5
-#| fig-cap: "Naive modal (attenuated) versus BCH bias-corrected odds ratios with design-based 95% intervals, each non-reference class against the reference class, by predictor. The correction generally pushes odds ratios away from 1 and widens the intervals."
-bind_rows(dplyr::select(mn_tbl, comparison, term, OR, lo, hi) |> mutate(method = "Modal (naive)"),
-          dplyr::select(bch_tbl, comparison, term, OR, lo, hi) |> mutate(method = "BCH (corrected)")) |>
-  mutate(method = factor(method, levels = c("Modal (naive)", "BCH (corrected)"))) |>
-  ggplot(aes(OR, term, color = method)) +
-  geom_vline(xintercept = 1, linetype = "dashed", color = "grey55") +
-  geom_pointrange(aes(xmin = lo, xmax = hi), size = 0.35, linewidth = 0.4,
-                  position = position_dodge(width = 0.6)) +
-  facet_wrap(~ comparison) +
-  scale_x_log10() +
-  scale_color_viridis_d(begin = 0.15, end = 0.7) +
-  labs(x = "Odds ratio versus reference class (log scale)", y = NULL, color = NULL) +
-  theme_lca()
-```
+One limitation is stated plainly, as elsewhere in the script: these estimates treat the measurement model as given. The replicate weights carry the design variance of the prevalences and their differences, but they do not propagate the uncertainty in the latent class fit itself (the $\pi_k$ and $\rho_{jck}$ estimated in Section 9). Propagating that as well would mean refitting the whole model inside a design bootstrap, a heavier exercise not done here.
 
 # Exporting results
 
@@ -964,13 +886,14 @@ Three files are written: the enumeration table, the full measurement model with 
 2.  **Set `cfg$items`** to your indicator columns, each coded as consecutive integers from 1 over its substantive answers. Items may have **different numbers of categories**. Put any "Don't know" or missing code in `cfg$na_codes` (or use `NA` directly); those responses are treated as missing, the model is fit on complete cases, and missing-item respondents are assigned a class in Section 14. The category-count and missing table after Section 6 lets you confirm the coding.
 3.  **Set `cfg$strata`, `cfg$psu`, `cfg$weight`** to your design columns. This is the analogue of `svyset psu [pweight = w], strata(stratum)`. If your file ships **replicate weights** instead of strata and PSU identifiers, replace each `svydesign(...)` plus `as.svrepdesign(...)` pair with a single `svrepdesign(repweights = ..., weights = ..., type = ...)`; the rest of the variance code is unchanged.
 4.  **Set `cfg$aux`** to the demographics you want in the profile. Demographics used to build the weights (age, for instance) are fine and often helpful here; the only variables to exclude are the survey items that defined the classes.
-5.  **Set `cfg$ref_class`** to the class you want as the multinomial baseline. Class labels are arbitrary, since no substantive order is imposed, so this only chooses which class the odds ratios and predicted probabilities are measured against.
-6.  **Run, then read enumeration first.** Choose $K$ on the weighted BIC, sanity-checked against entropy and interpretability; the validation check should show the EM matching `poLCA` at unit weights before you trust the weighted output.
+5.  **Optionally set `cfg$K_force`** to pin the number of classes when the weighted BIC prefers more than are interpretable. Leave it `NULL` to select $K$ by BIC (Section 8); set it to an integer within `cfg$K_range` to override the pick. The enumeration table still prints either way, so the BIC evidence remains visible alongside the forced choice.
+6.  **Run, then read enumeration first.** Choose $K$ on the weighted BIC, sanity-checked against entropy and interpretability (or pin it with `cfg$K_force`); the validation check should show the EM matching `poLCA` at unit weights before you trust the weighted output.
 7.  **Mind the degrees of freedom.** Your design-based intervals carry roughly (number of PSUs minus number of strata) degrees of freedom; with few PSUs they will be wide, and that width is honest.
-8.  **Treat the modal profile as descriptive, and use the BCH section for inference.** The naive multinomial in this section is attenuated by classification error. For inferential statements about demographic predictors, read the BCH bias-corrected odds ratios at the end of Section 15, which de-attenuate the associations while keeping the design-based variance. BCH assumes the classes are separated enough to be reliably told apart (high entropy); the code stops if they are not.
-9.  **Keep `survey_lca_source.R` next to this document.** It holds the plotting and data-prep helpers, the weighted EM engine, the BCH correction, and the worked-example simulator, and is sourced in the setup chunk. The functions are dataset-agnostic, so the same file serves any study, but the render fails if it is not in the working directory.
+8.  **Read the demographic profile as design-based prevalences (Section 15).** It reports each class's prevalence within each demographic level, and the differences between groups, with design-based intervals from the JKn replicate weights. Region is included even when it is the stratum, because a within-region prevalence is a domain estimate rather than a regression coefficient. Wide bands reflect few PSUs in a group, not an error. These estimates treat the measurement model as given and do not propagate the step-one latent class uncertainty.
+9.  **Keep `survey_lca_source.R` next to this document.** It holds the plotting and data-prep helpers, the weighted EM engine, and the worked-example simulator, and is sourced in the setup chunk. The functions are dataset-agnostic, so the same file serves any study, but the render fails if it is not in the working directory.
 10. **Score respondents outside the fit** with `score_lca(newdata, fit_w, cfg$items)` (Section 14): it assigns a class to anyone carrying the item columns, including a fresh data frame, as long as those items are recoded the same way.
 
 ```{r session}
+future::plan(future::sequential)   # close any parallel workers
 sessionInfo()
 ```

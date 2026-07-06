@@ -5,6 +5,8 @@ author: "Kevin"
 date: today
 format:
   typst:
+    toc: true
+    toc-depth: 3
     number-sections: true
     papersize: us-letter
     margin:
@@ -855,7 +857,7 @@ You can run a local LLM through ellmer's Ollama backend, so no data leaves your 
 
 ```{r}
 #| label: ai-setup
-#| eval: true
+#| eval: false
 
 library(ellmer)
 
@@ -879,7 +881,7 @@ Turning each topic's top terms into a human-readable label is low risk: the mode
 
 ```{r}
 #| label: ai-label
-#| eval: true
+#| eval: false
 
 labeler <- make_chat(paste(
   "You label political topic models. Given the top terms of one topic, return a",
@@ -906,7 +908,7 @@ Classify each post's sentiment with the local model, then compare to the Bing sc
 
 ```{r}
 #| label: ai-sentiment
-#| eval: true
+#| eval: false
 
 rater <- make_chat(paste(
   "You rate the sentiment of a political post toward the policy it discusses.",
@@ -929,7 +931,7 @@ safe_rate <- function(txt) {
 }
 
 ai_sent <- ai_check |>
-  mutate(res = map(text, safe_rate)) |>
+  mutate(res = map(text, safe_rate, .progress = "LLM sentiment")) |>
   unnest_wider(res) |>
   left_join(doc_sent_bing, by = c("doc_id", "year"))
 
@@ -988,9 +990,9 @@ On thresholds: there is **no agreed scale** for what $\kappa$ counts as "good." 
 LLM labels and scores are **measurements with error**. Even at temperature 0, local models can vary across versions and quantizations and are sensitive to prompt wording. Pin the model tag, log prompts and raw responses, validate against the lexicon (above), and never treat an LLM label as ground truth. Small local models also produce less reliable structured output than hosted ones — hence the per-call guard.
 :::
 
-# More we can do with AI (local, auditable)
+# More we can do with AI (local or API, auditable)
 
-The two uses above are deliberately conservative. Several richer applications fit this workflow; all run locally through Ollama and all remain *measurements to be validated*, not oracles.
+The two uses above are deliberately conservative. Several richer applications fit this workflow; they run against a local Ollama server or an API provider (Anthropic, OpenAI) through the same `ellmer` interface, and all remain *measurements to be validated*, not oracles.
 
 ::: callout-note
 ## These examples are inert until you enable them
@@ -1004,7 +1006,7 @@ Document-level sentiment is contaminated when a post touches several topics: a "
 
 ```{r}
 #| label: ai-aspect-sentiment
-#| eval: true
+#| eval: false
 
 aspect_rater <- make_chat(paste(
   "Given a political post and a named policy area, rate the author's sentiment",
@@ -1023,7 +1025,8 @@ aspect_sent <- corpus |>
   expand_grid(area = topic_names) |>
   mutate(res = map2(text, area, \(txt, ar)
     aspect_rater$chat_structured(
-      glue("Policy area: {ar}\n\nPost: {txt}"), type = aspect_type))) |>
+      glue("Policy area: {ar}\n\nPost: {txt}"), type = aspect_type),
+    .progress = "Aspect sentiment")) |>
   unnest_wider(res) |>
   filter(label != "absent")
 
@@ -1040,7 +1043,7 @@ Embeddings give a model-light alternative to LDA/STM and, more usefully here, a 
 
 ```{r}
 #| label: ai-embeddings
-#| eval: true
+#| eval: false
 
 # Local embeddings. Confirm the exact call in your installed package, e.g.
 # ollamar::embed("nomic-embed-text", txt) returning a numeric vector per input.
@@ -1049,7 +1052,7 @@ embed_text <- function(txt) ollamar::embed("nomic-embed-text", txt)[[1]]
 cosine <- function(a, b) sum(a * b) / (sqrt(sum(a^2)) * sqrt(sum(b^2)))
 
 emb <- corpus |>
-  mutate(vec = map(text, embed_text)) |>
+  mutate(vec = map(text, embed_text, .progress = "Embedding posts")) |>
   left_join(doc_dominant, by = c("doc_id", "year"))
 
 # Centroid per topic-year, then year-over-year cosine within each topic.
@@ -1099,7 +1102,7 @@ The classification step then feeds that codebook to the model (enable as above):
 
 ```{r}
 #| label: ai-codebook-classify
-#| eval: true
+#| eval: false
 
 classifier <- make_chat(glue(
   "Assign each post to exactly one category from this codebook:\n{codebook}\n",
@@ -1112,7 +1115,8 @@ class_type <- type_object(
 ai_topic <- corpus |>
   slice_sample(n = 200) |>
   mutate(res = map(text, \(txt)
-    classifier$chat_structured(txt, type = class_type))) |>
+    classifier$chat_structured(txt, type = class_type),
+    .progress = "Codebook classification")) |>
   unnest_wider(res)
 
 # Second-rater check: agreement of the LLM category with the STM dominant topic.
@@ -1121,10 +1125,44 @@ ai_topic |>
   summarise(agreement = mean(category == dominant_topic))
 ```
 
-## Briefly, three more
+## Stance detection: position toward a target
+
+Stance is a different construct from sentiment: it is the author's position **toward a stated proposition** (favor, oppose, neutral), not the emotional tone of the text; this favor/against/neither framing follows the stance-detection literature (Mohammad et al. 2016). The two routinely diverge -- "good riddance, half these offices did nothing" is negative in *sentiment* but *favors* workforce cuts -- so a lexicon or sentiment model cannot measure stance, and the target must be named in the prompt. Two further practices come from Li and Conrad (2024): give the model an **irrelevant** option when the corpus was keyword-collected (otherwise it is forced to invent a stance for off-target posts), and expect failure on texts whose stance is implicit -- LLMs disagree with humans exactly where humans disagree with each other, so disputed items should be routed to a human coder rather than trusted.
+
+The chunk below stays clean by sourcing the companion toolkit `llm_classify.R` (same folder as this document), which holds the functions: `stance_rater()` builds the codebook prompt, the constrained label schema, and the chat object from a `"provider/model"` string -- `"ollama/gemma4:31b"` for the local model, or `"openrouter/<slug>"` for any hosted model through OpenRouter (key in `.Renviron` as `OPENROUTER_API_KEY`; slugs at openrouter.ai/models). `classify_texts()` sends the texts concurrently with rate limits, turns failures into NA rows instead of aborting, and can sleep-and-retry through API quota resets. On this simulated corpus there is no planted stance target, so treat this strictly as the procedure for real data.
+
+```{r}
+#| label: ai-stance
+#| eval: true
+
+source("llm_classify.R")
+
+stance_target <- "expanding federal climate regulation"   # name the proposition
+
+# Single local rater: gemma4 via Ollama (`ollama serve` must be running).
+stance_raters <- list(
+  gemma4 = stance_rater(stance_target, model = "ollama/gemma4",
+                        include_irrelevant = TRUE, 
+                        params = ellmer::params(
+                          temperature = 0.05, seed = 1)))
+
+stance_sample <- corpus |> slice_sample(n = 200)
+
+# max_active = 2 suits a single local GPU; retries = 1, retry_wait = 5 fails
+# fast instead of sleeping for hours if the server is unreachable.
+ai_stance <- classify_texts(stance_sample, text, stance_raters, id = doc_id,
+                            max_active = 2, rpm = 60,
+                            retries = 1, retry_wait = 5)
+
+# Label distribution and failure count for the single rater.
+ai_stance |> dplyr::count(label)
+```
+
+For unattended runs on a quota-limited work API, add `retries = 16, retry_wait = 30 * 60, checkpoint = "stance_run.rds"` to `classify_texts()`: failed texts are retried after a sleep (spanning an 8-hour token reset), and finished models are saved to disk so an interrupted run resumes instead of re-spending tokens.
+
+## Briefly, two more
 
 - **Topic narratives.** Feed the highest-`theta` posts for a topic to the model and ask for a two-sentence summary of how that topic's framing shifts across years — a readable companion to the prevalence curve, reviewed by a human.
-- **Stance and frames.** Sentiment is not stance: ask separately whether the author *supports* or *opposes* the policy, and which frame (economic, moral, security) dominates — a richer construct than tone alone.
 - **RAG over the corpus.** Index the posts (e.g., with `ragnar`) so you can ask grounded questions ("what did the author say about tariffs in 2019?") with the source posts retrieved as evidence rather than trusting the model's memory.
 
 All of these stay under the Section 9 discipline: pin the model, log prompts and raw output, keep the LLM blind to the outcome it helps measure, and validate against an independent signal.
@@ -1162,6 +1200,8 @@ All entries below were verified against primary sources while preparing this fil
 - Grimmer, J., Roberts, M. E., & Stewart, B. M. (2022). *Text as Data: A New Framework for Machine Learning and the Social Sciences.* Princeton University Press.
 - Chang, J., Boyd-Graber, J., Gerrish, S., Wang, C., & Blei, D. M. (2009). Reading Tea Leaves: How Humans Interpret Topic Models. *Advances in Neural Information Processing Systems 22 (NIPS)*, 288-296.
 - Gilardi, F., Alizadeh, M., & Kubli, M. (2023). ChatGPT Outperforms Crowd Workers for Text-Annotation Tasks. *PNAS*, 120(30), e2305016120. doi:10.1073/pnas.2305016120
+- Mohammad, S. M., Kiritchenko, S., Sobhani, P., Zhu, X., & Cherry, C. (2016). SemEval-2016 Task 6: Detecting Stance in Tweets. *Proceedings of the 10th International Workshop on Semantic Evaluation (SemEval-2016)*.
+- Li, M., & Conrad, F. (2024). Advancing Annotation of Stance in Social Media Posts: A Comparative Analysis of Large Language Models and Crowd Sourcing. arXiv preprint arXiv:2406.07483.
 
 ```{r}
 #| label: session

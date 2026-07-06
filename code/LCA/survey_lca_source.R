@@ -3,11 +3,10 @@
 # Reusable source code for design-weighted latent class analysis.
 # Sourced by survey_lca_analysis.qmd; keep it in the same folder when rendering.
 #
-# Contents (four sections):
+# Contents (three sections):
 #   1. Plotting and data-preparation helpers
 #   2. The weighted EM engine and label alignment
-#   3. The Bolck-Croon-Hagenaars (BCH) three-step correction
-#   4. The worked-example data simulator
+#   3. The worked-example data simulator
 #
 # These functions take their inputs as arguments and hold no analysis-specific
 # state, with one documented exception kept from the original script: fit_lca()
@@ -150,6 +149,32 @@ align_to <- function(fit, ref) {
 }
 
 # Fit at a given K from many random starts; keep the best weighted log-likelihood.
+# Bivariate residuals (BVR): a local-independence diagnostic for each item PAIR.
+# For items a and b, compare the design-weighted observed two-way table with the
+# table the fitted model implies, p_exp(r, s) = sum_k pi_k rho_a[r, k] rho_b[s, k],
+# as a Pearson X2 on proportions scaled by n, divided by (Ca-1)(Cb-1). Under a
+# weighted pseudo-likelihood and a complex design the chi-square reference does not
+# apply, so the value is a descriptive index for RANKING pairs, not a test.
+# rho in the fit is positional in `items` order, so items must be passed in the
+# same order used to fit.
+bvr_pairs <- function(df, w, items, fit) {
+  n  <- length(w)
+  W  <- sum(w)
+  pr <- t(utils::combn(seq_along(items), 2L))
+  map_dfr(seq_len(nrow(pr)), function(i) {
+    a <- pr[i, 1]; b <- pr[i, 2]
+    Ca <- nrow(fit$rho[[a]]); Cb <- nrow(fit$rho[[b]])
+    obs <- as.matrix(stats::xtabs(w ~ factor(df[[items[a]]], seq_len(Ca)) +
+                                      factor(df[[items[b]]], seq_len(Cb)))) / W
+    exp_p <- fit$rho[[a]] %*% (fit$pi * t(fit$rho[[b]]))   # Ca x Cb model-implied
+    x2 <- n * sum((obs - exp_p)^2 / exp_p)
+    tibble(item_a = items[a], item_b = items[b],
+           df  = (Ca - 1L) * (Cb - 1L),
+           bvr = x2 / ((Ca - 1L) * (Cb - 1L)))
+  }) |>
+    arrange(desc(bvr))
+}
+
 fit_lca <- function(df, w, cats, items, K, starts, ref = NULL) {
   inp <- make_inputs(df, items, cats)
   cands <- map(seq_len(starts), function(s) {
@@ -171,112 +196,7 @@ entropy_R2 <- function(post, K) {
 
 
 # ============================================================================
-# 3. THE BCH (BOLCK-CROON-HAGENAARS) THREE-STEP CORRECTION
-# ============================================================================
-# Regresses latent class membership on external covariates without the
-# attenuation that arises when a modal class assignment is treated as the true
-# class. References: Bolck, Croon & Hagenaars (2004) Political Analysis
-# 12(1):3-27; Vermunt (2010) Political Analysis 18(4):450-469; Bakk, Tekle &
-# Vermunt (2013) Sociological Methodology 43(1):272-311.
-
-# Classification (misclassification) matrix D, K x K with
-# D[t, s] = P(assigned class = s | true class = t); rows sum to 1.
-#   post  : n x K posterior class probabilities, columns in class order 1..K.
-#   modal : length-n integer vector of assigned (modal) classes, values 1..K.
-#   w     : length-n weights (survey weights, or replicate weights).
-# A near-diagonal D means clean classification; off-diagonal mass is the error
-# that attenuates a modal-class regression.
-classification_matrix <- function(post, modal, w) {
-  K <- ncol(post)
-  modal_ind <- outer(modal, seq_len(K), `==`) + 0      # n x K, 1 where assigned = s
-  # t(post * w) is K x n with row t equal to w_i * post[i, t] (w recycles down
-  # each column because length(w) == nrow(post)); the matrix product then sums
-  # the weighted (true t, assigned s) counts over respondents.
-  N_ts <- t(post * w) %*% modal_ind                    # K x K: rows true, cols assigned
-  N_ts / rowSums(N_ts)                                 # normalise each true-class row to 1
-}
-
-# Weighted multinomial logistic regression with BCH soft labels.
-#   X   : n x p numeric design matrix (include the intercept column).
-#   R   : n x K soft-label matrix; row i is row modal_i of solve(D), so each row
-#         sums to 1 but entries may be NEGATIVE (this is the BCH correction).
-#   w   : length-n numeric case weights (the survey or replicate weights).
-#   ref : integer index (1..K) of the reference class (its coefficients are 0).
-# Returns a p x (K-1) coefficient matrix: rows are the columns of X, columns are
-# the non-reference classes (named by their integer label).
-#
-# Why negative soft labels do not destabilise the fit. The objective is the
-# weighted log-likelihood
-#   l(B) = sum_i w_i * sum_t R[i, t] * log P(class = t | X_i).
-# Its curvature (the Hessian) depends only on the POSITIVE weights w_i and the
-# fitted probabilities, not on the signed labels R, so l is concave with a
-# single maximum; a quasi-Newton solver finds the unique BCH solution. The
-# gradient for a non-reference class t is
-#   sum_i w_i * X_i * (R[i, t] - P(class = t | X_i)),
-# which the solver below supplies analytically.
-weighted_multinom <- function(X, R, w, ref = 1L, maxit = 500L) {
-  K <- ncol(R); p <- ncol(X)
-  nonref <- setdiff(seq_len(K), ref)             # the K-1 classes that carry coefficients
-  unpack <- function(par) matrix(par, nrow = p)  # p x (K-1); column j -> class nonref[j]
-  # Linear predictors, n x K, with the reference column held at 0.
-  linpred <- function(B) { eta <- matrix(0, nrow(X), K); eta[, nonref] <- X %*% B; eta }
-  # Row-wise softmax, shifted by each row's maximum for numerical stability.
-  probs <- function(eta) { e <- exp(eta - matrixStats::rowMaxs(eta)); e / rowSums(e) }
-  negll <- function(par) {                       # negative weighted log-likelihood
-    P <- probs(linpred(unpack(par)))
-    -sum(w * rowSums(R * log(pmax(P, 1e-12))))   # floor probabilities off 0 before the log
-  }
-  neggr <- function(par) {                       # gradient of negll, length p*(K-1)
-    P <- probs(linpred(unpack(par)))
-    -as.vector(crossprod(X, w * (R[, nonref, drop = FALSE] - P[, nonref, drop = FALSE])))
-  }
-  opt <- optim(rep(0, p * (K - 1)), negll, neggr, method = "BFGS",
-               control = list(maxit = maxit, reltol = 1e-11))
-  B <- unpack(opt$par)
-  dimnames(B) <- list(colnames(X), as.character(nonref))
-  B
-}
-
-# End-to-end BCH fit from a data frame.
-#   data      : data frame with the covariates, posteriors, and modal class.
-#   aux       : character vector of covariate (predictor) column names.
-#   post_cols : the K posterior column names, in class order 1..K.
-#   modal     : name of the modal-class column (integer, or a factor whose
-#               levels are the integer class labels).
-#   w         : length-n weights (survey weights or, inside a replicate, the
-#               replicate weights). Drives BOTH D and the regression.
-#   ref       : integer reference class.
-# The design matrix uses treatment contrasts (each factor's first level as its
-# reference), matching nnet::multinom, so BCH and naive modal coefficients are
-# comparable term by term. na.action = na.pass keeps rows aligned with the
-# posteriors; missing covariates are caught explicitly rather than dropping rows.
-bch_fit <- function(data, aux, post_cols, modal, w, ref = 1L) {
-  mf <- model.frame(reformulate(aux), data, na.action = na.pass)
-  X  <- model.matrix(attr(mf, "terms"), mf)                  # n x p, aligned with data
-  if (anyNA(X))
-    stop("Missing values in the BCH covariates (", paste(aux, collapse = ", "),
-         "). BCH needs complete covariates; drop or impute them before profiling.")
-  post      <- as.matrix(data[, post_cols, drop = FALSE])    # n x K posteriors, class order
-  modal_int <- as.integer(as.character(data[[modal]]))       # recover integer class labels
-  D <- classification_matrix(post, modal_int, w)
-  R <- solve(D)[modal_int, , drop = FALSE]                   # soft labels: rows of D^{-1}
-  weighted_multinom(X, R, w, ref = ref)
-}
-
-# Flatten a coefficient matrix to one named vector with names "<class>::<term>",
-# laid out one class at a time, matching the naive multinom_theta() layout so
-# survey::withReplicates can build a covariance matrix and the two coefficient
-# sets join term by term.
-bch_flatten <- function(B) {
-  flat <- as.vector(B)                                       # column-major: class by class
-  names(flat) <- as.vector(outer(rownames(B), colnames(B),
-                                 function(tm, cl) paste(cl, tm, sep = "::")))
-  flat
-}
-
-
-# ============================================================================
-# 4. THE WORKED-EXAMPLE DATA SIMULATOR
+# 3. THE WORKED-EXAMPLE DATA SIMULATOR
 # ============================================================================
 # Generate the multistage worked example: 9 strata, ~20 PSUs in total, ~1,200
 # respondents, stratum-varying base weights, and an INFORMATIVE design (the more

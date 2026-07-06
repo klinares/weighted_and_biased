@@ -2,7 +2,7 @@
 
 A reproducible Quarto template that builds a full **topic-evolution + sentiment** pipeline and then *proves it works* by recovering structure that was deliberately planted into a simulated corpus. The subject matter (synthetic political commentary over a decade) is just a test fixture — the point is the **method**: how to know whether your text-mining results mean anything when real-world text comes with no answer key.
 
-![Topic modeling: expectation vs. reality](topic_modeling_reality.svg){width="595"}
+![Topic modeling: expectation vs. reality](topic_modeling_reality.svg){width="497"}
 
 ## Why simulate?
 
@@ -16,7 +16,7 @@ On real text you can run a topic model, read the top words, nod, and ship it —
 4.  **Topic models** — LDA (collapsed Gibbs) and STM (with an `s(year)` prevalence covariate). Recovered topics are matched back to the planted ones with the **Hungarian algorithm** (`clue::solve_LSAP`) to resolve label switching.
 5.  **Recovery metrics** — the honest part: document-level **dominant-topic accuracy**, **prevalence MAE** against realized topic shares, and STM's `estimateEffect` with 95% confidence bands. Trend correlation alone is shown to be too lenient on short, monotone series.
 6.  **Sentiment** — Bing lexicon (with an AFINN fallback), a bigram-based **negation diagnostic**, and per-topic sentiment-trajectory recovery.
-7.  **Optional AI module** — a local LLM (Ollama / `gemma4` via `ellmer`) for zero-shot labeling and a sentiment cross-check (Spearman ρ + Cohen's κ), plus extensions: aspect-based (topic-conditioned) sentiment, embedding-based semantic-drift detection, and codebook-seeded few-shot classification.
+7.  **Optional AI module** — a chat LLM (gemma4 locally via Ollama, or any hosted model through OpenRouter, via `ellmer`) for zero-shot labeling, a sentiment cross-check (Spearman ρ + Cohen's κ), and target-specific stance detection with a relevance gate, plus extensions: aspect-based (topic-conditioned) sentiment, embedding-based semantic-drift detection, and codebook-seeded few-shot classification.
 
 ## Methods and tooling
 
@@ -26,7 +26,7 @@ On real text you can run a topic model, read the top words, nod, and ship it —
 | Label alignment | Hungarian algorithm (`clue::solve_LSAP`) on top-term overlap |
 | Recovery | dominant-topic accuracy, prevalence MAE, `estimateEffect` with CIs |
 | Sentiment | `tidytext` + Bing / AFINN lexicons; negation bigrams |
-| LLM annotation | local Ollama via `ellmer::chat_ollama` (structured output) |
+| LLM annotation | `llm_classify.R` toolkit: gemma4 via local Ollama or hosted models via OpenRouter (`ellmer` structured output) |
 | Agreement | Spearman ρ; Cohen's κ (`irr::kappa2`) |
 | Rendering | Quarto **Typst** engine — a self-contained PDF with no LaTeX / tinytex |
 
@@ -56,4 +56,6 @@ The simulated corpus uses disjoint topic vocabularies and very little negation, 
 ## Files
 
 - `political_text_topic_evolution.qmd` — the workflow; render to a self-contained PDF.
+- `llm_classify.R` — reusable LLM classification toolkit (sentiment, stance, topic); the `.qmd`'s stance chunk `source()`s it, so keep it in this folder.
+- `defensible_llm_text_measurement.md` — methodology and citations for the toolkit.
 - `topic_modeling_reality.svg` — the image above.

@@ -1,78 +1,136 @@
-# weighted-and-biased
+# weighted_and_biased
 
-![weighted-and-biased](images/banner.svg)
+Design-weighted latent class analysis (LCA) with integrated jackknife replicate
+variance estimation, and an LLM-assisted tool for drafting class labels from a
+fitted measurement model.
 
-> *Correcting for who answered. Occasionally correct about other things.*
+The repository fills a gap in the R ecosystem. Existing packages either estimate
+latent class models or compute replicate variances, but none combine
+survey-design-weighted LCA estimation with replicate-based variance estimation for
+the quantities that result: class prevalences, item-response probabilities, and
+design-based domain estimates.
 
-Personal research repository for work at the intersection of survey methodology, machine learning, and applied statistics. Projects live here when they are either (a) finished enough to share or (b) useful enough to version-control before they become a cautionary tale about undocumented pipelines.
+The project has two parts, an estimation pipeline (R and Quarto) and a labeling
+tool (R).
 
----
+## 1. Design-weighted LCA estimation
 
-## Projects
+Files:
 
-| Project | What it does | Key methods | Status |
-|---|---|---|---|
-| **Design-Weighted LCA** | Estimates latent class models from complex survey data without pretending the weights don't exist | Pseudo-ML weighted EM · stratified jackknife (JKn) replication variance · Hungarian label alignment · weight-to-_n_ calibrated BIC · BCH bias-corrected three-step profiling · out-of-sample scoring | Manuscript draft |
-| **LCA-to-ML Workflow** | Predicts latent class membership from external covariates using machine learning, without the naive classify-then-regress mistake | Posterior probability targets · design-weighted random forests · pseudo-class draws · PSU-grouped validation | Manuscript draft |
+- `survey_lca_source.R` is the reusable engine: data-preparation and plotting
+  helpers, the design-weighted EM estimator, and a configurable data simulator for
+  testing.
+- `survey_lca_analysis.qmd` is the analysis narrative; it sources the engine and
+  renders to PDF.
 
-Each project folder contains a Quarto manuscript (`.qmd`), a companion documentation file (`_documentation.qmd`), and exported CSVs. Rendering the manuscript reproduces every result, table, and figure. The teaching-oriented Design-Weighted LCA build is split into two files: an analysis manuscript (`survey_lca_analysis.qmd`) that holds the narrative and the equations, and a sourced engine (`survey_lca_source.R`) that holds the reusable functions, the BCH correction, and the worked-example simulator. A single `cfg$simulated` flag switches the manuscript between the worked example and your own data.
+A single configuration list (`cfg`) is the only intended edit point.
 
----
+### Methods
 
-## Philosophy
+Weighted EM. The latent class model is fit by an expectation-maximization
+algorithm in which each case contributes its survey weight to the sufficient
+statistics, so prevalences and item-response probabilities are design-weighted.
+Each random start is re-seeded deterministically, so a run reproduces exactly.
 
-Survey data is not a sample of the internet. It has a design, and the design has a purpose, and ignoring it produces estimates of what happened in your sample, which is a different and smaller place than the world.
+Jackknife replicate variance. Standard errors and confidence intervals come from
+jackknife (JKn) replicate weights constructed from the design's strata, primary
+sampling units, and weights, applied through `survey::withReplicates`. This
+propagates the complex-design variance into every reported quantity rather than
+assuming simple random sampling.
 
-Everything here tries to:
+Design-based domain estimation. Class composition within a demographic domain is
+estimated from the soft posterior class probabilities, averaged with the replicate
+weights through a controlled `withReplicates` statistic. The result is
+logit-bounded confidence intervals that are coherent with the overall prevalences,
+since the weighted domain mean of the posteriors reproduces the prevalence at the
+EM fixed point. This replaced an earlier odds-ratio and multinomial approach that
+suffered quasi-separation when a stratum was sparse within a class and replication
+emptied the cell.
 
-- **Weight correctly or say why not.** Horvitz-Thompson is not optional decoration.
-- **Report uncertainty honestly.** A standard error from the information matrix, on weighted pseudo-ML estimates, from a clustered sample, is not the right standard error. The replication-based one is.
-- **Fabricate nothing.** All numeric claims in the prose are inline code references. If the code doesn't run, the number doesn't appear.
-- **State the boundary.** Prediction pipelines license predictions. They do not license causal inference, effect estimates, or press releases.
+Model selection. The number of classes is chosen by an information criterion on
+the weighted pseudo-log-likelihood. Because base weights need not sum to the
+sample size, the pseudo-log-likelihood is rescaled by n / sum(w) before forming
+AIC and BIC, so the fit term and the ln(n) penalty are on the same footing; this
+leaves point estimates unchanged. A `cfg$K_force` override pins the class count
+when a substantive or diagnostic reason calls for it. The unweighted poLCA
+BIC-selected K is retained as a diagnostic comparator. The design-based criterion
+of Lumley and Scott (2015), which inflates the parameter penalty by the trace of a
+generalized design-effect matrix and so selects fewer classes when the design
+effect exceeds one, is the rigorous reference point.
 
----
+Variable selection. Where indicator screening is used, the framework follows Fop,
+Smart and Murphy (2017), whose generalization allows a dropped variable to depend
+on the retained ones, alongside the stepwise BIC search of Dean and Raftery (2010)
+with its conditional-independence restricted comparison model.
 
-## Reproducibility
+Parallelism. The three repeated-fit loops (class-number enumeration, the indicator
+screen, and the poLCA comparison sweep) are parallelized with `furrr` using
+reproducible parallel seeding.
 
-Every manuscript renders from source. Dependencies are documented in `sessionInfo()` at the end of each rendered document.
+## 2. LLM-assisted class labeling
 
-```r
-# render the design-weighted LCA manuscript (keep survey_lca_source.R beside it)
-quarto render survey_lca_analysis.qmd
+File: `lca_class_labeling.R`, with `gemma_label_experiment.R` as the ground-truth
+validation harness used to design it.
 
-# render a pipeline manuscript and its documentation
-quarto render design_weighted_lca_pipeline.qmd
-quarto render design_weighted_lca_documentation.qmd
-```
+The tool reads a fitted measurement model and asks a language model to draft, for
+each class, a short label, a factual description anchored to that class's
+high-probability answers, and the items that define it. The output is a draft for
+an analyst to review and refine; it never re-enters estimation.
 
-Required packages: `tidyverse`, `matrixStats`, `survey`, `poLCA`, `clue`, `nnet`, `ranger`, `viridisLite`.
+### Input
 
-No data is fabricated. Simulations use `set.seed()` and fixed parameters. The seeds and parameters are in the code, not the prose.
+`read_lca_outputs()` reads the measurement-model export, a long CSV with a `kind`
+column where `pi` rows carry class prevalences and `rho` rows carry response
+probabilities by item, category, and class. It returns one category-by-class
+probability matrix per item plus the prevalence vector. Question wording and
+response-category labels are supplied alongside, since they are not part of the
+numeric fit.
 
----
+### Method and its justification
 
-## What this is not
+The tool issues one model call per class. This was chosen empirically with the
+validation harness, which plants a known measurement model, runs the labeler
+blind, and scores recovery against the planted truth:
 
-- A package. There is no `DESCRIPTION` file and `install.packages` will not help you.
-- A textbook. The documentation explains the equations because the equations are load-bearing, not for pedagogical completeness.
-- Finished. The manuscript drafts say "draft" for a reason.
+- Showing the model all classes at once and asking for a joint labeling confuses
+  the structurally closest classes. The failure is similarity-driven, concentrated
+  on near-neighbor pairs, and a forced one-to-one assignment lets a single
+  confusion fail two classes.
+- Reading one class in isolation removes that interference and gives a clean,
+  independently scored result per class.
+- A two-stage variant, a global comparison pass feeding each per-class call, was
+  tested and changed no class on the near-neighbor cells, so the extra call was
+  dropped.
 
----
+The model is therefore used for what it does reliably, reading a profile and
+reporting facts, while the interpretive naming is left to the analyst. The output
+prints the items the model named beside the items that objectively most
+distinguish each class (total-variation distance), so the review is grounded.
+Labels are least reliable for classes with very similar profiles and for
+near-neutral response patterns, and these are flagged for closer review.
 
-## TSE placement
+### Providers
 
-For anyone arriving from the survey-methods side: these projects sit at the boundary of the representation arm and the measurement arm of the Total Survey Error framework. The weighting corrects representation bias from informative selection. The latent class model is the measurement model. The downstream ML is a prediction exercise on the measurement output. Coverage error, nonresponse bias beyond what the weights encode, and measurement error in the items themselves are noted as limitations and left to future work (or better-funded collaborators).
+The model call is provider-agnostic: OpenRouter, a local Ollama server, or an
+internal OpenAI-compatible endpoint, selected in the configuration block. API keys
+are read from environment variables and are never stored in the file.
 
----
+## Reproducibility and conventions
 
-## Name
+- R style: native pipe only, no explicit loops (map, reduce, and matrix algebra),
+  `tidyverse` loaded last, viridis palettes for figures, and explicit conflict
+  resolution.
+- Estimation is seeded per replicate fit, so weighted EM runs and replicate
+  variances reproduce exactly.
+- Quarto documents render to PDF; a stale-cache render is cleared by removing the
+  `_freeze` and `.quarto` directories.
 
-Three simultaneous meanings, all accurate:
+## References
 
-1. The data came from a complex survey and the observations carry design weights.
-2. Without those weights, the estimates are biased.
-3. This is a personal repo and therefore also a personality description.
-
----
-
-*University of Maryland, Joint Program in Survey Methodology*
+- Dean, N. and Raftery, A. E. (2010). Latent class analysis variable selection.
+  *Annals of the Institute of Statistical Mathematics*, 62(1), 11-35.
+- Fop, M., Smart, K. M. and Murphy, T. B. (2017). Variable selection for latent
+  class analysis with application to low back pain diagnosis. *Annals of Applied
+  Statistics*, 11(4), 2080-2110.
+- Lumley, T. and Scott, A. J. (2015). AIC and BIC for modeling with complex survey
+  data. *Journal of Survey Statistics and Methodology*, 3(1), 1-18.
