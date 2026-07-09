@@ -1,13 +1,22 @@
 # Defensible LLM-based measurement of sentiment, stance, and topic
 
-A short methodology note and usage guide for `llm_classify.R`. It addresses one
-situation: you need to classify text by sentiment, stance, or topic, and you
-cannot use a fine-tuned encoder (RoBERTa, DeBERTa, a domain classifier) because
-the model weights or the GPU/hosting are not available at work. The tools on
-hand are chat LLMs: one local Ollama model (`gemma4:31b`) plus any hosted model
-through OpenRouter's unified API (one key, many providers) -- all called from
-`ellmer` through one interface. The question is how to use them
-so the results survive review.
+The methodology note for the LLM measurement in the **hot_topic** pipeline
+(`llm_stance.qmd`, Script 2). It addresses one situation: you need to classify
+text by sentiment, stance, or topic, and you cannot use a fine-tuned encoder
+(RoBERTa, DeBERTa, a domain classifier) because the model weights or the
+GPU/hosting are not available at work. The tools on hand are chat LLMs: one
+local Ollama model (`gemma4:31b`) plus any hosted model through OpenRouter's
+unified API (one key, many providers), with a one-line swap to the work
+OpenAI-compatible endpoint -- all called from `ellmer` through one routing
+function. The question is how to use them so the results survive review.
+
+The machinery described here originated in a standalone toolkit
+(`llm_classify.R`, now superseded) and lives **inline in `llm_stance.qmd`** so
+the production script is self-contained; the function names below
+(`stance_rater`, `model_agreement`, `consensus_label`, `triage_for_review`,
+`validate_against_gold`) are the inline functions. The pipeline currently
+implements **stance only**; sentiment and topic raters follow the same
+constrained-output pattern and are one `type_enum` schema away when needed.
 
 The short answer: a chat LLM used this way is a **zero/few-shot annotator**, not
 a calibrated classifier. So you validate it exactly as you would validate a new
@@ -36,8 +45,9 @@ the cuts. *"I'm so proud of my colleagues fighting back against this"* is
 behind the empirical finding in the DOGE study that "oppose" was recoverable
 while "favor" was not: favorable comments often arrive wrapped in anger, so any
 method keying on tone will misread them. State which construct you are measuring,
-and if it is stance, state the target in the prompt. `stance_rater()` and
-`sentiment_rater()` bake this distinction into their instructions on purpose.
+and if it is stance, state the target in the prompt. The pipeline's
+`stance_rater()` bakes this distinction into its codebook on purpose, and a
+sentiment rater, when needed, states the converse in its own.
 
 ## Treat the LLM as a fallible annotator, and validate it like one
 
@@ -47,8 +57,7 @@ Eight practices, each implemented in the toolkit.
 
 This is the difference between a defensible measurement and a guess. Hold out a
 human-labeled set and report per-class precision, recall, and F1, plus macro-F1,
-overall accuracy, and Cohen's kappa against the human labels. `validate_against_
-gold()` returns all of these and the confusion matrix. If you have no labels, you
+overall accuracy, and Cohen's kappa against the human labels. `validate_against_gold()` returns all of these and the confusion matrix. If you have no labels, you
 have no defensible claim about accuracy -- get some, even a few hundred, as the
 DOGE study did with 400. Report **macro-F1**, not accuracy, when classes are
 imbalanced: at 54% "oppose", a model that only ever says "oppose" scores 54%
@@ -109,19 +118,25 @@ The model's self-reported `confidence` and any verbalized probabilities are
 **not calibrated** -- do not treat them as true probabilities. They are useful
 only for triage (review the low-confidence items). If you genuinely need
 calibrated scores, you need labeled data to calibrate against (e.g. isotonic or
-Platt scaling on a held-out split), which again points back to practice 1. The
-`self_consistency()` helper gives a more trustworthy, label-free uncertainty
-signal, adapting the self-consistency idea of Wang et al. (2023): resample each
-item at temperature > 0 and see how often the label recurs; unstable items are
-the ones the model is actually unsure about.
+Platt scaling on a held-out split), which again points back to practice 1. A more
+trustworthy, label-free uncertainty signal is self-consistency (Wang et al.
+2023): resample each item at temperature > 0 and see how often the label
+recurs; unstable items are the ones the model is actually unsure about. The
+production pipeline does not run it, because every resample spends the same
+300-calls-per-window budget as a real classification; the deployed label-free
+triage signal is model-to-model disagreement (practice 3), and
+self-consistency remains an option for a small diagnostic subsample if a
+dispute needs settling.
 
 ### 8. Few-shot from a held-out codebook, kept blind
 
 If you add few-shot examples, draw them from a split **disjoint** from the
 validation set (otherwise you leak the test answers and inflate your metrics),
 and give the model the same written codebook your human coders used. The gain
-is real: in a stance-annotation benchmark, few-shot prompting improved F1 over
-zero-shot for every model tested (Li & Conrad 2024). Keep the model blind to
+is real: in a stance-annotation benchmark, few-shot prompting improved the
+average F1 over zero-shot for every model tested (Li & Conrad 2024, Table 1;
+the improvement holds per model averaged across tasks, though one or two
+individual class-level cells tick down). Keep the model blind to
 anything it should not use: metadata, the outcome, and -- if you are measuring
 change over time -- the date, so it cannot infer the trend it is supposed to
 help measure.
@@ -137,7 +152,9 @@ consequences, both implemented in the toolkit:
 - **Gate for relevance.** Keyword-collected corpora contain posts that never
   discuss the target; forcing a favor/oppose/neutral choice on them
   manufactures noise. Their prompts add an "irrelevant" option;
-  `stance_rater(target, include_irrelevant = TRUE)` does the same.
+  the pipeline's `stance_rater()` carries the gate in its label set and
+  codebook by default, since the corpus is topic-assigned rather than
+  hand-screened and off-target paragraphs are guaranteed to occur.
 - **Triage instead of trusting.** Model-to-model disagreement (and low
   self-consistency) is a label-free proxy for the implicitness that predicts
   failure. `triage_for_review()` accepts unanimous items from the LLMs at
@@ -148,76 +165,60 @@ consequences, both implemented in the toolkit:
 
 ## What this looks like in code
 
+The shape of the measurement in `llm_stance.qmd` (Script 2), reading Script 1's
+topic outputs; everything below is defined inline in that script.
+
 ```r
-source("llm_classify.R")
+# --- Raters: one proposition per topic stratum; >= 2 pinned models ------------
+# Routing off the model string: "openrouter/<slug>" -> chat_openrouter,
+# "ollama/<tag>" -> chat_ollama, anything else -> the work OpenAI-compatible
+# endpoint (base URL and key from .Renviron). Temperature 0, structured output.
+st$models <- c(gemma4   = "ollama/gemma4:31b",
+               maverick = "openrouter/meta-llama/llama-4-maverick")
+rater <- stance_rater(proposition = props[["3"]], model = st$models[["maverick"]])
 
-# --- Stance (target-specific): gemma4 local, everything else via OpenRouter ---
-target <- "reducing the size of the federal workforce"
-raters <- list(   # slugs at openrouter.ai/models; OPENROUTER_API_KEY in .Renviron
-  gemma4   = stance_rater(target, model = "ollama/gemma4:31b",
-                          include_irrelevant = TRUE),
-  maverick = stance_rater(target,
-                          model = "openrouter/meta-llama/llama-4-maverick",
-                          include_irrelevant = TRUE))
+# --- Census classification, batched and checkpointed --------------------------
+# run_batch() is the single seam between simulated and real runs; the loop
+# below it batches each stratum to the 300-call quota window, checkpoints one
+# .rds per batch, and sleep-and-retry recursion rides out quota resets.
+stance_raw <- cache_parquet(p_out("stance_labels.parquet"), { ... })
 
-stance <- classify_texts(comments, comment, raters, id = comment_id,
-                         max_active = 3, rpm = 60,
-                         retries = 16, retry_wait = 30 * 60,  # 8-h quota reset
-                         checkpoint = "stance_run.rds")       # resumable
-model_agreement(stance)                                    # reliability
-review <- triage_for_review(stance)                        # humans get the rest
-validate_against_gold(stance, gold, model_name = "gemma4") # validity (per class)
-
-# --- Sentiment (same toolkit, different construct) ----------------------------
-sent <- classify_texts(comments, comment,
-                       list(gemma4 = sentiment_rater("ollama/gemma4:31b")),
-                       id = comment_id)
-
-# --- Topic (supply your category set) ------------------------------------------
-areas <- c("pay & benefits", "job security", "agency mission", "management")
-topic <- classify_texts(comments, comment,
-                        list(gemma4 = topic_rater(areas, "ollama/gemma4:31b")),
-                        id = comment_id)
+# --- Reliability, ensemble, triage, validity ----------------------------------
+model_agreement(stance_raw)        # kappa + raw agreement + per-class confusion
+consensus <- consensus_label(stance_raw)   # majority vote, deterministic ties
+triage    <- ...                   # non-unanimous items -> human coder, CSV
+validate_against_gold(stance_raw, gold, "maverick")  # per-class P/R/F1, macro-F1
 ```
 
 The same four-step pattern -- build raters, classify, check agreement, validate
-against gold -- works for all three constructs and any new project; only the
-label set and the codebook text change. Model strings are one-string swaps:
-`"ollama/gemma4:31b"` for the local model, `"openrouter/<slug>"` for any hosted
-model (the toolkit routes the latter to `ellmer::chat_openrouter()`, since
-OpenRouter slugs themselves contain a slash), and direct `"provider/model"`
-strings if you hold that provider's key. Pin exact tags and slugs in scripts,
-since catalogs and defaults move.
+against gold -- transfers to any construct and project; only the label set and
+the codebook text change. Model strings are one-string swaps and are pinned in
+the script, since catalogs and defaults move.
 
-## Scaling: parallel and batch execution
+## Scaling: batches, checkpoints, and quota windows
 
-`classify_texts()` runs each model's texts through
-`ellmer::parallel_chat_structured()`: concurrent requests with `max_active` and
-`rpm` throttles, and `on_error = "continue"` so one failed request yields an NA
-row instead of killing an hours-long run. Downstream helpers drop failed rows
-and say how many. Set `max_active` low (2-3) for a local Ollama server and
-respect your API tier's rate limits for hosted models.
+Each batch runs through `ellmer::parallel_chat_structured()`: concurrent
+requests with `max_active` and `rpm` throttles, and `on_error = "continue"` so
+one failed request yields an NA row instead of killing an hours-long run. Set
+`max_active` low (2-3) for a local Ollama server and respect the API tier's
+limits for hosted models.
 
-**Quota-limited APIs.** When an API's token allowance resets on a clock (e.g.
-every 8 hours), a long run will hit the wall mid-corpus. `classify_texts()`
-handles this without babysitting: after each pass it collects the texts whose
-requests failed, `Sys.sleep(retry_wait)`, and re-sends **only those texts**, up
-to `retries` rounds -- so successes never re-spend tokens, and
-`retry_wait = 30 * 60` with `retries = 16` rides out a full 8-hour reset
-unattended. Submission-level failures (auth or quota rejection before any text
-is processed) are caught and given the same sleep-and-retry treatment. Add
-`checkpoint = "run.rds"` and each model's finished results are saved as they
-complete, so an interrupted or crashed run resumes from disk instead of from
-the API.
+**Quota-limited APIs.** The work allowance is 300 calls per 4-hour window, so
+the census is organized around that number: each stratum's paragraphs are
+split into batches sized so one batch times the number of models fills one
+window, every batch is checkpointed to its own `.rds` the moment it completes,
+and failed texts are re-sent after `Sys.sleep(retry_wait)`, up to `retries`
+rounds, so successes never re-spend tokens. With the production settings
+(`retries = 16`, `retry_wait = 30 * 60`) a run rides out full quota resets
+unattended, and an interrupted or crashed render resumes from the batch
+checkpoints instead of from the API. The interactive defaults fail fast
+(`retries = 1`, `retry_wait = 5`) so a misconfiguration surfaces in seconds.
 
-For large corpora, `classify_texts_batch()` uses the provider batch API via
-`ellmer::batch_chat_structured()`: roughly half the per-token price in exchange
-for up to 24-hour latency, and resumable -- the `path` state file means an
-interrupted run picks up where it left off instead of resubmitting. One hard
-constraint: the batch API works only with **direct** `openai/...` or
-`anthropic/...` chats, not through OpenRouter. On an OpenRouter stack, scale
-with `classify_texts()` itself -- checkpointing plus sleep-and-retry make long
-runs resumable and quota-safe without the batch endpoint.
+**Provider batch APIs** (about half the per-token price, up to 24-hour
+latency) work only with direct `openai/...` or `anthropic/...` chats, not
+through OpenRouter, so the pipeline does not use them; on this stack the
+checkpoint-plus-retry loop is the scaling mechanism. If a direct provider key
+ever becomes available, the batch endpoint is a cost lever worth revisiting.
 
 API models introduce one defensibility cost local models do not have: the text
 leaves your machine. Confirm that sending your corpus to a commercial API is
@@ -240,16 +241,18 @@ Before reporting an LLM-based measurement, confirm you can answer yes to each:
    probability?
 8. If few-shot, are the examples disjoint from the validation set?
 
-## What this fixes relative to the current pipeline
+## What this fixes relative to the legacy pipeline
 
-- The `rollama` script's `str_sub(deepseek, -12)` extraction disappears:
-  structured `type_enum` output cannot return anything but a valid label.
-- One toolkit now covers sentiment, stance, and topic, so the same validated
-  machinery is reused across projects instead of re-written per task.
-- Multi-model agreement and gold-standard scoring are first-class functions, not
-  one-off blocks, so every analysis reports the same defensible evidence.
+- Free-text extraction hacks (the old `str_sub(deepseek, -12)` pattern)
+  disappear: structured `type_enum` output cannot return anything but a valid
+  label.
+- Multi-model agreement and gold-standard scoring are first-class functions,
+  not one-off blocks, so every analysis reports the same defensible evidence.
 - Construct precision is enforced in the prompts, separating the "favor with
   hostile tone" cases that a sentiment-flavored prompt mislabels.
+- The measurement lives inline in one self-contained script with a single
+  simulated/real seam, instead of a `source()`d toolkit whose version could
+  drift from the analysis that cites it.
 
 ## Honest limits
 
