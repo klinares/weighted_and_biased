@@ -1,0 +1,461 @@
+kind,item,category,class,estimate,se,lo,hi,class_label
+pi,NA,NA,1,0.33122,0.02006,0.29191,0.37054,Moderate Institutional Trust
+pi,NA,NA,2,0.11142,0.01033,0.09117,0.13166,High Institutional Trust
+pi,NA,NA,3,0.20866,0.01912,0.1712,0.24613,Strong Institutional Trust
+pi,NA,NA,4,0.10668,0.01143,0.08427,0.12909,Generalized Institutional Distrust
+pi,NA,NA,5,0.24202,0.02047,0.20188999999999999,0.28215,Selective Executive and Military Trust
+rho,justice_system,1,1,0,0,0,0,Moderate Institutional Trust
+rho,justice_system,2,1,0.04353,0.01097,0.02203,0.06504,Moderate Institutional Trust
+rho,justice_system,3,1,0.14622,0.0343,0.07899,0.21344,Moderate Institutional Trust
+rho,justice_system,4,1,0.45597,0.02871,0.39969,0.51225,Moderate Institutional Trust
+rho,justice_system,5,1,0.28517,0.03721,0.21223,0.3581,Moderate Institutional Trust
+rho,justice_system,6,1,0.05396,0.01465,0.02525,0.08267,Moderate Institutional Trust
+rho,justice_system,7,1,0.01515,0.00656,0.00229,0.02802,Moderate Institutional Trust
+rho,justice_system,1,2,0.03766,0.01494,0.00838,0.06694,High Institutional Trust
+rho,justice_system,2,2,0,0,0,0,High Institutional Trust
+rho,justice_system,3,2,0.02238,0.02334,0,0.06813,High Institutional Trust
+rho,justice_system,4,2,0.02651,0.0135,5e-5,0.05297,High Institutional Trust
+rho,justice_system,5,2,0.0756,0.02495,0.02669,0.12451,High Institutional Trust
+rho,justice_system,6,2,0.17429,0.04284,0.09033,0.25826,High Institutional Trust
+rho,justice_system,7,2,0.66355,0.06016,0.54564,0.78147,High Institutional Trust
+rho,justice_system,1,3,0,0,0,0,Strong Institutional Trust
+rho,justice_system,2,3,0.00344,0.00345,0,0.0102,Strong Institutional Trust
+rho,justice_system,3,3,0.00843,0.01118,0,0.03035,Strong Institutional Trust
+rho,justice_system,4,3,0.06856,0.02343,0.02264,0.11448,Strong Institutional Trust
+rho,justice_system,5,3,0.4594,0.03392,0.39291,0.52589,Strong Institutional Trust
+rho,justice_system,6,3,0.38907,0.04197,0.30682,0.47133,Strong Institutional Trust
+rho,justice_system,7,3,0.0711,0.01689,0.03799,0.1042,Strong Institutional Trust
+rho,justice_system,1,4,0.652,0.0612,0.53206,0.77195,Generalized Institutional Distrust
+rho,justice_system,2,4,0.18524,0.05235,0.08263,0.28785,Generalized Institutional Distrust
+rho,justice_system,3,4,0.09497,0.03457,0.02721,0.16274,Generalized Institutional Distrust
+rho,justice_system,4,4,0.01068,0.01273,0,0.03563,Generalized Institutional Distrust
+rho,justice_system,5,4,0.04473,0.01899,0.0075,0.08195,Generalized Institutional Distrust
+rho,justice_system,6,4,0,0,0,0,Generalized Institutional Distrust
+rho,justice_system,7,4,0.01237,0.01376,0,0.03934,Generalized Institutional Distrust
+rho,justice_system,1,5,0.10268,0.01996,0.06356,0.1418,Selective Executive and Military Trust
+rho,justice_system,2,5,0.27767,0.04252,0.19432,0.36101,Selective Executive and Military Trust
+rho,justice_system,3,5,0.41947,0.03114,0.35844,0.4805,Selective Executive and Military Trust
+rho,justice_system,4,5,0.161,0.03371,0.09494,0.22707,Selective Executive and Military Trust
+rho,justice_system,5,5,0.03173,0.0148,0.00273,0.06073,Selective Executive and Military Trust
+rho,justice_system,6,5,0.00745,0.00666,0,0.02051,Selective Executive and Military Trust
+rho,justice_system,7,5,0,0,0,0,Selective Executive and Military Trust
+rho,electoral_tribunal,1,1,0.02619,0.00761,0.01128,0.0411,Moderate Institutional Trust
+rho,electoral_tribunal,2,1,0.04851,0.01597,0.01722,0.0798,Moderate Institutional Trust
+rho,electoral_tribunal,3,1,0.11538,0.0203,0.07558,0.15517,Moderate Institutional Trust
+rho,electoral_tribunal,4,1,0.26664,0.02518,0.21728,0.316,Moderate Institutional Trust
+rho,electoral_tribunal,5,1,0.28617,0.02418,0.23877,0.33357,Moderate Institutional Trust
+rho,electoral_tribunal,6,1,0.17477,0.02502,0.12573,0.22381,Moderate Institutional Trust
+rho,electoral_tribunal,7,1,0.08234,0.01649,0.05002,0.11466,Moderate Institutional Trust
+rho,electoral_tribunal,1,2,0.03861,0.01685,0.00557,0.07164,High Institutional Trust
+rho,electoral_tribunal,2,2,0.01992,0.01147,0,0.04239,High Institutional Trust
+rho,electoral_tribunal,3,2,0.00672,0.00678,0,0.02,High Institutional Trust
+rho,electoral_tribunal,4,2,0.04665,0.02012,0.00722,0.08607,High Institutional Trust
+rho,electoral_tribunal,5,2,0.016,0.0119,0,0.03931,High Institutional Trust
+rho,electoral_tribunal,6,2,0.16894,0.03556,0.09925,0.23863,High Institutional Trust
+rho,electoral_tribunal,7,2,0.70318,0.04558,0.61383,0.79252,High Institutional Trust
+rho,electoral_tribunal,1,3,0,0,0,0,Strong Institutional Trust
+rho,electoral_tribunal,2,3,0,0,0,0,Strong Institutional Trust
+rho,electoral_tribunal,3,3,0.0067,0.00799,0,0.02236,Strong Institutional Trust
+rho,electoral_tribunal,4,3,0.06303,0.0166,0.0305,0.09555,Strong Institutional Trust
+rho,electoral_tribunal,5,3,0.27103,0.03276,0.20682,0.33524,Strong Institutional Trust
+rho,electoral_tribunal,6,3,0.407,0.03119,0.34587,0.46813,Strong Institutional Trust
+rho,electoral_tribunal,7,3,0.25224,0.03525,0.18316,0.32132,Strong Institutional Trust
+rho,electoral_tribunal,1,4,0.53665,0.05722,0.4245,0.64879,Generalized Institutional Distrust
+rho,electoral_tribunal,2,4,0.1346,0.04908,0.03841,0.23079,Generalized Institutional Distrust
+rho,electoral_tribunal,3,4,0.12623,0.02979,0.06783,0.18462,Generalized Institutional Distrust
+rho,electoral_tribunal,4,4,0.03146,0.01618,0,0.06317,Generalized Institutional Distrust
+rho,electoral_tribunal,5,4,0.07159,0.02072,0.03098,0.11219,Generalized Institutional Distrust
+rho,electoral_tribunal,6,4,0.03845,0.01633,0.00645,0.07044,Generalized Institutional Distrust
+rho,electoral_tribunal,7,4,0.06103,0.02482,0.01239,0.10968,Generalized Institutional Distrust
+rho,electoral_tribunal,1,5,0.11147,0.02192,0.06851,0.15444,Selective Executive and Military Trust
+rho,electoral_tribunal,2,5,0.2234,0.03655,0.15177,0.29503,Selective Executive and Military Trust
+rho,electoral_tribunal,3,5,0.2399,0.02525,0.19041,0.28939,Selective Executive and Military Trust
+rho,electoral_tribunal,4,5,0.24464,0.0309,0.18409,0.3052,Selective Executive and Military Trust
+rho,electoral_tribunal,5,5,0.13902,0.02384,0.09229,0.18576,Selective Executive and Military Trust
+rho,electoral_tribunal,6,5,0.0231,0.0122,0,0.04701,Selective Executive and Military Trust
+rho,electoral_tribunal,7,5,0.01846,0.01382,0,0.04554,Selective Executive and Military Trust
+rho,armed_forces,1,1,0.0209,0.00778,0.00565,0.03616,Moderate Institutional Trust
+rho,armed_forces,2,1,0.02123,0.00784,0.00586,0.03661,Moderate Institutional Trust
+rho,armed_forces,3,1,0.07453,0.01449,0.04612,0.10293,Moderate Institutional Trust
+rho,armed_forces,4,1,0.16503,0.02667,0.11275,0.21731,Moderate Institutional Trust
+rho,armed_forces,5,1,0.27668,0.02581,0.2261,0.32727,Moderate Institutional Trust
+rho,armed_forces,6,1,0.24373,0.0269,0.191,0.29646,Moderate Institutional Trust
+rho,armed_forces,7,1,0.19789,0.02395,0.15096,0.24483,Moderate Institutional Trust
+rho,armed_forces,1,2,0.06266,0.0196,0.02423,0.10108,High Institutional Trust
+rho,armed_forces,2,2,0.00636,0.0064,0,0.0189,High Institutional Trust
+rho,armed_forces,3,2,0.04752,0.01897,0.01035,0.08469,High Institutional Trust
+rho,armed_forces,4,2,0.01961,0.01263,0,0.04436,High Institutional Trust
+rho,armed_forces,5,2,0.06461,0.02284,0.01984,0.10938,High Institutional Trust
+rho,armed_forces,6,2,0.07841,0.02842,0.02271,0.13411,High Institutional Trust
+rho,armed_forces,7,2,0.72082,0.04672,0.62925,0.8124,High Institutional Trust
+rho,armed_forces,1,3,0.00225,0.00297,0,0.00807,Strong Institutional Trust
+rho,armed_forces,2,3,0.00647,0.00714,0,0.02046,Strong Institutional Trust
+rho,armed_forces,3,3,0.00345,0.00349,0,0.01028,Strong Institutional Trust
+rho,armed_forces,4,3,0.0443,0.01374,0.01738,0.07123,Strong Institutional Trust
+rho,armed_forces,5,3,0.24509,0.02896,0.18832,0.30185,Strong Institutional Trust
+rho,armed_forces,6,3,0.35897,0.03,0.30017,0.41777,Strong Institutional Trust
+rho,armed_forces,7,3,0.33947,0.0364,0.26813,0.41081,Strong Institutional Trust
+rho,armed_forces,1,4,0.42027,0.05033,0.32161,0.51892,Generalized Institutional Distrust
+rho,armed_forces,2,4,0.06885,0.02879,0.01243,0.12527,Generalized Institutional Distrust
+rho,armed_forces,3,4,0.12206,0.02961,0.06401,0.1801,Generalized Institutional Distrust
+rho,armed_forces,4,4,0.12266,0.02871,0.06639,0.17893,Generalized Institutional Distrust
+rho,armed_forces,5,4,0.0916,0.02462,0.04334,0.13986,Generalized Institutional Distrust
+rho,armed_forces,6,4,0.08102,0.02439,0.03322,0.12882,Generalized Institutional Distrust
+rho,armed_forces,7,4,0.09354,0.02803,0.03861,0.14848,Generalized Institutional Distrust
+rho,armed_forces,1,5,0.05876,0.01785,0.02377,0.09375,Selective Executive and Military Trust
+rho,armed_forces,2,5,0.12279,0.02361,0.0765,0.16907,Selective Executive and Military Trust
+rho,armed_forces,3,5,0.1892,0.02645,0.13736,0.24104,Selective Executive and Military Trust
+rho,armed_forces,4,5,0.18717,0.02686,0.13453,0.23981,Selective Executive and Military Trust
+rho,armed_forces,5,5,0.17785,0.02612,0.12666,0.22904,Selective Executive and Military Trust
+rho,armed_forces,6,5,0.13751,0.02526,0.08801,0.18701,Selective Executive and Military Trust
+rho,armed_forces,7,5,0.12673,0.01834,0.09078,0.16267,Selective Executive and Military Trust
+rho,legislature,1,1,0.0169,0.00616,0.00483,0.02897,Moderate Institutional Trust
+rho,legislature,2,1,0.03383,0.01175,0.0108,0.05686,Moderate Institutional Trust
+rho,legislature,3,1,0.10266,0.021329999999999998,0.06086,0.14446,Moderate Institutional Trust
+rho,legislature,4,1,0.38177,0.028,0.3269,0.43665,Moderate Institutional Trust
+rho,legislature,5,1,0.29988,0.02916,0.24272,0.35705,Moderate Institutional Trust
+rho,legislature,6,1,0.1278,0.02328,0.08218,0.17343,Moderate Institutional Trust
+rho,legislature,7,1,0.03715,0.00917,0.01918,0.05512,Moderate Institutional Trust
+rho,legislature,1,2,0.0378,0.01502,0.00836,0.06723,High Institutional Trust
+rho,legislature,2,2,0.00629,0.00632,0,0.01867,High Institutional Trust
+rho,legislature,3,2,0.03672,0.01767,0.0021,0.07135,High Institutional Trust
+rho,legislature,4,2,0.03588,0.01842,0,0.07198,High Institutional Trust
+rho,legislature,5,2,0.07068,0.03006,0.01177,0.12959,High Institutional Trust
+rho,legislature,6,2,0.20157,0.03613,0.13075,0.27239,High Institutional Trust
+rho,legislature,7,2,0.61106,0.05597,0.50136,0.72076,High Institutional Trust
+rho,legislature,1,3,0,0,0,0,Strong Institutional Trust
+rho,legislature,2,3,0.00362,0.00367,0,0.01082,Strong Institutional Trust
+rho,legislature,3,3,0.00631,0.00697,0,0.01997,Strong Institutional Trust
+rho,legislature,4,3,0.05001,0.01595,0.01874,0.08127,Strong Institutional Trust
+rho,legislature,5,3,0.46768,0.0394,0.39046,0.5449,Strong Institutional Trust
+rho,legislature,6,3,0.38771,0.03457,0.31994,0.45548,Strong Institutional Trust
+rho,legislature,7,3,0.08467,0.02022,0.04504,0.12431,Strong Institutional Trust
+rho,legislature,1,4,0.59761,0.05246,0.49479,0.70044,Generalized Institutional Distrust
+rho,legislature,2,4,0.16382,0.03303,0.09909,0.22856,Generalized Institutional Distrust
+rho,legislature,3,4,0.11841,0.03082,0.05802,0.17881,Generalized Institutional Distrust
+rho,legislature,4,4,0.05554,0.02647,0.00365,0.10742,Generalized Institutional Distrust
+rho,legislature,5,4,0.03327,0.02065,0,0.07375,Generalized Institutional Distrust
+rho,legislature,6,4,0,0,0,0,Generalized Institutional Distrust
+rho,legislature,7,4,0.03134,0.02028,0,0.07109,Generalized Institutional Distrust
+rho,legislature,1,5,0.09768,0.0229,0.05281,0.14256,Selective Executive and Military Trust
+rho,legislature,2,5,0.18754,0.02467,0.13918,0.23589,Selective Executive and Military Trust
+rho,legislature,3,5,0.28194,0.02425,0.23441,0.32948,Selective Executive and Military Trust
+rho,legislature,4,5,0.23134,0.03062,0.17133,0.29135,Selective Executive and Military Trust
+rho,legislature,5,5,0.15046,0.0242,0.10302,0.1979,Selective Executive and Military Trust
+rho,legislature,6,5,0.05103,0.01759,0.01655,0.08552,Selective Executive and Military Trust
+rho,legislature,7,5,0,0,0,0,Selective Executive and Military Trust
+rho,public_ministry,1,1,0.00904,0.00519,0,0.0192,Moderate Institutional Trust
+rho,public_ministry,2,1,0.01921,0.01144,0,0.04162,Moderate Institutional Trust
+rho,public_ministry,3,1,0.09741,0.02596,0.04653,0.14829,Moderate Institutional Trust
+rho,public_ministry,4,1,0.36555,0.02674,0.31313,0.41797,Moderate Institutional Trust
+rho,public_ministry,5,1,0.35367,0.03333,0.28835,0.419,Moderate Institutional Trust
+rho,public_ministry,6,1,0.10963,0.01782,0.07471,0.14455,Moderate Institutional Trust
+rho,public_ministry,7,1,0.04549,0.01187,0.02223,0.06875,Moderate Institutional Trust
+rho,public_ministry,1,2,0.03125,0.01871,0,0.06793,High Institutional Trust
+rho,public_ministry,2,2,0.0128,0.00901,0,0.03046,High Institutional Trust
+rho,public_ministry,3,2,0.01371,0.00998,0,0.03327,High Institutional Trust
+rho,public_ministry,4,2,0.01585,0.01302,0,0.04138,High Institutional Trust
+rho,public_ministry,5,2,0.02224,0.0285,0,0.07811,High Institutional Trust
+rho,public_ministry,6,2,0.16378,0.02931,0.10632,0.22123,High Institutional Trust
+rho,public_ministry,7,2,0.74037,0.0475,0.64727,0.83346,High Institutional Trust
+rho,public_ministry,1,3,0,0,0,0,Strong Institutional Trust
+rho,public_ministry,2,3,0.00491,0.00537,0,0.01544,Strong Institutional Trust
+rho,public_ministry,3,3,0,0,0,0,Strong Institutional Trust
+rho,public_ministry,4,3,0.09567,0.02191,0.05272,0.13862,Strong Institutional Trust
+rho,public_ministry,5,3,0.35494,0.03441,0.28751,0.42238,Strong Institutional Trust
+rho,public_ministry,6,3,0.43907,0.03642,0.36769,0.51045,Strong Institutional Trust
+rho,public_ministry,7,3,0.10541,0.03001,0.04659,0.16423,Strong Institutional Trust
+rho,public_ministry,1,4,0.62244,0.0551,0.51445,0.73043,Generalized Institutional Distrust
+rho,public_ministry,2,4,0.15152,0.04136,0.07045,0.23259,Generalized Institutional Distrust
+rho,public_ministry,3,4,0.09255,0.02692,0.03979,0.14531,Generalized Institutional Distrust
+rho,public_ministry,4,4,0.05425,0.02228,0.01058,0.09792,Generalized Institutional Distrust
+rho,public_ministry,5,4,0.04553,0.02258,0.00127,0.08979,Generalized Institutional Distrust
+rho,public_ministry,6,4,0.00722,0.00733,0,0.02158,Generalized Institutional Distrust
+rho,public_ministry,7,4,0.02649,0.01499,0,0.05587,Generalized Institutional Distrust
+rho,public_ministry,1,5,0.10629,0.02456,0.05816,0.15443,Selective Executive and Military Trust
+rho,public_ministry,2,5,0.24065,0.03286,0.17624,0.30505,Selective Executive and Military Trust
+rho,public_ministry,3,5,0.34257,0.03121,0.28139,0.40375,Selective Executive and Military Trust
+rho,public_ministry,4,5,0.19218,0.03367,0.12618,0.25817,Selective Executive and Military Trust
+rho,public_ministry,5,5,0.08403,0.01761,0.04952,0.11854,Selective Executive and Military Trust
+rho,public_ministry,6,5,0.03428,0.01253,0.00973,0.05884,Selective Executive and Military Trust
+rho,public_ministry,7,5,0,0,0,0,Selective Executive and Military Trust
+rho,police,1,1,0.07799,0.01758,0.04353,0.11245,Moderate Institutional Trust
+rho,police,2,1,0.17406,0.01944,0.13597,0.21216,Moderate Institutional Trust
+rho,police,3,1,0.28533,0.02281,0.24063,0.33004,Moderate Institutional Trust
+rho,police,4,1,0.25806,0.02245,0.21406,0.30206,Moderate Institutional Trust
+rho,police,5,1,0.14474,0.02171,0.10219,0.18729,Moderate Institutional Trust
+rho,police,6,1,0.04356,0.01139,0.02125,0.06588,Moderate Institutional Trust
+rho,police,7,1,0.01626,0.006,0.0045,0.02801,Moderate Institutional Trust
+rho,police,1,2,0.09422,0.0299,0.03562,0.15281,High Institutional Trust
+rho,police,2,2,0.0308,0.01383,0.00369,0.05792,High Institutional Trust
+rho,police,3,2,0.03795,0.01948,0,0.07612,High Institutional Trust
+rho,police,4,2,0.07441,0.02394,0.02748,0.12134,High Institutional Trust
+rho,police,5,2,0.20635,0.03731,0.13324,0.27947,High Institutional Trust
+rho,police,6,2,0.12053,0.03206,0.05769,0.18337,High Institutional Trust
+rho,police,7,2,0.43573,0.05457,0.32876,0.5427,High Institutional Trust
+rho,police,1,3,0.01833,0.01262,0,0.04307,Strong Institutional Trust
+rho,police,2,3,0.03342,0.01455,0.00489,0.06194,Strong Institutional Trust
+rho,police,3,3,0.07615,0.02312,0.03083,0.12147,Strong Institutional Trust
+rho,police,4,3,0.22186,0.02917,0.16469,0.27903,Strong Institutional Trust
+rho,police,5,3,0.38971,0.03296,0.32511,0.4543,Strong Institutional Trust
+rho,police,6,3,0.20732,0.02863,0.15121,0.26343,Strong Institutional Trust
+rho,police,7,3,0.05321,0.01852,0.01692,0.0895,Strong Institutional Trust
+rho,police,1,4,0.75672,0.04227,0.67387,0.83956,Generalized Institutional Distrust
+rho,police,2,4,0.09457,0.0365,0.02302,0.16612,Generalized Institutional Distrust
+rho,police,3,4,0.04693,0.01792,0.01181,0.08206,Generalized Institutional Distrust
+rho,police,4,4,0.03998,0.01856,0.0036,0.07637,Generalized Institutional Distrust
+rho,police,5,4,0.05524,0.02211,0.01191,0.09856,Generalized Institutional Distrust
+rho,police,6,4,0,0,0,0,Generalized Institutional Distrust
+rho,police,7,4,0.00656,0.00659,0,0.01947,Generalized Institutional Distrust
+rho,police,1,5,0.3587,0.0428,0.27481,0.44259,Selective Executive and Military Trust
+rho,police,2,5,0.29833,0.02685,0.24571,0.35096,Selective Executive and Military Trust
+rho,police,3,5,0.16159,0.02985,0.10308,0.2201,Selective Executive and Military Trust
+rho,police,4,5,0.10291,0.01999,0.06372,0.14209,Selective Executive and Military Trust
+rho,police,5,5,0.0516,0.01514,0.02192,0.08127,Selective Executive and Military Trust
+rho,police,6,5,0.02687,0.01159,0.00416,0.04959,Selective Executive and Military Trust
+rho,police,7,5,0,0,0,0,Selective Executive and Military Trust
+rho,auditor,1,1,0.00702,0.00553,0,0.01786,Moderate Institutional Trust
+rho,auditor,2,1,0.02183,0.00713,0.00784,0.03581,Moderate Institutional Trust
+rho,auditor,3,1,0.13495,0.0305,0.07518,0.19473,Moderate Institutional Trust
+rho,auditor,4,1,0.41284,0.02521,0.36343,0.46226,Moderate Institutional Trust
+rho,auditor,5,1,0.30452,0.0337,0.23846,0.37059,Moderate Institutional Trust
+rho,auditor,6,1,0.09854,0.01516,0.06882,0.12826,Moderate Institutional Trust
+rho,auditor,7,1,0.02028,0.00738,0.00581,0.03476,Moderate Institutional Trust
+rho,auditor,1,2,0.01404,0.01211,0,0.03778,High Institutional Trust
+rho,auditor,2,2,0.01891,0.0107,0,0.03989,High Institutional Trust
+rho,auditor,3,2,0.01724,0.01243,0,0.0416,High Institutional Trust
+rho,auditor,4,2,0.03889,0.01743,0.00472,0.07306,High Institutional Trust
+rho,auditor,5,2,0.08022,0.02823,0.02489,0.13556000000000001,High Institutional Trust
+rho,auditor,6,2,0.20708,0.03911,0.13043,0.28373,High Institutional Trust
+rho,auditor,7,2,0.62362,0.0484,0.52877,0.71847,High Institutional Trust
+rho,auditor,1,3,0,0,0,0,Strong Institutional Trust
+rho,auditor,2,3,0,0,0,0,Strong Institutional Trust
+rho,auditor,3,3,0.01154,0.00699,0,0.02524,Strong Institutional Trust
+rho,auditor,4,3,0.11929,0.02278,0.07464,0.16395,Strong Institutional Trust
+rho,auditor,5,3,0.40124,0.03959,0.32365,0.47884,Strong Institutional Trust
+rho,auditor,6,3,0.3965,0.03873,0.32059,0.4724,Strong Institutional Trust
+rho,auditor,7,3,0.07143,0.01985,0.03252,0.11034,Strong Institutional Trust
+rho,auditor,1,4,0.65275,0.05422,0.54649,0.75901,Generalized Institutional Distrust
+rho,auditor,2,4,0.16586,0.04559,0.07651,0.25521,Generalized Institutional Distrust
+rho,auditor,3,4,0.06,0.02452,0.01194,0.10806,Generalized Institutional Distrust
+rho,auditor,4,4,0.07319,0.02246,0.02916,0.11721,Generalized Institutional Distrust
+rho,auditor,5,4,0.03876,0.0196,3.4e-4,0.07718,Generalized Institutional Distrust
+rho,auditor,6,4,0.00944,0.01284,0,0.0346,Generalized Institutional Distrust
+rho,auditor,7,4,0,0,0,0,Generalized Institutional Distrust
+rho,auditor,1,5,0.06605,0.02433,0.01836,0.11374,Selective Executive and Military Trust
+rho,auditor,2,5,0.24371,0.03581,0.17352,0.31391,Selective Executive and Military Trust
+rho,auditor,3,5,0.37487,0.03679,0.30277,0.44697,Selective Executive and Military Trust
+rho,auditor,4,5,0.22105,0.02802,0.16612,0.27597,Selective Executive and Military Trust
+rho,auditor,5,5,0.07323,0.01543,0.04298,0.10347,Selective Executive and Military Trust
+rho,auditor,6,5,0.01901,0.0116,0,0.04176,Selective Executive and Military Trust
+rho,auditor,7,5,0.00208,0.00243,0,0.00684,Selective Executive and Military Trust
+rho,political_parties,1,1,0.10495,0.0203,0.06516,0.14474,Moderate Institutional Trust
+rho,political_parties,2,1,0.18803,0.02388,0.14122,0.23484,Moderate Institutional Trust
+rho,political_parties,3,1,0.27952,0.02534,0.22986,0.32918,Moderate Institutional Trust
+rho,political_parties,4,1,0.295,0.0311,0.23404,0.35595,Moderate Institutional Trust
+rho,political_parties,5,1,0.10331,0.01588,0.07218,0.13443,Moderate Institutional Trust
+rho,political_parties,6,1,0.0292,0.00912,0.01132,0.04709,Moderate Institutional Trust
+rho,political_parties,7,1,0,0.00569,0,0.01115,Moderate Institutional Trust
+rho,political_parties,1,2,0.08912,0.03079,0.02877,0.14948,High Institutional Trust
+rho,political_parties,2,2,0.03216,0.01416,0.00441,0.05991,High Institutional Trust
+rho,political_parties,3,2,0.057,0.01992,0.01795,0.09605,High Institutional Trust
+rho,political_parties,4,2,0.0976,0.02747,0.04376,0.15145,High Institutional Trust
+rho,political_parties,5,2,0.18507,0.03401,0.11842,0.25172,High Institutional Trust
+rho,political_parties,6,2,0.22182,0.03324,0.15668,0.28697,High Institutional Trust
+rho,political_parties,7,2,0.31721,0.0467,0.22567,0.40876,High Institutional Trust
+rho,political_parties,1,3,0.02521,0.01052,0.00459,0.04583,Strong Institutional Trust
+rho,political_parties,2,3,0.02259,0.01286,0,0.0478,Strong Institutional Trust
+rho,political_parties,3,3,0.08037,0.0192,0.04274,0.11801,Strong Institutional Trust
+rho,political_parties,4,3,0.29576,0.02929,0.23836,0.35317,Strong Institutional Trust
+rho,political_parties,5,3,0.37701,0.03176,0.31477,0.43925,Strong Institutional Trust
+rho,political_parties,6,3,0.15707,0.025,0.10806,0.20608,Strong Institutional Trust
+rho,political_parties,7,3,0.04198,0.01565,0.01131,0.07266,Strong Institutional Trust
+rho,political_parties,1,4,0.85306,0.03868,0.77724,0.92888,Generalized Institutional Distrust
+rho,political_parties,2,4,0.09378,0.03558,0.02404,0.16352,Generalized Institutional Distrust
+rho,political_parties,3,4,0.01424,0.01185,0,0.03748,Generalized Institutional Distrust
+rho,political_parties,4,4,0.00665,0.00668,0,0.01974,Generalized Institutional Distrust
+rho,political_parties,5,4,0.01943,0.01161,0,0.04218,Generalized Institutional Distrust
+rho,political_parties,6,4,0.01283,0.0097,0,0.03184,Generalized Institutional Distrust
+rho,political_parties,7,4,0,0,0,0,Generalized Institutional Distrust
+rho,political_parties,1,5,0.41445,0.03925,0.33751,0.49139,Selective Executive and Military Trust
+rho,political_parties,2,5,0.27672,0.02537,0.227,0.32645,Selective Executive and Military Trust
+rho,political_parties,3,5,0.20911,0.03006,0.1502,0.26802,Selective Executive and Military Trust
+rho,political_parties,4,5,0.067780000000000007,0.01372,0.04088,0.09468,Selective Executive and Military Trust
+rho,political_parties,5,5,0.02347,0.0116,7.4e-4,0.0462,Selective Executive and Military Trust
+rho,political_parties,6,5,0,0,0,0,Selective Executive and Military Trust
+rho,political_parties,7,5,0.00847,0.00752,0,0.02322,Selective Executive and Military Trust
+rho,president,1,1,0.04291,0.0134,0.01665,0.06916,Moderate Institutional Trust
+rho,president,2,1,0.05609,0.01134,0.03386,0.07831,Moderate Institutional Trust
+rho,president,3,1,0.07151,0.01486,0.04238,0.10064,Moderate Institutional Trust
+rho,president,4,1,0.17066,0.02062,0.13024,0.21109,Moderate Institutional Trust
+rho,president,5,1,0.19153,0.02222,0.14798,0.23508,Moderate Institutional Trust
+rho,president,6,1,0.21144,0.02191,0.1685,0.25438,Moderate Institutional Trust
+rho,president,7,1,0.25586,0.0297,0.19765,0.31408,Moderate Institutional Trust
+rho,president,1,2,0.03221,0.02377,0,0.07879,High Institutional Trust
+rho,president,2,2,0.00621,0.00623,0,0.01843,High Institutional Trust
+rho,president,3,2,0.02569,0.01248,0.00122,0.05015,High Institutional Trust
+rho,president,4,2,0.01343,0.00971,0,0.03246,High Institutional Trust
+rho,president,5,2,0.05078,0.01945,0.01265,0.0889,High Institutional Trust
+rho,president,6,2,0.05643,0.0194,0.0184,0.09446,High Institutional Trust
+rho,president,7,2,0.81526,0.03877,0.73926,0.89126,High Institutional Trust
+rho,president,1,3,0.00984,0.00583,0,0.02127,Strong Institutional Trust
+rho,president,2,3,0.00703,0.00512,0,0.01705,Strong Institutional Trust
+rho,president,3,3,0.02053,0.00882,0.00325,0.03781,Strong Institutional Trust
+rho,president,4,3,0.0289,0.01122,0.0069,0.0509,Strong Institutional Trust
+rho,president,5,3,0.22906,0.02812,0.17394,0.28418,Strong Institutional Trust
+rho,president,6,3,0.30133,0.03261,0.23743,0.36524,Strong Institutional Trust
+rho,president,7,3,0.40331,0.03935,0.32618,0.48043,Strong Institutional Trust
+rho,president,1,4,0.51164,0.05423,0.40534,0.61793,Generalized Institutional Distrust
+rho,president,2,4,0.0442,0.02042,0.00417,0.08423,Generalized Institutional Distrust
+rho,president,3,4,0.02222,0.01368,0,0.04903,Generalized Institutional Distrust
+rho,president,4,4,0.09015,0.02496,0.04123,0.13907,Generalized Institutional Distrust
+rho,president,5,4,0.10932,0.03181,0.04697,0.17166,Generalized Institutional Distrust
+rho,president,6,4,0.04729,0.02221,0.00375,0.09083,Generalized Institutional Distrust
+rho,president,7,4,0.17518,0.03058,0.11525,0.23511,Generalized Institutional Distrust
+rho,president,1,5,0.09697,0.02383,0.05027,0.14367,Selective Executive and Military Trust
+rho,president,2,5,0.09421,0.01927,0.05645,0.13198,Selective Executive and Military Trust
+rho,president,3,5,0.09685,0.02015,0.05736,0.13634,Selective Executive and Military Trust
+rho,president,4,5,0.13479,0.02382,0.08809,0.18148,Selective Executive and Military Trust
+rho,president,5,5,0.22586,0.02699,0.17296,0.27876,Selective Executive and Military Trust
+rho,president,6,5,0.13792,0.02289,0.09305,0.18279,Selective Executive and Military Trust
+rho,president,7,5,0.2134,0.03076,0.15311,0.27369,Selective Executive and Military Trust
+rho,supreme_court,1,1,0.00481,0.00574,0,0.01607,Moderate Institutional Trust
+rho,supreme_court,2,1,0.03733,0.01007,0.01759,0.05707,Moderate Institutional Trust
+rho,supreme_court,3,1,0.11321,0.01867,0.07662,0.14979,Moderate Institutional Trust
+rho,supreme_court,4,1,0.31124,0.03112,0.25025,0.37223,Moderate Institutional Trust
+rho,supreme_court,5,1,0.36615,0.03504,0.29748,0.43482,Moderate Institutional Trust
+rho,supreme_court,6,1,0.12825,0.01801,0.09295,0.16354,Moderate Institutional Trust
+rho,supreme_court,7,1,0.03901,0.01156,0.01636,0.06166,Moderate Institutional Trust
+rho,supreme_court,1,2,0.05086,0.01754,0.01649,0.08523,High Institutional Trust
+rho,supreme_court,2,2,0,0,0,0,High Institutional Trust
+rho,supreme_court,3,2,0.00767,0.00829,0,0.02393,High Institutional Trust
+rho,supreme_court,4,2,0.03442,0.01792,0,0.06954,High Institutional Trust
+rho,supreme_court,5,2,0.08239,0.0218,0.03967,0.12512,High Institutional Trust
+rho,supreme_court,6,2,0.11852,0.03137,0.05704,0.18,High Institutional Trust
+rho,supreme_court,7,2,0.70613,0.04251,0.62282,0.78945,High Institutional Trust
+rho,supreme_court,1,3,0.0033,0.00332,0,0.0098,Strong Institutional Trust
+rho,supreme_court,2,3,0.0066,0.00511,0,0.01661,Strong Institutional Trust
+rho,supreme_court,3,3,0.00603,0.00832,0,0.02235,Strong Institutional Trust
+rho,supreme_court,4,3,0.05876,0.01634,0.02674,0.09079,Strong Institutional Trust
+rho,supreme_court,5,3,0.32416,0.04003,0.2457,0.40261,Strong Institutional Trust
+rho,supreme_court,6,3,0.47988,0.0388,0.40383,0.55593,Strong Institutional Trust
+rho,supreme_court,7,3,0.12127,0.02497,0.07232,0.17022,Strong Institutional Trust
+rho,supreme_court,1,4,0.60814,0.04972,0.5107,0.70559,Generalized Institutional Distrust
+rho,supreme_court,2,4,0.19859,0.04661,0.10723,0.28995,Generalized Institutional Distrust
+rho,supreme_court,3,4,0.10626,0.02973,0.04799,0.16453,Generalized Institutional Distrust
+rho,supreme_court,4,4,0,0,0,0,Generalized Institutional Distrust
+rho,supreme_court,5,4,0.05128,0.01841,0.0152,0.08736,Generalized Institutional Distrust
+rho,supreme_court,6,4,0.01061,0.0152,0,0.04039,Generalized Institutional Distrust
+rho,supreme_court,7,4,0.02512,0.01521,0,0.05493,Generalized Institutional Distrust
+rho,supreme_court,1,5,0.12673,0.02446,0.07879,0.17467,Selective Executive and Military Trust
+rho,supreme_court,2,5,0.18508,0.03122,0.12389,0.24628,Selective Executive and Military Trust
+rho,supreme_court,3,5,0.31538,0.02932,0.2579,0.37285,Selective Executive and Military Trust
+rho,supreme_court,4,5,0.23278,0.03883,0.15668,0.30888,Selective Executive and Military Trust
+rho,supreme_court,5,5,0.09506,0.01987,0.05611,0.134,Selective Executive and Military Trust
+rho,supreme_court,6,5,0.04497,0.0223,0.00126,0.08867,Selective Executive and Military Trust
+rho,supreme_court,7,5,0,0,0,0,Selective Executive and Military Trust
+rho,municipality,1,1,0.01335,0.00639,8.3e-4,0.02587,Moderate Institutional Trust
+rho,municipality,2,1,0.04254,0.01112,0.02075,0.06432,Moderate Institutional Trust
+rho,municipality,3,1,0.14177,0.021329999999999998,0.09996,0.18358,Moderate Institutional Trust
+rho,municipality,4,1,0.36883,0.02879,0.31241,0.42525,Moderate Institutional Trust
+rho,municipality,5,1,0.33521,0.03464,0.26733,0.4031,Moderate Institutional Trust
+rho,municipality,6,1,0.077,0.01381,0.04994,0.10406,Moderate Institutional Trust
+rho,municipality,7,1,0.0213,0.00715,0.00728,0.03532,Moderate Institutional Trust
+rho,municipality,1,2,0.03202,0.01752,0,0.06637,High Institutional Trust
+rho,municipality,2,2,0,0,0,0,High Institutional Trust
+rho,municipality,3,2,0.04279,0.01872,0.0061,0.07948,High Institutional Trust
+rho,municipality,4,2,0.04467,0.01762,0.01014,0.0792,High Institutional Trust
+rho,municipality,5,2,0.1026,0.02692,0.04984,0.15536,High Institutional Trust
+rho,municipality,6,2,0.23912,0.03903,0.16261,0.31562,High Institutional Trust
+rho,municipality,7,2,0.5388,0.04871,0.44334,0.63426,High Institutional Trust
+rho,municipality,1,3,0,0,0,0,Strong Institutional Trust
+rho,municipality,2,3,0,0,0,0,Strong Institutional Trust
+rho,municipality,3,3,0,0,0,0,Strong Institutional Trust
+rho,municipality,4,3,0.09668,0.02412,0.0494,0.14397,Strong Institutional Trust
+rho,municipality,5,3,0.40717,0.03546,0.33767,0.47668,Strong Institutional Trust
+rho,municipality,6,3,0.31528,0.03515,0.24638,0.38418,Strong Institutional Trust
+rho,municipality,7,3,0.18086,0.02952,0.12301,0.23872,Strong Institutional Trust
+rho,municipality,1,4,0.51816,0.05281,0.41466,0.62166,Generalized Institutional Distrust
+rho,municipality,2,4,0.17141,0.03894,0.09508,0.24774,Generalized Institutional Distrust
+rho,municipality,3,4,0.15344,0.03436,0.0861,0.22078,Generalized Institutional Distrust
+rho,municipality,4,4,0.01464,0.01045,0,0.03513,Generalized Institutional Distrust
+rho,municipality,5,4,0.07531,0.02466,0.02698,0.12364,Generalized Institutional Distrust
+rho,municipality,6,4,0.00874,0.00977,0,0.02789,Generalized Institutional Distrust
+rho,municipality,7,4,0.05829,0.02242,0.01434,0.10224,Generalized Institutional Distrust
+rho,municipality,1,5,0.10555,0.02465,0.05724,0.15385,Selective Executive and Military Trust
+rho,municipality,2,5,0.19851,0.0297,0.1403,0.25673,Selective Executive and Military Trust
+rho,municipality,3,5,0.28497,0.02722,0.23163,0.33832,Selective Executive and Military Trust
+rho,municipality,4,5,0.22857,0.03201,0.16584,0.2913,Selective Executive and Military Trust
+rho,municipality,5,5,0.1355,0.02251,0.09137,0.17963,Selective Executive and Military Trust
+rho,municipality,6,5,0.03763,0.01464,0.00892,0.06633,Selective Executive and Military Trust
+rho,municipality,7,5,0.00926,0.00593,0,0.02088,Selective Executive and Military Trust
+rho,media,1,1,0.05077,0.0127,0.02587,0.07566,Moderate Institutional Trust
+rho,media,2,1,0.10227,0.01752,0.06793,0.1366,Moderate Institutional Trust
+rho,media,3,1,0.21052,0.02015,0.17103,0.25001,Moderate Institutional Trust
+rho,media,4,1,0.27437,0.02424,0.22686,0.32187,Moderate Institutional Trust
+rho,media,5,1,0.24611,0.02213,0.20273,0.28949,Moderate Institutional Trust
+rho,media,6,1,0.07975,0.01633,0.04774,0.11175,Moderate Institutional Trust
+rho,media,7,1,0.03623,0.00935,0.0179,0.05456,Moderate Institutional Trust
+rho,media,1,2,0.11995,0.02974,0.06166,0.17823,High Institutional Trust
+rho,media,2,2,0.02956,0.01435,0.00144,0.05768,High Institutional Trust
+rho,media,3,2,0.05826,0.02502,0.00921,0.1073,High Institutional Trust
+rho,media,4,2,0.10201,0.02576,0.05151,0.1525,High Institutional Trust
+rho,media,5,2,0.09196,0.02747,0.03812,0.1458,High Institutional Trust
+rho,media,6,2,0.11901,0.03205,0.0562,0.18183,High Institutional Trust
+rho,media,7,2,0.47925,0.05219,0.37696,0.58154,High Institutional Trust
+rho,media,1,3,0.01593,0.00764,9.5e-4,0.03091,Strong Institutional Trust
+rho,media,2,3,0.03486,0.01479,0.00586,0.06386,Strong Institutional Trust
+rho,media,3,3,0.03438,0.01383,0.00728,0.06149,Strong Institutional Trust
+rho,media,4,3,0.19952,0.02463,0.15125,0.2478,Strong Institutional Trust
+rho,media,5,3,0.27792,0.02943,0.22025,0.33559,Strong Institutional Trust
+rho,media,6,3,0.29974,0.03362,0.23385,0.36563,Strong Institutional Trust
+rho,media,7,3,0.13764,0.0247,0.08922,0.18606,Strong Institutional Trust
+rho,media,1,4,0.47173,0.0467,0.38018,0.56327,Generalized Institutional Distrust
+rho,media,2,4,0.13905,0.03345,0.0735,0.20461,Generalized Institutional Distrust
+rho,media,3,4,0.10394,0.03367,0.03795,0.16993,Generalized Institutional Distrust
+rho,media,4,4,0.11427,0.03399,0.04764,0.18089,Generalized Institutional Distrust
+rho,media,5,4,0.0611,0.01919,0.02349,0.09871,Generalized Institutional Distrust
+rho,media,6,4,0.02631,0.01302,8e-4,0.05183,Generalized Institutional Distrust
+rho,media,7,4,0.0836,0.02673,0.03121,0.13598,Generalized Institutional Distrust
+rho,media,1,5,0.16507,0.03021,0.10586,0.22427,Selective Executive and Military Trust
+rho,media,2,5,0.26651,0.02749,0.21264,0.32039,Selective Executive and Military Trust
+rho,media,3,5,0.25684,0.02702,0.20388,0.30981,Selective Executive and Military Trust
+rho,media,4,5,0.15842,0.0309,0.09786,0.21899,Selective Executive and Military Trust
+rho,media,5,5,0.12,0.0241,0.07277,0.16723,Selective Executive and Military Trust
+rho,media,6,5,0.02547,0.00921,0.00743,0.04351,Selective Executive and Military Trust
+rho,media,7,5,0.00769,0.00867,0,0.02469,Selective Executive and Military Trust
+rho,elections,1,1,0.02246,0.00949,0.00386,0.04106,Moderate Institutional Trust
+rho,elections,2,1,0.05056,0.0134,0.02429,0.07683,Moderate Institutional Trust
+rho,elections,3,1,0.21364,0.02882,0.15716,0.27013,Moderate Institutional Trust
+rho,elections,4,1,0.30412,0.02609,0.25299,0.35524,Moderate Institutional Trust
+rho,elections,5,1,0.26296,0.02706,0.20993,0.31598,Moderate Institutional Trust
+rho,elections,6,1,0.12536,0.01866,0.08878,0.16194,Moderate Institutional Trust
+rho,elections,7,1,0.0209,0.0089,0.00345,0.03836,Moderate Institutional Trust
+rho,elections,1,2,0.03942,0.02407,0,0.08659,High Institutional Trust
+rho,elections,2,2,0,0,0,0,High Institutional Trust
+rho,elections,3,2,0.01435,0.01421,0,0.0422,High Institutional Trust
+rho,elections,4,2,0.04236,0.02076,0.00167,0.08305,High Institutional Trust
+rho,elections,5,2,0.08451,0.02843,0.02879,0.14023,High Institutional Trust
+rho,elections,6,2,0.22716,0.03722,0.1542,0.30011,High Institutional Trust
+rho,elections,7,2,0.59219,0.05123,0.49178,0.69261,High Institutional Trust
+rho,elections,1,3,0.00308,0.00314,0,0.00924,Strong Institutional Trust
+rho,elections,2,3,0.00146,0.00283,0,0.007,Strong Institutional Trust
+rho,elections,3,3,0.00917,0.01184,0,0.03237,Strong Institutional Trust
+rho,elections,4,3,0.11809,0.02529,0.06852,0.16766,Strong Institutional Trust
+rho,elections,5,3,0.4216,0.03268,0.35755,0.48564,Strong Institutional Trust
+rho,elections,6,3,0.38997,0.03369,0.32393,0.45601,Strong Institutional Trust
+rho,elections,7,3,0.05664,0.01654,0.02422,0.08906,Strong Institutional Trust
+rho,elections,1,4,0.64442,0.04912,0.54813,0.7407,Generalized Institutional Distrust
+rho,elections,2,4,0.15238,0.03522,0.08335,0.22141,Generalized Institutional Distrust
+rho,elections,3,4,0.08395,0.02511,0.03474,0.13316,Generalized Institutional Distrust
+rho,elections,4,4,0.05073,0.02445,0.0028,0.09866,Generalized Institutional Distrust
+rho,elections,5,4,0.04347,0.02186,6.2e-4,0.08631,Generalized Institutional Distrust
+rho,elections,6,4,0.00635,0.00648,0,0.01905,Generalized Institutional Distrust
+rho,elections,7,4,0.0187,0.01182,0,0.04187,Generalized Institutional Distrust
+rho,elections,1,5,0.10938,0.02741,0.05565,0.1631,Selective Executive and Military Trust
+rho,elections,2,5,0.2409,0.03164,0.17889,0.30291,Selective Executive and Military Trust
+rho,elections,3,5,0.27443,0.0354,0.20504,0.34383,Selective Executive and Military Trust
+rho,elections,4,5,0.24049,0.02508,0.19133,0.28965,Selective Executive and Military Trust
+rho,elections,5,5,0.09118,0.019,0.05393,0.12843,Selective Executive and Military Trust
+rho,elections,6,5,0.03208,0.0139,0.00484,0.05931,Selective Executive and Military Trust
+rho,elections,7,5,0.01154,0.00942,0,0.03,Selective Executive and Military Trust

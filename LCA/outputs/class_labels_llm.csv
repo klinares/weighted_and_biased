@@ -1,0 +1,6 @@
+K,Label,Description,Label_draft
+1,Moderate Institutional Trust,"This class shows a strong tendency toward mid-to-high trust categories (4 and 5) across most institutions, with particularly high trust in the president, armed forces, and supreme court.",Moderate to High Institutional Trust
+2,High Institutional Trust,"This class is characterized by very high probabilities of selecting Category 7 across nearly all institutions, most notably for the president (0.82), public ministry (0.74), and armed forces (0.72).",High Institutional Trust
+3,Strong Institutional Trust,"This class shows a strong lean toward higher trust categories (5, 6, and 7) across most institutions, with the highest probabilities concentrated in the president, armed forces, and supreme court.",Moderate to High Institutional Trust
+4,Generalized Institutional Distrust,"This class is characterized by a high probability of selecting Category 1 across all institutions, most notably for political parties (0.85) and police (0.76).",Generalized Institutional Distrust
+5,Selective Executive and Military Trust,"This class is characterized by high distrust of political parties and police, contrasted with relatively high trust in the president and armed forces.",Selective Executive and Military Trust
