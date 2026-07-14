@@ -1,8 +1,10 @@
 # hot_topic
 
+![](images/clipboard-2943011998.png)
+
 Measuring **stance in public comments (2000-2025)** with topic models and LLM annotation. A two-script Quarto pipeline: Script 1 discovers and names the topics; Script 2 measures stance toward one stated proposition per selected topic over a census of the in-scope paragraphs, with the validation evidence (inter-model agreement, human-LLM triage, gold-standard metrics) built in rather than bolted on.
 
-The corpus is ~1,200 public comments, often thousands of words spanning several topics, with columns `atom_id` (comment id), `Year` (integer), and `body_english` (text). Chat LLMs cannot judge stance on a whole multi-topic comment even with the topic named in the prompt, so the **measurement unit is the paragraph**, and the whole pipeline is built around that unit.
+The corpus is \~1,200 public comments, often thousands of words spanning several topics, with columns `atom_id` (comment id), `Year` (integer), and `body_english` (text). Chat LLMs cannot judge stance on a whole multi-topic comment even with the topic named in the prompt, so the **measurement unit is the paragraph**, and the whole pipeline is built around that unit.
 
 ## Simulate first
 
@@ -36,7 +38,7 @@ Named topics to defensible stance estimates. The qmd carries config, prose, and 
 Script 1 writes `outputs/`; Script 2 reads it and writes `outputs_stance/`.
 
 | File | Producer | Contents |
-|---|---|---|
+|------------------------|------------------------|------------------------|
 | `paragraphs.parquet` | Script 1 | `para_uid, atom_id, para_id, Year, n_tokens, text` |
 | `paragraph_theta.parquet` | Script 1 | the above plus `topic_1..topic_K` (STM theta) |
 | `topic_summary.parquet` | Script 1 | topic, prevalence, FREX and PROB words |
@@ -62,12 +64,12 @@ Script 1 writes `outputs/`; Script 2 reads it and writes `outputs_stance/`.
 ## Methods and tooling
 
 | Concern | Approach |
-|---|---|
+|------------------------------------|------------------------------------|
 | Paragraph unit | direction-aware atomizer (headings forward, fragments backward), config-driven splitter |
 | Topic discovery | `topicmodels::LDA` comparator; `stm::stm` with `prevalence = ~ s(Year, df = 5)`, spectral init |
 | Choosing K | manual held-out searchK grid via `furrr` (Windows-safe); coherence-exclusivity frontier |
 | Topic naming | FREX sheet + `findThoughts`; optional LLM drafts, analyst-verified file as sole source of record |
-| Stance measurement | `llm_stance_source.R` via `ellmer`: sequential calls on `clone()`d chats, structured output (`type_enum`), >= 2 models, pinned tags, temp 0, analyst persona in config |
+| Stance measurement | `llm_stance_source.R` via `ellmer`: sequential calls on `clone()`d chats, structured output (`type_enum`), \>= 2 models, pinned tags, temp 0, analyst persona in config |
 | Reliability / validity | `irr` kappa + per-class confusion; consensus + triage; per-class P/R/F1 and macro-F1 vs gold |
 | Estimation | census tabulation over the selected-topic paragraphs by topic and era; uncertainty carried by measurement error |
 | Rendering | Quarto **Typst** (no LaTeX/tinytex), PNG figures, breakable-figure show rule for tall tables |
@@ -79,27 +81,27 @@ quarto render text_topics.qmd     # Script 1; searchK is the long chunk
 quarto render llm_stance.qmd      # Script 2; census classification is the long chunk
 ```
 
-Both render to PDF through Quarto's bundled Typst engine (Quarto >= 1.4). Figures use a PNG device because Typst mishandles complex SVG. Each document opens with `#show figure: set block(breakable: true)` so tall captioned tables break across pages instead of overflowing; wide text tables set `tbl-colwidths` per chunk.
+Both render to PDF through Quarto's bundled Typst engine (Quarto \>= 1.4). Figures use a PNG device because Typst mishandles complex SVG. Each document opens with `#show figure: set block(breakable: true)` so tall captioned tables break across pages instead of overflowing; wide text tables set `tbl-colwidths` per chunk.
 
 ## Transferable lessons
 
--   **Simulate first, always.** A pipeline that has never recovered a planted answer is unverified plumbing.
--   **Quarantine the simulation.** All simulation code lives in one deletable fenced section per script; downstream code is branch-free (Script 2's real/fake seam is the single overridden `run_rater()`, and mode differences downstream are data-driven).
--   **Caches track files, not code** (see above; the most common source of "impossible" results).
--   **tibble data masking:** a column defined earlier in the same `tibble()`/`mutate()` call shadows an environment object of the same name for every later argument. Pull env values into plain locals first, and keep display names (`topic_label`) away from measurement names (`label`).
--   **tf-idf degenerates** when every term appears in every document group: `idf = ln(N/df)` is 0 by definition, not by bug; filter and say so.
--   **Headings are not paragraphs.** A naive short-fragment rule glues a subtitle's topical words onto the *preceding* paragraph; merge headings forward.
--   **LLM labels are measurements with error,** not ground truth: constrain the output, use >= 2 models, validate per class against human labels, report macro-F1 on imbalanced classes, and remember Cohen's kappa has no validated interpretive thresholds.
--   **A census removes sampling error, not measurement error.** With every paragraph classified, no interval belongs on a corpus proportion; the honest uncertainty statement is the gold-quantified per-class error rate.
--   **Load `tidyverse` last** so its verbs win over packages that mask them (`stm`, `topicmodels`, ...).
+- **Simulate first, always.** A pipeline that has never recovered a planted answer is unverified plumbing.
+- **Quarantine the simulation.** All simulation code lives in one deletable fenced section per script; downstream code is branch-free (Script 2's real/fake seam is the single overridden `run_rater()`, and mode differences downstream are data-driven).
+- **Caches track files, not code** (see above; the most common source of "impossible" results).
+- **tibble data masking:** a column defined earlier in the same `tibble()`/`mutate()` call shadows an environment object of the same name for every later argument. Pull env values into plain locals first, and keep display names (`topic_label`) away from measurement names (`label`).
+- **tf-idf degenerates** when every term appears in every document group: `idf = ln(N/df)` is 0 by definition, not by bug; filter and say so.
+- **Headings are not paragraphs.** A naive short-fragment rule glues a subtitle's topical words onto the *preceding* paragraph; merge headings forward.
+- **LLM labels are measurements with error,** not ground truth: constrain the output, use \>= 2 models, validate per class against human labels, report macro-F1 on imbalanced classes, and remember Cohen's kappa has no validated interpretive thresholds.
+- **A census removes sampling error, not measurement error.** With every paragraph classified, no interval belongs on a corpus proportion; the honest uncertainty statement is the gold-quantified per-class error rate.
+- **Load `tidyverse` last** so its verbs win over packages that mask them (`stm`, `topicmodels`, ...).
 
 ## Files
 
--   `text_topics.qmd` - Script 1: paragraph corpus, EDA, LDA/STM, searchK, topic naming, LLM label drafting.
--   `llm_stance.qmd` - Script 2: config, topic CSV lookup, scope, transparent prompt, census stance detection, validation, estimation.
--   `llm_stance_source.R` - Script 2's functions (chat/rater, sequential classify with retry, measurement QC); keep it beside the qmd, which `source()`s it.
--   `defensible_llm_text_measurement.md` - methodology and verified citations for the LLM measurement.
--   `README.md` - this file.
+- `text_topics.qmd` - Script 1: paragraph corpus, EDA, LDA/STM, searchK, topic naming, LLM label drafting.
+- `llm_stance.qmd` - Script 2: config, topic CSV lookup, scope, transparent prompt, census stance detection, validation, estimation.
+- `llm_stance_source.R` - Script 2's functions (chat/rater, sequential classify with retry, measurement QC); keep it beside the qmd, which `source()`s it.
+- `defensible_llm_text_measurement.md` - methodology and verified citations for the LLM measurement.
+- `README.md` - this file.
 
 ## Lineage
 
