@@ -43,7 +43,6 @@ library(furrr)         # future_map_*: parallel model fits (enumeration, screen,
 # the libraries, means every function is available to the analysis chunks below.
 source("survey_lca_source.R")
 
-`%||%` <- rlang::`%||%`  # null-coalescing helper (also defined in the source file)
 # Reproducibility is controlled by cfg$seed (set in the configuration block): every
 # random step below (the EM random starts and the poLCA starts) seeds
 # itself from it, so the classes and their labels are identical across runs.
