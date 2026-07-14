@@ -42,6 +42,219 @@ theme_lca <- function(base_size = 11) {
 # Map any configured missing/DK codes to NA, leaving every other value intact.
 to_na <- function(x, codes) { if (!is.null(codes)) x[x %in% codes] <- NA; x }
 
+# ---- Generic .sav preparation --------------------------------------------
+# prepare_survey_data(pd) turns a labelled .sav into a pipeline-ready tibble.
+# EVERYTHING dataset-specific lives in the pd list the caller supplies (in the
+# analysis document); this function is pure machinery and never changes.
+#
+# pd fields:
+#   sav_path          path to the .sav
+#   design            named c(id=, strata=, psu=, weight=) as named in the file
+#   items             named character: english_name = "sav_code" (analysis order)
+#   demo_source       raw columns the demographic recodes read from
+#   na_label_regex    values whose LABEL matches (case-insensitive) become NA
+#   na_recode_also    non-item columns sharing the nonresponse codes (e.g. outcomes)
+#   demographics      NAMED LIST OF FUNCTIONS, each function(d) -> vector of
+#                     nrow(d): ALL recoding lives here (cut(), case_when(), ...);
+#                     d is the working tibble after the NA recode, so labelled
+#                     columns are converted inside each function as needed
+#   audit_source      optional named character derived -> source column, enabling
+#                     the 'unmatched' share in the recode audit
+#   question_template optional glue with {name}; NULL keeps the extracted labels
+#   response_labels   optional character(C) replacing value labels; NULL keeps
+#                     the extracted ones
+#
+# Missingness policy (deliberate): listwise deletion on design variables and
+# the derived demographics; item-partial respondents KEPT (scored later); only
+# rows missing every item dropped. Prints: value-label inventory, NA audit,
+# recode audit, attrition; stops loudly (with evidence) if the sample zeroes.
+prepare_survey_data <- function(pd) {
+  raw   <- haven::read_sav(pd$sav_path) |> as_tibble()
+  items <- names(pd$items)
+  dvars <- unname(pd$design)
+
+  work <- raw |>
+    dplyr::select(all_of(c(dvars, unname(pd$items), pd$demo_source))) |>
+    rename(!!!pd$items)
+  dat_before <- work |> dplyr::select(all_of(items))
+
+  # -- nonresponse: evidence first, empty-safe ------------------------------
+  inventory <- map_dfr(items, function(it) {
+    labs <- sjlabelled::get_labels(work[[it]])
+    vals <- sjlabelled::get_values(work[[it]])
+    if (length(labs) == 0 || length(labs) != length(vals)) return(
+      tibble(item = character(), value = numeric(), label = character()))
+    tibble(item = it, value = as.numeric(vals), label = as.character(labs))
+  })
+  cat("Value-label inventory (distinct labels across the ", length(items),
+      " items):\n", sep = "")
+  print(inventory |> dplyr::count(value, label, name = "n_items"), n = Inf)
+
+  na_map <- inventory |>
+    dplyr::filter(str_detect(tolower(label), pd$na_label_regex)) |>
+    distinct(value, label)
+  if (nrow(na_map) == 0) {
+    cat("\nNo label matched pd$na_label_regex ('", pd$na_label_regex, "'): either\n",
+        "nonresponse is user-missing (already NA at read; before/after plots will\n",
+        "match, correctly) or the regex misses this file's wording; see inventory.\n",
+        sep = "")
+  } else {
+    cat("\nNonresponse labels recoded to NA:\n"); print(na_map, n = Inf)
+    work <- work |>
+      mutate(across(all_of(c(items, intersect(pd$na_recode_also, names(work)))),
+                    ~ replace(.x, .x %in% na_map$value, NA)))
+  }
+
+  # -- wording onto the items (single source of truth downstream) -----------
+  qtext <- map_chr(unname(pd$items), ~ sjlabelled::get_label(raw[[.x]]) %||% .x) |>
+    set_names(items)
+  if (!is.null(pd$question_template))
+    qtext <- map_chr(items, ~ as.character(
+      stringr::str_glue(pd$question_template,
+                        name = str_replace_all(.x, "_", " ")))) |> set_names(items)
+  work <- work |>
+    mutate(across(all_of(items), function(x) {
+      nm <- cur_column()
+      x  <- sjlabelled::set_label(x, label = qtext[[nm]])
+      if (!is.null(pd$response_labels))
+        x <- sjlabelled::set_labels(
+          x, labels = set_names(seq_along(pd$response_labels), pd$response_labels),
+          force.labels = TRUE)
+      x
+    }))
+
+  # -- demographics: every recode is a pd-supplied function -----------------
+  work <- bind_cols(work, map_dfc(pd$demographics, ~ .x(work)))
+  derived <- names(pd$demographics)
+  audit <- map_dfr(derived, function(d) {
+    s <- pd$audit_source[d] %||% NA_character_
+    tibble(derived = d, source = s,
+           na_share  = mean(is.na(work[[d]])),
+           unmatched = if (!is.na(s)) mean(is.na(work[[d]]) & !is.na(work[[s]]))
+                       else NA_real_)
+  })
+  cat("\nRecode audit ('unmatched' = source present, recode NA; a label-mismatch",
+      "fingerprint):\n")
+  print(audit |> mutate(across(where(is.numeric), ~ round(.x, 3))), n = Inf)
+  walk(derived, function(d) {
+    s <- pd$audit_source[d] %||% NA_character_
+    if (is.na(s)) return(invisible(NULL))
+    bad <- work |> dplyr::filter(is.na(.data[[d]]), !is.na(.data[[s]]))
+    if (nrow(bad) / nrow(work) > 0.02) {
+      cat("\nUnmatched source values for ", d, " (from ", s, "):\n", sep = "")
+      print(bad |> dplyr::count(.data[[s]], sort = TRUE) |> slice_head(n = 8))
+    }
+  })
+
+  # -- missingness policy + attrition ---------------------------------------
+  dat <- work |>
+    dplyr::select(all_of(dvars), all_of(items), all_of(derived)) |>
+    drop_na(all_of(dvars), all_of(derived)) |>
+    dplyr::filter(!if_all(all_of(items), is.na))
+  cat("\nAttrition: ", nrow(work), " read -> ", nrow(dat), " prepared (",
+      nrow(work) - nrow(dat), " dropped by listwise design/demographics or by ",
+      "missing every item).\n", sep = "")
+  if (nrow(dat) == 0)
+    stop("prepare_survey_data() produced 0 respondents; the recode audit above ",
+         "identifies the derived variable responsible.")
+  cat("Prepared: ", nrow(dat), " respondents, ", length(items), " items, ",
+      sum(!stats::complete.cases(dat[, items])),
+      " item-partial cases kept for scoring.\n", sep = "")
+
+  dictionary <- tibble(item = items, sav_code = unname(pd$items),
+                       label_extracted = map_chr(unname(pd$items),
+                                                 ~ sjlabelled::get_label(raw[[.x]]) %||% .x),
+                       question_used = unname(qtext))
+  responses <- if (!is.null(pd$response_labels))
+    tibble(value = seq_along(pd$response_labels), response = pd$response_labels)
+  else tibble(value = numeric(), response = character())
+
+  list(dat = dat, dat_before = dat_before, dictionary = dictionary,
+       responses = responses, na_map = na_map, audit = audit)
+}
+
+# Two-color palette for the weighted-vs-unweighted comparison figure.
+wu_pal <- setNames(viridisLite::viridis(2, begin = 0.2, end = 0.75),
+                   c("Weighted (population)", "Unweighted (poLCA)"))
+
+# Parallel backend for the repeated fits (enumeration, indicator screen, poLCA
+# sweep). multisession works on Windows and macOS; a sequential plan reproduces
+# the parallel result exactly, because every fit re-seeds from cfg$seed, so
+# parallelism changes timing, never output.
+init_parallel <- function(cfg) {
+  if (isTRUE(cfg$parallel)) {
+    future::plan(future::multisession,
+                 workers = cfg$workers %||% max(1L, future::availableCores() - 1L))
+  } else {
+    future::plan(future::sequential)
+  }
+  invisible(NULL)
+}
+
+# Prepare the configured data for estimation. Machinery, not analysis:
+#  - verifies every configured column exists (loud, early failure);
+#  - coerces design columns to base types (haven_labelled arithmetic is
+#    forbidden by vctrs, and the EM computes w * posterior);
+#  - maps cfg$na_codes to NA, recodes each item to consecutive integers from 1
+#    over its substantive categories, coerces profiling covariates to factors;
+#  - splits complete cases (the fit sample) from item-partial respondents,
+#    who are scored later from their answered items;
+#  - computes the weight vector and the sum-to-n scale for information
+#    criteria: the weighted pseudo-log-likelihood is linear in the weights, so
+#    multiplying by n / sum(w) equals fitting with weights scaled to sum to n,
+#    leaving point estimates untouched and calibrating only model selection,
+#    which otherwise leans toward too many classes.
+# Returns dat_all, dat_prepared, cats, w_vec, scale_ic, and a per-item summary
+# table (categories and missing counts) for the document to print.
+prepare_items <- function(cfg) {
+  dat <- cfg$data
+  stopifnot(is.data.frame(dat))
+  required_cols <- c(cfg$items, cfg$aux, cfg$strata, cfg$psu, cfg$weight)
+  missing_cols  <- setdiff(required_cols, names(dat))
+  if (length(missing_cols) > 0)
+    stop("These configured columns are not in the data: ",
+         paste(missing_cols, collapse = ", "))
+
+  strip_labelled <- function(x) if (inherits(x, "haven_labelled")) as.numeric(x) else x
+  dat <- dat |>
+    mutate(across(all_of(c(cfg$strata, cfg$psu)), strip_labelled),
+           !!cfg$weight := as.numeric(.data[[cfg$weight]]))
+
+  dat_all <- dat |>
+    mutate(across(all_of(cfg$items),
+                  ~ recode_consecutive(to_na(as.integer(.x), cfg$na_codes))),
+           across(all_of(cfg$aux), as.factor))
+  cats <- map_int(cfg$items, ~ max(dat_all[[.x]], na.rm = TRUE)) |>
+    set_names(cfg$items)
+
+  complete_items <- stats::complete.cases(dat_all[, cfg$items, drop = FALSE])
+  dat_prepared   <- dat_all[complete_items, , drop = FALSE]
+  w_vec          <- dat_prepared[[cfg$weight]]
+
+  list(dat_all = dat_all, dat_prepared = dat_prepared, cats = cats,
+       complete_items = complete_items,   # logical over dat_all; scoring uses it
+       w_vec = w_vec, scale_ic = nrow(dat_prepared) / sum(w_vec),
+       summary = tibble(item = cfg$items, categories = as.integer(cats),
+                        n_missing = map_int(cfg$items,
+                                            ~ sum(is.na(dat_all[[.x]])))))
+}
+
+# Stacked response-proportion bars for a set of items (before/after views).
+plot_item_stack <- function(df, items, title) {
+  df |>
+    dplyr::select(all_of(items)) |>
+    mutate(across(everything(), as.numeric)) |>
+    pivot_longer(everything(), names_to = "item", values_to = "value") |>
+    dplyr::filter(!is.na(value)) |>
+    dplyr::count(item, value) |>
+    ggplot(aes(item, n, fill = factor(value))) +
+    geom_col(position = "fill") +
+    scale_fill_viridis_d(name = "Response") +
+    labs(x = NULL, y = "Proportion", title = title) +
+    theme_lca() +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1))
+}
+
 # Recode a vector to consecutive integers 1..C over its substantive (non-NA)
 # values, preserving NA. Items of different lengths are handled the same way.
 recode_consecutive <- function(x) as.integer(factor(x, levels = sort(unique(x[!is.na(x)]))))

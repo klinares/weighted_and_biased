@@ -4,7 +4,7 @@ subtitle: "Institutional trust in Mexico: LAPOP AmericasBarometer 2023"
 author: "Kevin"
 date: today
 format:
-  pdf:
+  typst:
     toc: false
     number-sections: true
     fig-width: 7
@@ -12,19 +12,6 @@ format:
     fig-align: center
     df-print: kable
     geometry: margin=1in
-    # fvextra wraps long code lines (including long caption strings) so nothing
-    # overflows the page; this is the only LaTeX add-on the document relies on.
-    include-in-header:
-      text: |
-        \usepackage{fvextra}
-        \DefineVerbatimEnvironment{Highlighting}{Verbatim}{breaklines,breakanywhere,commandchars=\\\{\}}
-        % UNCLASSIFIED banner via KOMA's \titlehead: rendered BY \maketitle at
-        % the top of the title area, above the title, same page, exactly once.
-        % (Quarto's PDF class is scrartcl; emitting material before \maketitle
-        % instead makes KOMA break the page, hence this native hook. xcolor is
-        % loaded by Quarto's PDF template.)
-        \definecolor{bannerred}{HTML}{B00020}
-        \titlehead{\colorbox{bannerred}{\parbox{\dimexpr\textwidth-2\fboxsep\relax}{\centering\textcolor{white}{\textbf{\large UNCLASSIFIED}}}}}
 execute:
   echo: true
   warning: false
@@ -32,20 +19,11 @@ execute:
   eval: true
 ---
 
-# Purpose and how to use this script
+# Purpose and method
 
-This is a complete, adaptable analysis for finding latent classes (hidden respondent types) in categorical survey items collected under a complex sampling design, estimating the class structure so that it describes the **population** rather than the achieved sample, attaching design-based confidence intervals to every estimated probability, writing class membership back to the respondents, and profiling that membership on demographics.
+This document estimates a population-level latent class typology from complex-survey items and carries the sampling design through every result: enumeration, parameter intervals, class assignment, and demographic profiling all rest on the same design. Estimation maximizes the design-weighted pseudo-log-likelihood by EM; all uncertainty comes from stratified jackknife (JKn) replicate weights, because a pseudo-likelihood has no usable information matrix. Everything dataset-specific lives in the `pd` block and the configuration; the machinery lives in `survey_lca_source.R` and never changes.
 
-The analysis identifies types of respondents by their **trust in Mexican institutions**, thirteen 7-point items from the 2023 LAPOP AmericasBarometer (1 = Not at all, 7 = A lot). Everything dataset-specific lives in ONE adapter script (`prepare_data_lapop.R`) plus the configuration block; to apply this to another survey, write a sibling adapter and edit the config, and nothing else changes.
-
-The script makes four methodological commitments, each explained where it occurs:
-
-1.  **The design is respected during estimation**, not only afterward. Class prevalences and item-response probabilities are estimated by *pseudo-maximum likelihood* with the base weights, which is the analogue of declaring `svyset psu [pweight = w], strata(stratum)` in Stata. This is the established design-based approach to latent class analysis under complex sampling (Patterson, Dayton, and Graubard 2002, *Journal of the American Statistical Association* 97(459):721–728; Vermunt and Magidson 2007, *Sociological Methods & Research* 36(1):87–111).
-2.  **`poLCA` is used as an unweighted benchmark**, because it cannot use design weights, and the gap between it and the weighted fit measures how informative the design is for this typology. A built-in equivalence check confirms the weighted estimator reproduces `poLCA` exactly when all weights are set to one.
-3.  **Uncertainty is design-based.** Confidence intervals on every conditional and inclusion probability come from the stratified jackknife (JKn) using replicate weights, which respects the stratification and clustering of a multistage design.
-4.  **"Don't know" is treated as missing**, not as a response category. The model is fit on respondents who answered every item, which also makes the `poLCA` benchmark an exact comparison; respondents dropped for a missing answer are then assigned a class from their answered items (the scoring section), so no one is discarded and nothing is imputed. The configuration block notes where to change this if your items call for it.
-
-The code uses the tidyverse, contains no `for` or `while` loops (iteration is done with `purrr` and matrix algebra), and is written to fail loudly and informatively rather than silently on edge cases.
+The decisions taken, each argued in the section that uses it: weights enter every EM step, so estimates describe the population, not the achieved sample; information criteria rescale the log-likelihood to the sum-to-n scale, otherwise BIC leans toward too many classes; the bootstrapped LRT is omitted because its independent-observations premise fails under a design-weighted pseudo-likelihood on a clustered sample; the model is fit on complete cases and item-partial respondents are assigned classes afterwards from their answered items; demographic profiling is design-based domain estimation on soft posteriors, not a three-step regression; and class labels are LLM-drafted once, frozen to CSV, and analyst-overridable, applied only after the diagnostics pass.
 
 # Setup
 
@@ -75,12 +53,86 @@ source("survey_lca_source.R")
 # and dplyr::distinct() throughout. This is a deliberate, defensive choice.
 ```
 
-# The dataset adapter
+# The dataset block: the ONLY per-dataset edits
 
-One script per dataset does all reading and cleaning; it is sourced here, before the configuration, so the config can point at its outputs (`lapop`, `lapop_items`). Its console output, the nonresponse audit and the preparation summary, prints below and is part of the record.
+`pd` below is the complete description of a dataset: where the .sav lives, which columns are design variables, items, and demographic sources, how nonresponse is recognized, optional English wording, and EVERY demographic recode, written as named functions so arbitrary transformations (cut points, label matching, level ordering) stay inside this one list. `prepare_survey_data(pd)` in the source file is pure machinery and never changes. Its console output, the label inventory, the nonresponse audit, the recode audit, and the attrition line, prints below and is part of the record.
 
-```{r prepare-data}
-source("prepare_data_lapop.R")
+```{r dataset-block}
+pd <- list(
+  # -- where and what -----------------------------------------------------
+  sav_path = "D:/repos/weighted_and_biased/LCA/data/MEX_2023_LAPOP_AmericasBarometer_v1.0_w.sav",
+  design   = c(id = "idnum", strata = "strata", psu = "upm", weight = "wt"),
+  items    = c(                       # english_name = "sav_code", analysis order
+    justice_system     = "b10a",
+    electoral_tribunal = "b11",
+    armed_forces       = "b12",
+    legislature        = "b13",
+    public_ministry    = "b15",
+    police             = "b18",
+    auditor            = "b19",
+    political_parties  = "b21",
+    president          = "b21a",
+    supreme_court      = "b31",
+    municipality       = "b32",
+    media              = "b37",
+    elections          = "b47a"
+  ),
+  demo_source = c("q1tc_r", "q2", "edre", "ur", "ocup4a", "pn4", "m1"),
+
+  # -- nonresponse ---------------------------------------------------------
+  na_label_regex = "no sabe|no responde|no contesta|no aplica|^dk$|^nr$|^n/a$",
+  na_recode_also = c("pn4", "m1", "q2"),   # non-item columns sharing the codes
+
+  # -- wording (optional; NULL keeps the labels extracted from the .sav) ----
+  question_template = "To what extent do you trust the {name}?",
+  response_labels   = c("Not at all", "2", "3", "4", "5", "6", "A lot"),
+
+  # -- demographics: EVERY recode is a function(d) -> vector -----------------
+  demographics = list(
+    age_cat = function(d) cut(d$q2, breaks = c(17, 29, 44, 59, Inf),
+                              labels = c("18-29", "30-44", "45-59", "60+"),
+                              right = TRUE),
+    male = function(d) factor(ifelse(sjlabelled::as_character(d$q1tc_r) ==
+                                       "Mujer/femenino", "Female", "Male")),
+    Edu = function(d) {
+      e <- sjlabelled::as_character(d$edre)
+      case_when(e == "Ninguna" ~ "none",
+                str_detect(e, "^Primaria") ~ "primary",
+                str_detect(e, "^Secundaria") ~ "secondary",
+                str_detect(e, "^Universitaria") ~ "higher_ed",
+                TRUE ~ NA_character_) |>
+        factor(levels = c("none", "primary", "secondary", "higher_ed"))
+    },
+    Urban = function(d) factor(ifelse(sjlabelled::as_character(d$ur) == "Urbano",
+                                      "urban", "rural")),
+    Employment = function(d) {
+      o <- sjlabelled::as_character(d$ocup4a)
+      case_when(str_detect(o, "^Trabajando|pero tiene trabajo") ~ "Employed",
+                str_detect(o, "quehaceres")                     ~ "house_keeper",
+                str_detect(o, "estudiante")                     ~ "Student",
+                str_detect(o, "jubilado|pensionado")            ~ "Retired",
+                str_detect(o, "buscando trabajo|no est\u00e1 buscando") ~ "Unemployed",
+                TRUE ~ NA_character_) |> factor()
+    },
+    satis_demo = function(d) factor(as.numeric(d$pn4), levels = 1:4,
+                                    labels = c("Very satisfied", "Satisfied",
+                                               "Dissatisfied", "Very dissatisfied")),
+    prez_rating = function(d) factor(as.numeric(d$m1), levels = 1:5,
+                                     labels = c("Very good", "Good",
+                                                "Neither good nor bad",
+                                                "Bad", "Very bad"))
+  ),
+  # source column per derived variable, enabling the 'unmatched' audit share
+  audit_source = c(age_cat = "q2", male = "q1tc_r", Edu = "edre", Urban = "ur",
+                   Employment = "ocup4a", satis_demo = "pn4", prez_rating = "m1")
+)
+
+prep       <- prepare_survey_data(pd)
+dat        <- prep$dat
+dat_before <- prep$dat_before
+dictionary <- prep$dictionary
+responses  <- prep$responses
+items      <- names(pd$items)
 ```
 
 # Configuration: the only block you edit to reuse this script
@@ -90,7 +142,7 @@ Everything design-specific is gathered here; the data themselves arrive already 
 ```{r config}
 cfg <- list(
   # --- columns in YOUR data -------------------------------------------------
-  items   = lapop_items,        # the 13 trust items (English names from the adapter)
+  items   = items,              # the item names from the dataset block (pd)
   aux     = c("age_cat", "male", "Edu", "Urban", "Employment",
               "satis_demo", "prez_rating"),        # demographics/outcomes for profiling
   strata  = "strata",           # stratum identifier (design)
@@ -99,8 +151,8 @@ cfg <- list(
                                 # weighted machinery reduces to unweighted, correctly
 
   # --- analysis choices -----------------------------------------------------
-  K_range = 2:16,                # candidate numbers of latent classes to compare
-  K_force = 5,               # force a specific number of classes, overriding the BIC pick;
+  K_range = 2:8,                # candidate numbers of latent classes to compare
+  K_force = NULL,               # force a specific number of classes, overriding the BIC pick;
                                 # leave NULL to select K by BIC (Section 8). Set to an integer
                                 # within K_range to pin K (e.g. when BIC prefers more classes
                                 # than are interpretable). The enumeration still prints either way.
@@ -133,13 +185,12 @@ cfg <- list(
                                 # context-free prompt byte for byte.
 
   # --- outputs ----------------------------------------------------------------
-  out_dir = "outputs",          # folder where every result file is written and where the
+  out_dir = "../outputs",          # folder where every result file is written and where the
                                 # frozen label cache (class_labels_llm.csv) is found on
                                 # re-render; created below if missing
 
   # --- data -----------------------------------------------------------------
-  data = lapop                  # the prepared tibble from the adapter script; swap the
-                                # sourced adapter (and this line) to change datasets
+  data = dat                    # the prepared tibble from the dataset block (pd)
 )
 dir.create(cfg$out_dir, showWarnings = FALSE, recursive = TRUE)
 
@@ -154,63 +205,33 @@ if (needs_llm && !nzchar(Sys.getenv(cfg$llm_key_env %||% "OPENAI_API_KEY")))
        cfg$llm_key_env %||% "OPENAI_API_KEY", "' is empty. Put the key in ",
        ".Renviron (home) or let .Rprofile set it (work); console Sys.setenv() ",
        "does not reach a quarto render.")
+
+init_parallel(cfg)   # future backend for the repeated fits (survey_lca_source.R)
 ```
 
 A note on the **`items` coding requirement**, which the script checks: each indicator must be a small set of consecutive integer codes starting at 1 over its *substantive* responses (for example 1,2,3,4 for a four-point item), and items may differ in how many categories they have. "Don't know" is **not** a response category in this version: it is treated as missing data, set to `NA` (directly, or by listing its code in `cfg$na_codes`). Respondents with any missing item are held out of the model fit (Section 6) but are still assigned a class afterwards from their answered items (the scoring section), so no one is discarded and nothing is imputed.
 
-```{r theme}
-# theme_lca() (the colorblind-safe figure theme) lives in survey_lca_source.R.
-# Only the two-color weighted/unweighted palette, which is specific to this
-# document's labels, is defined here.
-wu_pal <- setNames(viridisLite::viridis(2, begin = 0.2, end = 0.75),
-                   c("Weighted (population)", "Unweighted (poLCA)"))
-```
+# The model
 
-```{r parallel-plan}
-# Parallel backend for the repeated model fits below (enumeration, indicator
-# screen, poLCA sweep), read from cfg. multisession works on Windows and macOS.
-# A sequential plan reproduces the serial result exactly, because every fit
-# re-seeds itself from cfg$seed; parallelism changes timing, not output.
-if (isTRUE(cfg$parallel)) {
-  future::plan(future::multisession,
-               workers = cfg$workers %||% max(1L, future::availableCores() - 1L))
-} else {
-  future::plan(future::sequential)
-}
-```
+Each respondent belongs to one of $K$ unobserved classes, and within a class the items are independent (local independence). With $\pi_k$ the class prevalences and $\rho_{jck}$ the probability that class $k$ gives response $c$ to item $j$,
 
-# The latent class model
+$$P(\mathbf{y}_i) = \sum_{k=1}^{K} \pi_k \prod_{j=1}^{J} \rho_{j\,y_{ij}\,k}, \qquad \sum_{c=1}^{C_j}\rho_{jck}=1 .$$
 
-A latent class model supposes that each respondent belongs to one of $K$ unobserved classes, and that **within a class the items are statistically independent** (the local-independence assumption). Writing $\pi_k$ for the share of the population in class $k$, and $\rho_{jck}$ for the probability that a member of class $k$ gives response $c$ to item $j$, the probability of observing respondent $i$'s full pattern of answers is a mixture over the classes:
-
-$$P(\mathbf{y}_i) \;=\; \sum_{k=1}^{K} \pi_k \prod_{j=1}^{J} \rho_{j\,y_{ij}\,k},
-\qquad \text{with } \sum_{c=1}^{C_j}\rho_{jck}=1 \text{ for every item } j \text{ and class } k.$$
-
-The $\pi_k$ are the **inclusion (class-size) probabilities** and the $\rho_{jck}$ are the **conditional (item-response) probabilities**; together they are the *measurement model*. Each item is treated as an unordered (nominal) categorical variable, which is exactly what `poLCA` assumes, so the benchmark in Section 12 compares like with like. The items may have different numbers of categories; the model handles that without any special configuration. Because the items are independent within a class, a respondent who is missing an item still contributes through the items they did answer, which is what lets the model retain everyone for scoring without imputation.
-
-*Why this section matters: it is the contract the rest of the script honors. The local-independence assumption is what makes the classes interpretable as a measurement model rather than an arbitrary clustering, and it is the same assumption the indicator screen (Section 11) and the partial-response scoring (the scoring section) rely on; if it fails badly, the diagnostics there are where it shows up.*
-
-## Why ordinary `poLCA` is not enough
-
-`poLCA` maximizes the *unweighted* likelihood, so it estimates the class structure of the **achieved sample**. Under a complex design with unequal selection probabilities, the sample over- or under-represents parts of the population, and the unweighted estimates inherit that distortion. To describe the **population**, each respondent's contribution to the likelihood must be weighted by their base weight $w_i$, giving the *design-weighted pseudo-log-likelihood*
-
-$$\ell_w(\boldsymbol{\theta}) \;=\; \sum_{i} w_i \,\log\!\Big(\sum_{k=1}^{K} \pi_k \prod_{j} \rho_{j\,y_{ij}\,k}\Big).$$
-
-Maximizing $\ell_w$ yields *pseudo-maximum-likelihood* estimates of the finite-population parameters. This is the standard design-based device for latent class models under complex sampling (Patterson, Dayton, and Graubard 2002, *Journal of the American Statistical Association* 97(459):721–728), and it is what we implement below, because `poLCA` has no argument for weights.
+Items are nominal and may have different category counts. Under a complex design the unweighted likelihood targets the achieved sample, so estimation maximizes the design-weighted pseudo-log-likelihood $\ell_w(\boldsymbol\theta) = \sum_i w_i \log\!\big(\sum_k \pi_k \prod_j \rho_{j\,y_{ij}\,k}\big)$, the standard device for LCA under complex sampling (Patterson, Dayton, and Graubard 2002, *Journal of the American Statistical Association* 97(459):721-728); `poLCA` has no weights argument, which is why the engine is custom and `poLCA` serves as the unweighted benchmark. Local independence is the load-bearing assumption: the indicator screen and the bivariate residual test where it strains, and partial-response scoring relies on it (a missing item drops out of the within-class product).
 
 # The data: LAPOP Mexico 2023
 
-Everything dataset-specific happens in `prepare_data_lapop.R`, sourced above the configuration. That adapter reads the labelled .sav with `sjlabelled`, recodes nonresponse to `NA` by matching value labels (No sabe, No responde, No aplica) and prints an audit of exactly which codes were caught, authors English question wording and response labels onto the items (the dictionary keeps the extracted Spanish beside the English for confirmation), recodes the demographics, and applies the missingness policy: listwise deletion on design variables, demographics, and outcomes; item-partial respondents kept for the scoring section; only rows missing every item dropped. Adapting to another survey means writing a sibling adapter and pointing the config at its outputs; nothing else changes.
+Everything dataset-specific happens in the `pd` block above the configuration; `prepare_survey_data()` (source file) reads the labelled .sav with `sjlabelled`, recodes nonresponse to `NA` by matching value labels (No sabe, No responde, No aplica) and prints an audit of exactly which codes were caught, authors English question wording and response labels onto the items (the dictionary keeps the extracted Spanish beside the English for confirmation), recodes the demographics, and applies the missingness policy: listwise deletion on design variables, demographics, and outcomes; item-partial respondents kept for the scoring section; only rows missing every item dropped. Adapting to another survey means editing `pd`; nothing else changes.
 
 ```{r data-dictionary}
 # The item dictionary: .sav code, Spanish question as extracted, authored
 # English. CONFIRM the pairing here before trusting any downstream labels.
-knitr::kable(lapop_dictionary,
-             col.names = c("Item", ".sav code", "Question (Spanish, extracted)",
-                           "Question (English, authored)"),
+knitr::kable(dictionary,
+             col.names = c("Item", ".sav code", "Label (extracted)",
+                           "Question (used)"),
              caption = "Item dictionary. The English wording is set onto the data and is what the class labeler will read; the Spanish column is the extracted source of truth to verify it against.")
 
-knitr::kable(lapop_responses, col.names = c("Value", "Response (English)"),
+if (nrow(responses)) knitr::kable(responses, col.names = c("Value", "Response"),
              caption = "Response scale for all thirteen items (LAPOP B-series anchors).")
 ```
 
@@ -220,8 +241,8 @@ The two figures below show the response distributions before and after the nonre
 #| fig-height: 4.5
 # Printed sequentially on purpose: no patchwork dependency (its `/` operator
 # breaks against S7-based ggplot2 versions).
-print(plot_item_stack(lapop_before, lapop_items, "Before: as read (nonresponse codes included)"))
-print(plot_item_stack(lapop, lapop_items, "After: nonresponse recoded to NA"))
+print(plot_item_stack(dat_before, items, "Before: as read (nonresponse codes included)"))
+print(plot_item_stack(dat, items, "After: nonresponse recoded to NA"))
 ```
 
 ```{r data-llm-view}
@@ -240,49 +261,19 @@ walk(cfg$items, function(it) {
 
 # Preparing and validating the data
 
-Before any modeling, the script confirms the indicators are well coded and the design columns are present, stopping with an explicit message if anything is wrong. This is the robustness layer: it converts silent downstream errors into clear, early ones. *Why this section matters: latent class estimates are only as trustworthy as the coding underneath them. A mislabeled category or an unflagged missing code does not error, it quietly biases every prevalence, so catching it here is what separates a reproducible result from a plausible-looking wrong one.*
-
-"Don't know" is treated as missing. Any code listed in `cfg$na_codes` is set to `NA`, and each item is then recoded to consecutive integers from 1 over whatever substantive categories it has, so items of different lengths are all handled the same way. The model is **fit on complete cases**, the respondents who answered every item, which keeps estimation clean and makes the `poLCA` benchmark in Section 12 an exact comparison. Respondents held out here because of a missing answer are not discarded: the scoring section assigns each of them a class from the fitted model using only the items they did answer. With a small fraction missing, this loses little and imputes nothing.
+`prepare_items()` (source file) verifies every configured column exists, coerces the design columns to base types, maps `cfg$na_codes` to `NA`, recodes each item to consecutive integers from 1 over its substantive categories, and splits the fit sample: the model is fit on complete cases, and item-partial respondents are assigned a class afterwards from their answered items. It also fixes the sum-to-n scale for the information criteria, documented at its definition. Only the per-item summary prints here.
 
 ```{r prepare}
-# Pull the working data and confirm required columns exist.
-dat <- cfg$data
-stopifnot(is.data.frame(dat))
-required_cols <- c(cfg$items, cfg$aux, cfg$strata, cfg$psu, cfg$weight)
-missing_cols  <- setdiff(required_cols, names(dat))
-if (length(missing_cols) > 0)
-  stop("These configured columns are not in the data: ", paste(missing_cols, collapse = ", "))
+prep_fit     <- prepare_items(cfg)
+dat_all      <- prep_fit$dat_all
+dat_prepared <- prep_fit$dat_prepared
+cats         <- prep_fit$cats
+w_vec        <- prep_fit$w_vec
+scale_ic     <- prep_fit$scale_ic
+complete_items <- prep_fit$complete_items
 
-# Design columns from .sav files arrive as haven_labelled, and vctrs forbids
-# arithmetic on labelled vectors (the weighted EM computes w * posterior), so
-# they are coerced to base types here, once, for any dataset: the weight to
-# plain numeric unconditionally, strata and PSU stripped of the labelled class
-# only if they carry it (they may legitimately be character elsewhere).
-strip_labelled <- function(x) if (inherits(x, "haven_labelled")) as.numeric(x) else x
-dat <- dat |>
-  mutate(across(all_of(c(cfg$strata, cfg$psu)), strip_labelled),
-         !!cfg$weight := as.numeric(.data[[cfg$weight]]))
-
-# Map any configured missing/DK codes to NA, then recode each item to consecutive
-# integers from 1 over its substantive responses (NA preserved). Coerce profiling
-# covariates to factors so their levels drive the demographic domain estimates.
-# (to_na() and recode_consecutive() are defined in survey_lca_source.R.)
-dat_all <- dat |>
-  mutate(across(all_of(cfg$items), ~ recode_consecutive(to_na(as.integer(.x), cfg$na_codes))),
-         across(all_of(cfg$aux), as.factor))
-
-cats <- map_int(cfg$items, ~ max(dat_all[[.x]], na.rm = TRUE))
-names(cats) <- cfg$items
-
-# Complete-case subset for fitting, confidence intervals, and profiling. Respondents
-# with any missing item are scored later (the scoring section) from their answered items.
-complete_items <- stats::complete.cases(dat_all[, cfg$items, drop = FALSE])
-dat_prepared   <- dat_all[complete_items, , drop = FALSE]
-
-# Report the per-item category counts and missing footprint.
-tibble(item = cfg$items, categories = cats,
-       n_missing = map_int(cfg$items, ~ sum(is.na(dat_all[[.x]])))) |>
-  knitr::kable(align = "lrr")
+knitr::kable(prep_fit$summary, align = "lrr",
+             caption = "Per-item category counts and missing footprint after the NA recode.")
 ```
 
 Of `r nrow(dat_all)` respondents, `r nrow(dat_prepared)` answered every item and enter the fit; the remaining `r nrow(dat_all) - nrow(dat_prepared)` are assigned a class in the scoring section.
@@ -322,18 +313,8 @@ The number of classes $K$ is not known in advance and is chosen by comparing a s
 All enumeration here uses the **weighted** fit, so the chosen $K$ describes the population, not the achieved sample. To keep the criteria honest, the weighted pseudo-log-likelihood is put on the sample-size scale before $\hat\ell$ enters BIC and AIC: the weights are normalized to sum to $n$, so the fit term and the $\ln n$ penalty are measured in the same units. Without this the fit term would be inflated by the average weight and the criteria would lean toward too many classes. The script reports all three quantities across the candidate range and selects the $K$ that minimizes the weighted BIC. One standard companion to BIC is deliberately absent: the **bootstrapped likelihood ratio test** (BLRT), the usual complement for comparing $K$ against $K+1$ classes because the ordinary likelihood ratio statistic is not chi-square distributed for that comparison. The BLRT's parametric bootstrap simulates independent observations from the smaller model, and that premise does not carry over to a design-weighted pseudo-likelihood on a stratified, clustered sample, so applying it here would attach an invalid reference distribution to the decision. Enumeration therefore rests on the weighted BIC, read alongside entropy and the unweighted `poLCA` comparison in Section 12. *Why this section matters:* $K$ is the one modeling choice with no default, and every later result is conditional on it, so a well-calibrated, defensible selection here is what keeps the prevalences and profiles from being artifacts of an over- or under-fit class structure.
 
 ```{r enumerate}
-# df_k() and entropy_R2() are defined in survey_lca_source.R.
-w_vec <- dat_prepared[[cfg$weight]]
-
-# Information criteria for a WEIGHTED pseudo-likelihood need the log-likelihood and
-# the sample-size penalty on the same scale. The base weights here do not sum to
-# the sample size, so the weighted log-likelihood is rescaled to the n-scale before
-# forming AIC/BIC: multiplying by n / sum(w) is exactly fitting with weights scaled
-# to sum to n, because the pseudo-likelihood is linear in the weights. This leaves
-# the point estimates untouched (they are scale-invariant) and only calibrates model
-# selection, which otherwise leans toward too many classes.
-scale_ic <- nrow(dat_prepared) / sum(w_vec)
-
+# df_k() and entropy_R2() are defined in survey_lca_source.R; w_vec and the
+# sum-to-n scale_ic came from prepare_items() (rationale documented there).
 enum <- furrr::future_map_dfr(cfg$K_range, function(K) {
   fit  <- fit_lca(dat_prepared, w_vec, cats, cfg$items, K, cfg$n_starts)
   ll_n <- fit$ll * scale_ic                       # log-likelihood on the sum-to-n scale
@@ -394,7 +375,7 @@ The **inclusion probabilities** $\pi_k$ are the **class prevalences**: the fract
 
 The **conditional probabilities** $\rho_{jck}$ are **item-response probabilities**: given that a respondent is in class $k$, the probability they give answer $c$ to item $j$. For each class and item these sum to 1 across the answer categories. They are how you *characterize and name* a class. If, in one class, the probability of the most-open answer is high on every negotiation item, that class is the "open" type; if another class concentrates on the guarded answers, that is the "closed" type. Reading down the conditional probabilities for a class is reading its profile.
 
-**Class labels are arbitrary.** The algorithm could number the classes in any order, so "Class 1" carries no meaning on its own. The script does not impose a substantive order on the classes: with items of differing lengths there is no single scale on which to rank them. What it does do is fix one label order (from the weighted fit) and align the unweighted and `poLCA` fits to it (Section 12), so that "Class 2" refers to the same class in every table and figure. You read each class by its conditional-probability profile; the next section drafts the names (LLM, or your CSV via `cfg$class_labels_csv`) and applies them to every downstream table and figure.
+**Class labels are arbitrary.** The algorithm could number the classes in any order, so "Class 1" carries no meaning on its own. The script does not impose a substantive order on the classes: with items of differing lengths there is no single scale on which to rank them. What it does do is fix one label order (from the weighted fit) and align the unweighted and `poLCA` fits to it (Section 12), so that "Class 2" refers to the same class in every table and figure. You read each class by its conditional-probability profile; after the diagnostics, the naming section drafts the names (LLM, or your CSV via `cfg$class_labels_csv`) and applies them to everything downstream.
 
 ```{r fit-final}
 # Fit at K_star on the complete cases, weighted and unweighted. The weighted fit sets
@@ -414,37 +395,6 @@ dat_prepared <- dat_prepared |>
   bind_cols(as_tibble(post_w)) |>
   mutate(modal_class   = factor(modal_int, levels = seq_len(K_star)),
          max_posterior = post_w[cbind(seq_len(n()), modal_int)])
-```
-
-# Naming the classes
-
-Class numbers carry no meaning, so this section attaches a short label and a one-to-two-sentence description to each class and applies them to **every downstream table and figure**. Three routes, in strict precedence. First, an **analyst CSV**: point `cfg$class_labels_csv` at a file with columns `K`, `Label`, `Description`; this requires `cfg$K_force`, because hand-written labels are only meaningful for a pinned number of classes, and when both are set the LLM never runs. Second, a **frozen LLM output**: once the LLM has run, its labels live in `class_labels_llm.csv` inside `cfg$out_dir` and are reloaded on every re-render, so the calls happen once; edit that file and point `cfg$class_labels_csv` at it to take over naming permanently. Third, the **LLM itself**: one call per class, drafting a label and a factual description from that class's response probabilities and the item wording (extracted from `sjlabelled` attributes when the data are labelled, with value labels attached to `cfg$na_codes` dropped first so that 98/99-style "Don't know" labels do not cost an item its substantive wording; item codes otherwise). An optional `cfg$survey_context`, one sentence naming country, year, and topic, is prepended so the model can resolve referents like "the agreement" in the item wording; when set, rule 1 gains a fence restricting the context to referent resolution, so nothing may be attributed to a class that its probabilities do not show, and when `NULL` the prompt is byte-identical to the certified context-free version.
-
-The one-call-per-class design is empirical, not stylistic: in validation experiments, a single prompt carrying all classes systematically confused the closest class pairs, because a joint one-to-one assignment lets one confusion corrupt two classes, and a two-stage variant that fed a global comparison into each per-class call changed nothing. Isolated calls cost no accuracy and give one clean, independently frozen result per class. The provider is one OpenAI-compatible branch: `cfg$compass_base_url` with `cfg$llm_model`, your endpoint at work, OpenRouter at home, and no API key appears anywhere in this project (`.Rprofile`/`.Renviron` supply it).
-
-Two safeguards close the design. First, **harmonization**: isolation's one blind spot is that two near-neighbor classes can draft the same label, since neither call saw the other. When a mechanical collision check fires (duplicate or heavily word-overlapping labels), one closing call sees only the finished label-description pairs, never the profiles, and edits **labels only**, minimally, anchored to each class's own description; descriptions are frozen, non-colliding labels stay verbatim, and the pre-edit drafts are kept in a `Label_draft` column of the freeze file so every harmonizer change is auditable. When no collision exists, no extra call is made. Second, **determinism**: every class index is pinned by `cfg$seed` (each EM start re-seeds from it, so the classes come out in the same order on every run of the same data), and the same seed with temperature 0 is passed to the LLM. Cloud sampling is not bit-reproducible even so, which is exactly why the labels are frozen to CSV after the first run and reloaded thereafter: the freeze, not the seed, is what guarantees the class-label binding never drifts across renders.
-
-*Why this section matters: the labels are the words every reader will quote, and they are drafts, not findings. The LLM reads reliably but names loosely for near-neighbor or diffuse profiles, so verify each label against its response profile in the next figure, and prefer editing the frozen CSV over trusting the first draft.*
-
-```{r class-labels}
-# get_class_labels() implements the precedence above (survey_lca_source.R,
-# Section 4). The cache file freezes the LLM output for reproducibility.
-class_labels <- get_class_labels(fit_w, dat_prepared, cfg$items, cats, cfg)
-
-knitr::kable(class_labels,
-             caption = "Class labels and descriptions in use: from cfg$class_labels_csv if supplied (requires K_force), otherwise the frozen LLM draft. Verify each against its response profile before quoting.")
-
-# Display labels for every downstream table and figure: short, wrapped, fixed
-# class order so factor levels are stable everywhere.
-# Three display tiers, because one label format cannot serve every surface:
-#   lab_of    wrapped factor, for FIGURE legends and facets (newlines are fine there)
-#   lab_line  single line "Ck: Label", for SMALL tables (a newline inside a kable
-#             cell breaks Typst layout)
-#   lab_short "Ck" only, for LARGE tables; the class-label table above is the legend
-lab_lev   <- stringr::str_wrap(paste0("C", class_labels$K, ": ", class_labels$Label), 22)
-lab_of    <- function(k) factor(lab_lev[k], levels = lab_lev)
-lab_line  <- function(k) paste0("C", k, ": ", class_labels$Label[k])
-lab_short <- function(k) paste0("C", k)
 ```
 
 # Design-based confidence intervals via the stratified jackknife
@@ -537,12 +487,12 @@ The class-size (inclusion) probabilities, with their design-based intervals:
 ```{r tbl-pi}
 ci_tbl |>
   filter(kind == "pi") |>
-  transmute(Class = lab_line(class),
+  transmute(Class = paste("Class", class),
             Prevalence = round(estimate, 3),
             SE = round(se, 4),
             `95% CI` = sprintf("[%.3f, %.3f]", lo, hi)) |>
   knitr::kable(align = "lrrr",
-               caption = "Population class prevalences (inclusion probabilities) with design-based JKn confidence intervals. Labels are the drafted class names; verify each against its profile (next figure).")
+               caption = "Population class prevalences (inclusion probabilities) with design-based JKn confidence intervals. Classes are numbered here; names are drafted after the diagnostics (Naming the classes).")
 ```
 
 The item-response (conditional) probabilities are shown as a heatmap, which is far easier to scan than overlaid lines when there are several items: each panel is a class, each row an item, each column a response category, and the shade (and printed value) is the probability of that answer within that class. Reading a panel top to bottom gives that class's profile; comparing panels shows how the classes differ. Items with fewer categories simply leave the higher columns blank. The design-based confidence interval for every cell is in the exported table `lca_measurement_model_with_CIs.csv`; intervals are omitted from the heatmap only to keep it legible.
@@ -552,10 +502,10 @@ The item-response (conditional) probabilities are shown as a heatmap, which is f
 #| fig-height: 5.5
 #| fig-format: png
 #| dpi: 200
-#| fig-cap: "Population item-response (conditional) probabilities by class. Each panel is a class; rows are items, columns are response categories. Items of different lengths leave the higher columns blank. Cell shade and label give P(response | class). Panel headers carry the drafted class labels."
+#| fig-cap: "Population item-response (conditional) probabilities by class. Each panel is a class; rows are items, columns are response categories. Items of different lengths leave the higher columns blank. Cell shade and label give P(response | class). Panels are numbered; names are drafted after the diagnostics."
 rho_plot <- ci_tbl |>
   filter(kind == "rho") |>
-  mutate(Class = lab_of(class),
+  mutate(Class = factor(paste("Class", class), levels = paste("Class", seq_len(K_star))),
          item = factor(item, levels = cfg$items),
          category = factor(category),
          lbl = sprintf("%.2f", estimate),
@@ -686,6 +636,37 @@ bvr_tab |>
 ```
 
 How to act on it, in order of preference. A pair that stands far above the rest and is *substantively* redundant (two near-identical wordings of one question) is a case for dropping one of the pair; rerun the indicator screen after, since removing one member changes the other's contribution. If the pair is substantively distinct, the dependence may instead be a sign that $K$ is too small, so check whether the pair's BVR falls at $K+1$ before removing anything; a residual that melts away with one more class was class structure, not item redundancy. Only if it persists and both items must stay for content reasons does it become a documented limitation, a known local-independence violation whose main cost is overstated classification certainty for respondents whose pattern rides on that pair. A flat BVR table with no outlying pairs is affirmative evidence for the conditional-independence assumption and worth stating in the write-up.
+
+# Naming the classes
+
+Class numbers carry no meaning, so this section attaches a short label and a one-to-two-sentence description to each class and applies them to **every table and figure from here on** (the diagnostics above deliberately used class numbers). Three routes, in strict precedence. First, an **analyst CSV**: point `cfg$class_labels_csv` at a file with columns `K`, `Label`, `Description`; this requires `cfg$K_force`, because hand-written labels are only meaningful for a pinned number of classes, and when both are set the LLM never runs. Second, a **frozen LLM output**: once the LLM has run, its labels live in `class_labels_llm.csv` inside `cfg$out_dir` and are reloaded on every re-render, so the calls happen once; edit that file and point `cfg$class_labels_csv` at it to take over naming permanently. Third, the **LLM itself**: one call per class, drafting a label and a factual description from that class's response probabilities and the item wording (extracted from `sjlabelled` attributes when the data are labelled, with value labels attached to `cfg$na_codes` dropped first so that 98/99-style "Don't know" labels do not cost an item its substantive wording; item codes otherwise). An optional `cfg$survey_context`, one sentence naming country, year, and topic, is prepended so the model can resolve referents like "the agreement" in the item wording; when set, rule 1 gains a fence restricting the context to referent resolution, so nothing may be attributed to a class that its probabilities do not show, and when `NULL` the prompt is byte-identical to the certified context-free version.
+
+The one-call-per-class design is empirical, not stylistic: in validation experiments, a single prompt carrying all classes systematically confused the closest class pairs, because a joint one-to-one assignment lets one confusion corrupt two classes, and a two-stage variant that fed a global comparison into each per-class call changed nothing. Isolated calls cost no accuracy and give one clean, independently frozen result per class. The provider is one OpenAI-compatible branch: `cfg$compass_base_url` with `cfg$llm_model`, your endpoint at work, OpenRouter at home, and no API key appears anywhere in this project (`.Rprofile`/`.Renviron` supply it).
+
+Two safeguards close the design. First, **harmonization**: isolation's one blind spot is that two near-neighbor classes can draft the same label, since neither call saw the other. When a mechanical collision check fires (duplicate or heavily word-overlapping labels), one closing call sees only the finished label-description pairs, never the profiles, and edits **labels only**, minimally, anchored to each class's own description; descriptions are frozen, non-colliding labels stay verbatim, and the pre-edit drafts are kept in a `Label_draft` column of the freeze file so every harmonizer change is auditable. When no collision exists, no extra call is made. Second, **determinism**: every class index is pinned by `cfg$seed` (each EM start re-seeds from it, so the classes come out in the same order on every run of the same data), and the same seed with temperature 0 is passed to the LLM. Cloud sampling is not bit-reproducible even so, which is exactly why the labels are frozen to CSV after the first run and reloaded thereafter: the freeze, not the seed, is what guarantees the class-label binding never drifts across renders.
+
+*Why this section matters: the labels are the words every reader will quote, and they are drafts, not findings. The LLM reads reliably but names loosely for near-neighbor or diffuse profiles, so verify each label against its response profile in the heatmap above, and prefer editing the frozen CSV over trusting the first draft.*
+
+```{r class-labels}
+# get_class_labels() implements the precedence above (survey_lca_source.R,
+# Section 4). The cache file freezes the LLM output for reproducibility.
+class_labels <- get_class_labels(fit_w, dat_prepared, cfg$items, cats, cfg)
+
+knitr::kable(class_labels,
+             caption = "Class labels and descriptions in use: from cfg$class_labels_csv if supplied (requires K_force), otherwise the frozen LLM draft. Verify each against its response profile before quoting.")
+
+# Display labels for every downstream table and figure: short, wrapped, fixed
+# class order so factor levels are stable everywhere.
+# Three display tiers, because one label format cannot serve every surface:
+#   lab_of    wrapped factor, for FIGURE legends and facets (newlines are fine there)
+#   lab_line  single line "Ck: Label", for SMALL tables (a newline inside a kable
+#             cell breaks Typst layout)
+#   lab_short "Ck" only, for LARGE tables; the class-label table above is the legend
+lab_lev   <- stringr::str_wrap(paste0("C", class_labels$K, ": ", class_labels$Label), 22)
+lab_of    <- function(k) factor(lab_lev[k], levels = lab_lev)
+lab_line  <- function(k) paste0("C", k, ": ", class_labels$Label[k])
+lab_short <- function(k) paste0("C", k)
+```
 
 # Benchmark against `poLCA`, and a validation check
 
@@ -880,55 +861,6 @@ dom_tbl |>
   theme_lca()
 ```
 
-## Differences between groups
-
-For targeting, the operative quantity is often the **gap** between groups: how much more prevalent a class is at one demographic level than at a reference level. Each demographic's first level is the reference, and the difference in class prevalence (a risk difference on the probability scale) carries a design-based interval taken from the same replicate covariance, so the contrast sits on the identical variance footing as the prevalences above. A difference whose interval excludes zero is a group distinction the design can actually support; the interval width again reflects the available PSUs.
-
-```{r domain-contrasts}
-# Reference level = each demographic's first level. The difference in class
-# prevalence between a level and its reference, with a design-based SE from the
-# replicate covariance dom_V: Var(a - b) = Var(a) + Var(b) - 2 Cov(a, b). All
-# vectorised through matrix indexing; no loops.
-ref_idx <- dom_meta |>
-  group_by(pvar, class) |>
-  slice(1) |>
-  ungroup() |>
-  dplyr::select(pvar, class, ref = idx, ref_level = plevel)
-
-dom_diff <- dom_meta |>
-  inner_join(ref_idx, by = c("pvar", "class")) |>
-  filter(plevel != ref_level) |>
-  mutate(diff = dom_est[idx] - dom_est[ref],
-         var  = diag(dom_V)[idx] + diag(dom_V)[ref] - 2 * dom_V[cbind(idx, ref)],
-         se   = sqrt(pmax(var, 0)),
-         lo   = diff - 1.96 * se,
-         hi   = diff + 1.96 * se)
-```
-
-```{r tbl-contrasts}
-#| results: asis
-# These are DIFFERENCES, not probabilities: each cell is the previous table's
-# prevalence at this level MINUS the same class's prevalence at the variable's
-# reference (first) level, so negative values mean lower than the reference.
-# One table per demographic, its reference level named once in the caption.
-walk(cfg$aux, function(v) {
-  d <- dom_diff |> dplyr::filter(pvar == v)
-  if (nrow(d) == 0) return(invisible(NULL))   # single-level variables have no contrast
-  ref_name <- d$ref_level[1]
-  d |>
-    transmute(Level = plevel, Class = lab_short(class),
-              cell = sprintf("%+.2f [%.2f, %.2f]", diff, lo, hi)) |>
-    pivot_wider(names_from = Class, values_from = cell) |>
-    knitr::kable(align = str_c("l", strrep("r", K_star)),
-                 caption = paste0("Risk differences within ", v, ", each level minus the reference level \"",
-                                  ref_name, "\" (NOT probabilities; negative = lower than the reference). An interval excluding zero is a distinction the design supports; JKn replicate intervals; classes C1..CK per the class-label table.")) |>
-    print()
-  cat("\n\n")
-})
-```
-
-One limitation is stated plainly, as elsewhere in the script: these estimates treat the measurement model as given. The replicate weights carry the design variance of the prevalences and their differences, but they do not propagate the uncertainty in the latent class fit itself (the $\pi_k$ and $\rho_{jck}$ estimated in Section 9). Propagating that as well would mean refitting the whole model inside a design bootstrap, a heavier exercise not done here.
-
 # Exporting results
 
 *Why this section matters: it makes the analysis usable beyond the render. The enumeration, the design-based interval table, and the fully scored respondent file are the artifacts that feed manuscripts, slides, and downstream merges, and writing them out is what turns a one-time report into a reproducible dataset others can build on.*
@@ -951,7 +883,7 @@ Four files are written to `cfg$out_dir`: the enumeration table, the full measure
 
 # Adapting this script to your survey: a checklist
 
-1.  **Write a dataset adapter.** Copy `prepare_data_lapop.R`, edit only its `pd` block (path, design-variable names, item codes and English names, nonresponse regex, wording template, demographic recodes), source it in the adapter chunk, and point `cfg$data`/`cfg$items` at its outputs. Nothing else in this document changes.
+1.  **Edit the `pd` dataset block.** It is the complete per-dataset surface: path, design-variable names, item codes with analysis names, nonresponse regex, optional wording overrides, and every demographic recode as a named function. `prepare_survey_data(pd)` and everything downstream never change.
 2.  **Set `cfg$items`** to your indicator columns, each coded as consecutive integers from 1 over its substantive answers. Items may have **different numbers of categories**. Put any "Don't know" or missing code in `cfg$na_codes` (or use `NA` directly); those responses are treated as missing, the model is fit on complete cases, and missing-item respondents are assigned a class in the scoring section. The category-count and missing table after Section 6 lets you confirm the coding.
 3.  **Set `cfg$strata`, `cfg$psu`, `cfg$weight`** to your design columns. This is the analogue of `svyset psu [pweight = w], strata(stratum)`. If your file ships **replicate weights** instead of strata and PSU identifiers, replace each `svydesign(...)` plus `as.svrepdesign(...)` pair with a single `svrepdesign(repweights = ..., weights = ..., type = ...)`; the rest of the variance code is unchanged.
 4.  **Set `cfg$aux`** to the demographics you want in the profile. Demographics used to build the weights (age, for instance) are fine and often helpful here; the only variables to exclude are the survey items that defined the classes.
