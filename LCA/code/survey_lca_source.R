@@ -42,137 +42,6 @@ theme_lca <- function(base_size = 11) {
 # Map any configured missing/DK codes to NA, leaving every other value intact.
 to_na <- function(x, codes) { if (!is.null(codes)) x[x %in% codes] <- NA; x }
 
-# ---- Generic .sav preparation --------------------------------------------
-# prepare_survey_data(pd) turns a labelled .sav into a pipeline-ready tibble.
-# EVERYTHING dataset-specific lives in the pd list the caller supplies (in the
-# analysis document); this function is pure machinery and never changes.
-#
-# pd fields:
-#   sav_path          path to the .sav
-#   design            named c(id=, strata=, psu=, weight=) as named in the file
-#   items             named character: english_name = "sav_code" (analysis order)
-#   demo_source       raw columns the demographic recodes read from
-#   na_label_regex    values whose LABEL matches (case-insensitive) become NA
-#   na_recode_also    non-item columns sharing the nonresponse codes (e.g. outcomes)
-#   demographics      NAMED LIST OF FUNCTIONS, each function(d) -> vector of
-#                     nrow(d): ALL recoding lives here (cut(), case_when(), ...);
-#                     d is the working tibble after the NA recode, so labelled
-#                     columns are converted inside each function as needed
-#   audit_source      optional named character derived -> source column, enabling
-#                     the 'unmatched' share in the recode audit
-#   question_template optional glue with {name}; NULL keeps the extracted labels
-#   response_labels   optional character(C) replacing value labels; NULL keeps
-#                     the extracted ones
-#
-# Missingness policy (deliberate): listwise deletion on design variables and
-# the derived demographics; item-partial respondents KEPT (scored later); only
-# rows missing every item dropped. Prints: value-label inventory, NA audit,
-# recode audit, attrition; stops loudly (with evidence) if the sample zeroes.
-prepare_survey_data <- function(pd) {
-  raw   <- haven::read_sav(pd$sav_path) |> as_tibble()
-  items <- names(pd$items)
-  dvars <- unname(pd$design)
-
-  work <- raw |>
-    dplyr::select(all_of(c(dvars, unname(pd$items), pd$demo_source))) |>
-    rename(!!!pd$items)
-  dat_before <- work |> dplyr::select(all_of(items))
-
-  # -- nonresponse: evidence first, empty-safe ------------------------------
-  inventory <- map_dfr(items, function(it) {
-    labs <- sjlabelled::get_labels(work[[it]])
-    vals <- sjlabelled::get_values(work[[it]])
-    if (length(labs) == 0 || length(labs) != length(vals)) return(
-      tibble(item = character(), value = numeric(), label = character()))
-    tibble(item = it, value = as.numeric(vals), label = as.character(labs))
-  })
-  cat("Value-label inventory (distinct labels across the ", length(items),
-      " items):\n", sep = "")
-  print(inventory |> dplyr::count(value, label, name = "n_items"), n = Inf)
-
-  na_map <- inventory |>
-    dplyr::filter(str_detect(tolower(label), pd$na_label_regex)) |>
-    distinct(value, label)
-  if (nrow(na_map) == 0) {
-    cat("\nNo label matched pd$na_label_regex ('", pd$na_label_regex, "'): either\n",
-        "nonresponse is user-missing (already NA at read; before/after plots will\n",
-        "match, correctly) or the regex misses this file's wording; see inventory.\n",
-        sep = "")
-  } else {
-    cat("\nNonresponse labels recoded to NA:\n"); print(na_map, n = Inf)
-    work <- work |>
-      mutate(across(all_of(c(items, intersect(pd$na_recode_also, names(work)))),
-                    ~ replace(.x, .x %in% na_map$value, NA)))
-  }
-
-  # -- wording onto the items (single source of truth downstream) -----------
-  qtext <- map_chr(unname(pd$items), ~ sjlabelled::get_label(raw[[.x]]) %||% .x) |>
-    set_names(items)
-  if (!is.null(pd$question_template))
-    qtext <- map_chr(items, ~ as.character(
-      stringr::str_glue(pd$question_template,
-                        name = str_replace_all(.x, "_", " ")))) |> set_names(items)
-  work <- work |>
-    mutate(across(all_of(items), function(x) {
-      nm <- cur_column()
-      x  <- sjlabelled::set_label(x, label = qtext[[nm]])
-      if (!is.null(pd$response_labels))
-        x <- sjlabelled::set_labels(
-          x, labels = set_names(seq_along(pd$response_labels), pd$response_labels),
-          force.labels = TRUE)
-      x
-    }))
-
-  # -- demographics: every recode is a pd-supplied function -----------------
-  work <- bind_cols(work, map_dfc(pd$demographics, ~ .x(work)))
-  derived <- names(pd$demographics)
-  audit <- map_dfr(derived, function(d) {
-    s <- pd$audit_source[d] %||% NA_character_
-    tibble(derived = d, source = s,
-           na_share  = mean(is.na(work[[d]])),
-           unmatched = if (!is.na(s)) mean(is.na(work[[d]]) & !is.na(work[[s]]))
-                       else NA_real_)
-  })
-  cat("\nRecode audit ('unmatched' = source present, recode NA; a label-mismatch",
-      "fingerprint):\n")
-  print(audit |> mutate(across(where(is.numeric), ~ round(.x, 3))), n = Inf)
-  walk(derived, function(d) {
-    s <- pd$audit_source[d] %||% NA_character_
-    if (is.na(s)) return(invisible(NULL))
-    bad <- work |> dplyr::filter(is.na(.data[[d]]), !is.na(.data[[s]]))
-    if (nrow(bad) / nrow(work) > 0.02) {
-      cat("\nUnmatched source values for ", d, " (from ", s, "):\n", sep = "")
-      print(bad |> dplyr::count(.data[[s]], sort = TRUE) |> slice_head(n = 8))
-    }
-  })
-
-  # -- missingness policy + attrition ---------------------------------------
-  dat <- work |>
-    dplyr::select(all_of(dvars), all_of(items), all_of(derived)) |>
-    drop_na(all_of(dvars), all_of(derived)) |>
-    dplyr::filter(!if_all(all_of(items), is.na))
-  cat("\nAttrition: ", nrow(work), " read -> ", nrow(dat), " prepared (",
-      nrow(work) - nrow(dat), " dropped by listwise design/demographics or by ",
-      "missing every item).\n", sep = "")
-  if (nrow(dat) == 0)
-    stop("prepare_survey_data() produced 0 respondents; the recode audit above ",
-         "identifies the derived variable responsible.")
-  cat("Prepared: ", nrow(dat), " respondents, ", length(items), " items, ",
-      sum(!stats::complete.cases(dat[, items])),
-      " item-partial cases kept for scoring.\n", sep = "")
-
-  dictionary <- tibble(item = items, sav_code = unname(pd$items),
-                       label_extracted = map_chr(unname(pd$items),
-                                                 ~ sjlabelled::get_label(raw[[.x]]) %||% .x),
-                       question_used = unname(qtext))
-  responses <- if (!is.null(pd$response_labels))
-    tibble(value = seq_along(pd$response_labels), response = pd$response_labels)
-  else tibble(value = numeric(), response = character())
-
-  list(dat = dat, dat_before = dat_before, dictionary = dictionary,
-       responses = responses, na_map = na_map, audit = audit)
-}
-
 # Two-color palette for the weighted-vs-unweighted comparison figure.
 wu_pal <- setNames(viridisLite::viridis(2, begin = 0.2, end = 0.75),
                    c("Weighted (population)", "Unweighted (poLCA)"))
@@ -195,17 +64,16 @@ init_parallel <- function(cfg) {
 #  - verifies every configured column exists (loud, early failure);
 #  - coerces design columns to base types (haven_labelled arithmetic is
 #    forbidden by vctrs, and the EM computes w * posterior);
-#  - maps cfg$na_codes to NA, recodes each item to consecutive integers from 1
-#    over its substantive categories, coerces profiling covariates to factors;
-#  - splits complete cases (the fit sample) from item-partial respondents,
-#    who are scored later from their answered items;
+#  - maps cfg$na_codes to NA (a no-op when the document's processing chunk
+#    already delivered clean items) and recodes each item to consecutive
+#    integers from 1 over its substantive categories;
 #  - computes the weight vector and the sum-to-n scale for information
 #    criteria: the weighted pseudo-log-likelihood is linear in the weights, so
 #    multiplying by n / sum(w) equals fitting with weights scaled to sum to n,
 #    leaving point estimates untouched and calibrating only model selection,
 #    which otherwise leans toward too many classes.
-# Returns dat_all, dat_prepared, cats, w_vec, scale_ic, and a per-item summary
-# table (categories and missing counts) for the document to print.
+# Data arrive complete-case from the document's processing chunk; the
+# complete.cases() filter here is a guard, not a split.
 prepare_items <- function(cfg) {
   dat <- cfg$data
   stopifnot(is.data.frame(dat))
@@ -227,12 +95,11 @@ prepare_items <- function(cfg) {
   cats <- map_int(cfg$items, ~ max(dat_all[[.x]], na.rm = TRUE)) |>
     set_names(cfg$items)
 
-  complete_items <- stats::complete.cases(dat_all[, cfg$items, drop = FALSE])
-  dat_prepared   <- dat_all[complete_items, , drop = FALSE]
-  w_vec          <- dat_prepared[[cfg$weight]]
+  dat_prepared <- dat_all[stats::complete.cases(dat_all[, cfg$items, drop = FALSE]), ,
+                          drop = FALSE]
+  w_vec <- dat_prepared[[cfg$weight]]
 
-  list(dat_all = dat_all, dat_prepared = dat_prepared, cats = cats,
-       complete_items = complete_items,   # logical over dat_all; scoring uses it
+  list(dat_prepared = dat_prepared, cats = cats,
        w_vec = w_vec, scale_ic = nrow(dat_prepared) / sum(w_vec),
        summary = tibble(item = cfg$items, categories = as.integer(cats),
                         n_missing = map_int(cfg$items,
@@ -420,13 +287,9 @@ entropy_R2 <- function(post, K) {
 # frozen per-class results. Labels are DRAFTS for the analyst to verify against
 # the response profiles; they never feed back into estimation.
 #
-# Precedence (get_class_labels):
-#   1. cfg$class_labels_csv set  -> read the analyst's CSV (columns K, Label,
-#      Description). Requires cfg$K_force, because analyst labels are only
-#      meaningful for a pinned K; the LLM never runs.
-#   2. A frozen LLM output file exists in cfg$out_dir -> reload it (no repeat calls; edit that
-#      file and point cfg$class_labels_csv at it to take over permanently).
-#   3. Otherwise call the LLM once per class and freeze the result to CSV.
+# Labels (get_class_labels): ONE rule. cfg$K_force must be set. When
+# out_dir/llm_labels.csv exists it is used (validated against K); otherwise the
+# LLM drafts once per class and writes it. Edit the file to take over naming.
 #
 # Optional context (cfg$survey_context): ONE free-text sentence (country, year,
 # topic) rendered as a SURVEY CONTEXT line to resolve what the items refer to;
@@ -440,24 +303,25 @@ entropy_R2 <- function(post, K) {
 # OPENAI_API_KEY to the OpenRouter key for the session. Keys are never stored
 # here; .Rprofile / .Renviron supply them.
 
-# Question wording and response-category labels for the prompt, from sjlabelled
-# attributes when present (labelled real data); item codes and "Category 1..C"
-# otherwise (the simulator). Labels attached to na_codes values (98/99-style
-# "Don't know"/"Refused") are dropped FIRST, because those codes become NA in
-# preparation and their labels would otherwise break the count guard below,
-# silently costing the substantive wording on exactly the items that have it.
-# After the drop, attribute labels are used only when their count matches the
-# fitted category count, since recoding can compress sparse codes.
-item_meta <- function(df, items, cats, na_codes = NULL) {
+# Question wording and response labels for the prompt, PER ITEM, from the
+# item's own observed values: each substantive value takes its sjlabelled label
+# when one exists and its number otherwise. This handles items with different
+# response labels, anchors-only labeling (1 = "Nada", 7 = "Mucho", middles
+# unlabeled), and unlabeled data with one mechanism, and it aligns with the
+# fitted categories by construction (recode_consecutive() maps the same sorted
+# substantive values to 1..C). Pass df with ORIGINAL values (cfg$data), never a
+# recoded copy, or the labels are gone. `questions` optionally overrides the
+# extracted wording (e.g. the dictionary's question_used column).
+item_meta <- function(df, items, na_codes = NULL, questions = NULL) {
   map(set_names(items), function(it) {
-    q    <- sjlabelled::get_label(df[[it]])
-    labs <- sjlabelled::get_labels(df[[it]])
-    vals <- sjlabelled::get_values(df[[it]])
-    if (!is.null(na_codes) && length(labs) == length(vals))
-      labs <- labs[!vals %in% na_codes]
-    C    <- cats[[it]]
+    x    <- df[[it]]
+    vals <- setdiff(sort(unique(as.numeric(x[!is.na(x)]))), na_codes)
+    lookup <- set_names(as.character(sjlabelled::get_labels(x)),
+                        sjlabelled::get_values(x))
+    q <- questions[[it]] %||% sjlabelled::get_label(x)
     list(question  = if (length(q) == 1 && nzchar(q)) q else it,
-         responses = if (length(labs) == C) labs else paste("Category", seq_len(C)))
+         responses = unname(coalesce(lookup[as.character(vals)],
+                                     as.character(vals))))
   })
 }
 
@@ -558,8 +422,8 @@ parse_label_json <- function(txt) {
 }
 
 # One call per class; returns tibble(K, Label, Description) in class order.
-label_classes_llm <- function(fit, df, items, cats, cfg) {
-  meta <- item_meta(df, items, cats, cfg$na_codes)
+label_classes_llm <- function(fit, df, items, cfg, questions = NULL) {
+  meta <- item_meta(df, items, cfg$na_codes, questions)
   map_dfr(seq_along(fit$pi), function(k) {
     obj <- parse_label_json(
       lca_chat(cfg)$chat(prompt_class_label(fit, k, meta, items, cfg$survey_context), echo = FALSE))
@@ -620,28 +484,23 @@ harmonize_labels <- function(lab, cfg) {
     dplyr::select(-new)
 }
 
-# The orchestrator the .qmd calls; implements the precedence documented above.
-get_class_labels <- function(fit, df, items, cats, cfg,
-                             cache = file.path(cfg$out_dir %||% ".",
-                                               "class_labels_llm.csv")) {
+# The orchestrator the .qmd calls; implements the one rule documented above.
+get_class_labels <- function(fit, df, items, cfg, questions = NULL,
+                             cache = file.path(cfg$out_dir %||% ".", "llm_labels.csv")) {
+  if (is.null(cfg$K_force))
+    stop("Set cfg$K_force before labeling: labels are only meaningful for a chosen K.")
   K    <- length(fit$pi)
   need <- c("K", "Label", "Description")
   check <- function(lab, src) {
     miss <- setdiff(need, names(lab))
     if (length(miss)) stop(src, " is missing column(s): ", paste(miss, collapse = ", "))
-    if (nrow(lab) != K) stop(src, " has ", nrow(lab), " rows but the model has K = ", K, " classes.")
+    if (nrow(lab) != K) stop(src, " has ", nrow(lab), " rows but the model has K = ",
+                             K, " classes; delete or fix it.")
     lab |> arrange(K) |> dplyr::select(all_of(need))
-  }
-  if (!is.null(cfg$class_labels_csv)) {
-    if (is.null(cfg$K_force))
-      stop("cfg$class_labels_csv requires cfg$K_force: analyst labels are only ",
-           "meaningful for a pinned number of classes.")
-    return(check(readr::read_csv(cfg$class_labels_csv, show_col_types = FALSE),
-                 cfg$class_labels_csv))
   }
   if (file.exists(cache))
     return(check(readr::read_csv(cache, show_col_types = FALSE), cache))
-  lab <- label_classes_llm(fit, df, items, cats, cfg) |>
+  lab <- label_classes_llm(fit, df, items, cfg, questions) |>
     mutate(Label_draft = Label) |>
     harmonize_labels(cfg)
   readr::write_csv(lab, cache)   # freeze: Label_draft records any harmonizer edit
