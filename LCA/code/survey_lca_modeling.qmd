@@ -138,9 +138,12 @@ if (!K_ready) cat("**`cfg$K_force` is `NULL`.** Review the enumeration evidence 
 K_star <- as.integer(cfg$K_force)
 # Fit at K_star on the complete cases, weighted and unweighted. The weighted fit sets
 # the label order; the unweighted fit is aligned to it so "Class k" is consistent.
-fit_w <- fit_lca(dat_prepared, w_vec, cats, cfg$items, K_star, cfg$n_starts)
+# Chosen-K fits run at terminal precision (poLCA's tolerance), so the
+# unit-weight validation below compares optima rather than stopping rules.
+fit_w <- fit_lca(dat_prepared, w_vec, cats, cfg$items, K_star, cfg$n_starts,
+                 maxit = 5000L, tol = 1e-10)
 fit_u <- align_to(fit_lca(dat_prepared, rep(1, nrow(dat_prepared)), cats, cfg$items,
-                          K_star, cfg$n_starts), fit_w)
+                          K_star, cfg$n_starts, maxit = 5000L, tol = 1e-10), fit_w)
 
 # Posteriors recomputed from the FINAL parameters, then written back so the same replicate
 # design serves both the measurement-model CIs and the profiling regression.
@@ -352,14 +355,28 @@ se_vec  <- sqrt(diag(vcov(rep_var)))
 
 # Tidy table of every probability with its design-based 95% CI: item/category/class
 # are columns, ready to filter, join, and plot.
+# Intervals: logit-scale Wald via the delta method (se_logit = se / (p(1-p))),
+# back-transformed so they respect (0, 1) without truncation, with the design
+# t critical value (df = PSUs - strata) instead of 1.96. The same construction
+# serves the domain estimates in the segments script, so one interval method
+# runs through the whole pipeline. Boundary cells (estimate within eps of 0 or
+# 1) have no meaningful logit SE; they fall back to Wald truncated to [0, 1]
+# and are flagged in `boundary` so downstream tables can footnote them.
+crit <- qt(0.975, df = survey::degf(rep_des))
+eps  <- 1e-3
 ci_tbl <- param_meta |>
   mutate(estimate = as.numeric(est_vec), se = as.numeric(se_vec),
-         lo = pmax(0, estimate - 1.96 * se),
-         hi = pmin(1, estimate + 1.96 * se))
+         boundary = estimate < eps | estimate > 1 - eps,
+         p_c = pmin(pmax(estimate, 1e-6), 1 - 1e-6),
+         gse = se / (p_c * (1 - p_c)),
+         lo = if_else(boundary, pmax(0, estimate - crit * se),
+                      plogis(qlogis(p_c) - crit * gse)),
+         hi = if_else(boundary, pmin(1, estimate + crit * se),
+                      plogis(qlogis(p_c) + crit * gse))) |>
+  dplyr::select(-p_c, -gse)
 
 # What the design actually supports, then confirmation that every parameter got
-# an interval. Intervals here are Wald on the probability scale, truncated to
-# [0, 1]; the domain estimates in the segments script use the logit scale.
+# an interval.
 cat(sprintf(paste0("Design: %d strata, %d PSUs -> %d jackknife replicates",
                    " (%d residual df).\n%s",
                    "Design-based SEs computed for %d parameters",
@@ -397,9 +414,15 @@ polca_bic <- furrr::future_map_dfr(cfg$K_range, function(K) {
 polca_K <- polca_bic |> slice_min(poLCA_BIC, n = 1) |> pull(K) |> first()
 
 # --- validation: weighted EM with all weights = 1 should match poLCA ---
-# fit_u (Section 5) IS the unit-weight fit, already aligned to fit_w; reusing it
-# avoids a second multi-start refit of the same model.
-fit_unit <- fit_u
+# fit_u (Section 5) is the unit-weight multi-start fit, already aligned to
+# fit_w. Same likelihood, third candidate: EM warm-started at poLCA's own
+# solution; whichever basin is higher wins. pl_aligned$rho is already
+# (categories x classes) per item, em_run's format.
+fit_from_pl <- em_run(inp_full$Y, inp_full$OH, cats,
+                      rep(1, nrow(dat_prepared)), K_star,
+                      init = list(pi = pl_aligned$pi, rho = pl_aligned$rho),
+                      maxit = 5000L, tol = 1e-10)
+fit_unit <- if (fit_from_pl$ll > fit_u$ll) align_to(fit_from_pl, fit_w) else fit_u
 max_pi_gap  <- max(abs(fit_unit$pi - pl_aligned$pi))
 max_rho_gap <- max(map2_dbl(fit_unit$rho, pl_aligned$rho, ~ max(abs(.x - .y))))
 
@@ -439,6 +462,13 @@ gaps <- map_dfr(seq_along(cfg$items), function(j) {
 }) |> arrange(desc(gap))
 print(head(gaps, 5))
 cat("segment sizes:", paste(sprintf("%.3f", fit_unit$pi), collapse = ", "), "\n")
+
+# ONE validation verdict, frozen to disk; the segments script prints from this
+# file instead of recomputing with a different criterion.
+validation <- tibble(max_pi_gap, max_rho_gap,
+                     ll_ours = fit_unit$ll, ll_polca = pl$llik,
+                     polca_K = polca_K,
+                     match = max(max_pi_gap, max_rho_gap) < 0.005)
 ```
 
 # Saving the objects for the segments script
@@ -453,5 +483,6 @@ saveRDS(pl_aligned,  file.path(cfg$out_dir, "polca_aligned.rds"))
 arrow::write_parquet(enum,    file.path(cfg$out_dir, "enumeration.parquet"))
 arrow::write_parquet(ci_tbl,  file.path(cfg$out_dir, "ci_tbl.parquet"))
 arrow::write_parquet(bvr_tbl, file.path(cfg$out_dir, "bvr_tbl.parquet"))
+arrow::write_parquet(validation, file.path(cfg$out_dir, "validation.parquet"))
 cat("Saved fit and tables for K =", K_star, "to", cfg$out_dir, "\n")
 ```

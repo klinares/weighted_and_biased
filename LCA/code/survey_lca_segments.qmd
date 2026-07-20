@@ -33,6 +33,7 @@ fit_w      <- readRDS(file.path(cfg$out_dir, "fit_weighted.rds"))
 fit_unw    <- readRDS(file.path(cfg$out_dir, "fit_unweighted.rds"))
 pl_aligned <- readRDS(file.path(cfg$out_dir, "polca_aligned.rds"))
 ci_tbl     <- arrow::read_parquet(file.path(cfg$out_dir, "ci_tbl.parquet"))
+validation <- arrow::read_parquet(file.path(cfg$out_dir, "validation.parquet"))
 K_star     <- length(fit_w$pi)
 prep_fit     <- prepare_items(cfg)      # rebuilt identically from the config script
 dat_prepared <- prep_fit$dat_prepared
@@ -106,10 +107,13 @@ lab_short <- function(k) paste0("S", k)
 One table carries the design-weighted segment prevalences with their JKn intervals, the unweighted `poLCA` prevalences, and the gap. The printed validation line is the trust check: at unit weights our pseudo-EM and `poLCA` maximize the same likelihood, so their prevalences must match to optimization tolerance before the weighted output deserves belief.
 
 ```{r tbl-inclusion}
-max_diff <- max(abs(fit_unw$pi - pl_aligned$pi))
-cat(sprintf("VALIDATION: max |pi difference|, unit-weight pseudo-EM vs poLCA = %.5f -> %s\n",
-            max_diff,
-            ifelse(max_diff < 0.005, "MATCH (implementations agree)",
+# The verdict is READ from validation.parquet, frozen by the modeling script,
+# so both documents print the same criterion on the same numbers: max of the
+# prevalence gap and the conditional-probability gap, threshold 0.005.
+cat(sprintf(paste0("VALIDATION (unit weights, pseudo-EM vs poLCA): ",
+                   "max |pi gap| = %.5f, max |rho gap| = %.5f -> %s\n"),
+            validation$max_pi_gap, validation$max_rho_gap,
+            ifelse(validation$match, "MATCH (implementations agree)",
                    "MISMATCH - investigate before trusting weighted results")))
 
 # ci_tbl columns (from the modeling script): kind, item, category, class,
@@ -178,7 +182,7 @@ cat(sprintf(
 
 # Segment composition by demographics
 
-Design-based segment prevalence within each demographic level: the design-weighted mean posterior in that subpopulation, with JKn intervals on the logit scale, the standard domain estimate. One demographic per page, table above plot, so nothing crowds.
+BCH-corrected segment prevalence within each demographic level (Bolck, Croon & Hagenaars 2004; Vermunt 2010): modal assignments are reweighted by the inverse of the design-weighted classification-error matrix, so the cross-tabs are unbiased for true-segment composition rather than diluted by classification error. Intervals are JKn on the logit scale with the design t critical value; cells outside (0, 1), possible because BCH weights can be negative, fall back to truncated Wald and are footnoted. Step-1 parameter uncertainty is not propagated, the standard treatment; with entropy 0.907 the understatement is minor (Bakk, Oberski & Vermunt 2014). One demographic per page, table above plot, so nothing crowds.
 
 ```{r domain-setup}
 # The segment-membership target is the soft posterior attached in the setup
@@ -195,18 +199,24 @@ dom_meta <- map_dfr(cfg$aux, function(v)
   dplyr::select(pvar, plevel, class) |>
   mutate(idx = row_number())
 
-# The statistic survey::withReplicates evaluates on each replicate. For each
-# demographic it forms a level-indicator matrix, then the weighted mean of each
-# class posterior within each level: crossprod(M, w * P) / crossprod(M, w). The
-# result is flattened to ONE named numeric vector in dom_meta's order (level-major,
-# class-minor), because withReplicates needs a vector to build the covariance.
+# The statistic survey::withReplicates evaluates on each replicate: the BCH
+# three-step correction. post and modal are FIXED at the full-sample
+# measurement model (step-1 uncertainty not propagated, standard practice);
+# the classification-error matrix D and the correction weights u are rebuilt
+# inside every replicate from the replicate weights, so the intervals carry
+# the design variance of the classification table and the cross-tab jointly.
+# For each demographic: a level-indicator matrix, then the weighted mean of
+# each BCH-corrected membership column within each level,
+# crossprod(M, w * U) / crossprod(M, w), flattened to ONE numeric vector in
+# dom_meta's order (level-major, class-minor) for the replicate covariance.
 domain_theta <- function(w_rep, data) {
   P  <- as.matrix(data[, post_cols, drop = FALSE])      # n x K, fixed across replicates
-  wP <- w_rep * P                                       # n x K, weighted posteriors
+  U  <- bch_weights(P, max.col(P, ties.method = "first"), w_rep)  # n x K BCH
+  wU <- w_rep * U                                       # n x K, weighted corrections
   flat <- map(cfg$aux, function(v) {
     f   <- factor(data[[v]], levels = levels(dat_prepared[[v]]))
     M   <- model.matrix(~ f - 1)                        # n x L, one column per level
-    num <- crossprod(M, wP)                             # L x K: weighted class sums per level
+    num <- crossprod(M, wU)                             # L x K: corrected sums per level
     den <- as.numeric(crossprod(M, w_rep))              # L: weighted total per level
     as.vector(t(num / den))                             # level-major, class-minor
   })
@@ -221,17 +231,23 @@ stopifnot(length(dom_est) == nrow(dom_meta))
 ```
 
 ```{r domain-prevalence}
-# Per-level class prevalence with a design-based interval. The interval is formed
-# on the logit scale and back-transformed so it stays inside [0, 1]; the standard
-# error is mapped through the delta method, se_logit = se / (p (1 - p)). Estimates
-# are clamped a hair off 0 and 1 only to keep the transform finite.
+# Per-level BCH-corrected prevalence with a design-based interval: logit-scale
+# delta method (se_logit = se / (p (1 - p))), back-transformed, with the design
+# t critical value. BCH point estimates can fall outside (0, 1); the logit
+# transform is undefined there, so those cells fall back to Wald truncated to
+# [0, 1] and are flagged in `wald_fallback` for the table footnote.
+crit <- qt(0.975, df = survey::degf(rep_des))
 dom_tbl <- dom_meta |>
   mutate(p = as.numeric(dom_est), se = as.numeric(dom_se)) |>
-  mutate(p_c = pmin(pmax(p, 1e-6), 1 - 1e-6),
+  mutate(inside = p > 0 & p < 1,
+         p_c = pmin(pmax(p, 1e-6), 1 - 1e-6),
          gse = se / (p_c * (1 - p_c)),
-         lo  = plogis(qlogis(p_c) - 1.96 * gse),
-         hi  = plogis(qlogis(p_c) + 1.96 * gse)) |>
-  dplyr::select(pvar, plevel, class, p, se, lo, hi)
+         lo  = if_else(inside, plogis(qlogis(p_c) - crit * gse),
+                       pmax(0, p - crit * se)),
+         hi  = if_else(inside, plogis(qlogis(p_c) + crit * gse),
+                       pmin(1, p + crit * se)),
+         wald_fallback = !inside) |>
+  dplyr::select(pvar, plevel, class, p, se, lo, hi, wald_fallback)
 ```
 
 ```{r domain-pages}
@@ -247,9 +263,12 @@ walk(cfg$aux, function(v) {
     # Pandoc table that wraps instead of overflowing (the kable |> print()
     # pattern is silently swallowed by some render paths).
     knitr::kable(format = "pipe", align = str_c("l", strrep("r", K_star)),
-                 caption = paste0("Segment prevalence within ", v,
-                                  " (95% JKn intervals; rows sum to one across segments; S1..S",
-                                  K_star, " named in the segment-label table).")) |>
+                 caption = paste0("BCH-corrected segment prevalence within ", v,
+                                  " (95% JKn intervals, logit scale; rows sum to one across segments; S1..S",
+                                  K_star, " named in the segment-label table",
+                                  if (any(d$wald_fallback))
+                                    "; cells outside (0, 1) use truncated Wald intervals" else "",
+                                  ").")) |>
     cat(sep = "\n")
   cat("\n\n")
   p <- d |>

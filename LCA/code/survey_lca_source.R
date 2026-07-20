@@ -267,11 +267,15 @@ bvr_pairs <- function(df, w, items, fit) {
     arrange(desc(bvr))
 }
 
-fit_lca <- function(df, w, cats, items, K, starts, ref = NULL) {
+# maxit/tol pass through to em_run: enumeration keeps the fast defaults, the
+# chosen-K fits use maxit = 5000L, tol = 1e-10 (poLCA's terminal precision), so
+# the unit-weight validation compares optima, not stopping rules.
+fit_lca <- function(df, w, cats, items, K, starts, ref = NULL,
+                    maxit = 800L, tol = 1e-8) {
   inp <- make_inputs(df, items, cats)
   cands <- map(seq_len(starts), function(s) {
     set.seed(cfg$seed + s + 17L * K)
-    em_run(inp$Y, inp$OH, cats, w, K)
+    em_run(inp$Y, inp$OH, cats, w, K, maxit = maxit, tol = tol)
   })
   best <- cands[[which.max(map_dbl(cands, "ll"))]]
   if (!is.null(ref)) best <- align_to(best, ref)
@@ -284,6 +288,34 @@ df_k <- function(K, cats) (K - 1) + K * sum(cats - 1)
 entropy_R2 <- function(post, K) {
   if (K == 1) return(NA_real_)
   1 - (-sum(post * log(pmax(post, 1e-12)))) / (nrow(post) * log(K))
+}
+
+
+# ---- BCH three-step correction ---------------------------------------------
+# Bolck, Croon & Hagenaars (2004), operationalized as in Vermunt (2010).
+# Step 1 is the fitted measurement model. Step 2 is modal assignment W plus the
+# design-weighted classification-error matrix D, D[k, s] = P(W = s | X = k):
+# the weighted posterior mass of true class k landing in assigned class s.
+# Rows of D sum to one. Step 3 replaces each respondent's hard assignment with
+# u_i = e(W_i)' D^{-1}, i.e. row W_i of D^{-1}; weighted by w, cross-tabs of u
+# against external variables are unbiased for true-class composition. Entries
+# of u can be negative (a documented property of the correction, not an
+# error), and each row of u sums to one because D's rows do, so per-level
+# prevalences still sum to one across segments. Step-1 parameter uncertainty
+# is NOT propagated (standard practice; the understatement is minor when
+# entropy is high, Bakk, Oberski & Vermunt 2014): D and u are rebuilt inside
+# every replicate from the replicate weights, with post and modal fixed at the
+# full-sample fit.
+bch_error_matrix <- function(post, modal, w) {
+  K  <- ncol(post)
+  Wm <- outer(modal, seq_len(K), `==`) + 0        # n x K indicator of W
+  num <- crossprod(w * post, Wm)                  # K x K
+  sweep(num, 1, rowSums(num), "/")
+}
+
+bch_weights <- function(post, modal, w) {
+  Dinv <- solve(bch_error_matrix(post, modal, w))
+  Dinv[modal, , drop = FALSE]                     # n x K: row W_i of D^{-1}
 }
 
 
