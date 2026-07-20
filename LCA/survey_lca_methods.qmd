@@ -1,0 +1,145 @@
+---
+title: "Design-Weighted Latent Class Analysis with Replicate Variance Estimation and Analyst-Controlled Labeling"
+subtitle: "Methodology for the weighted_and_biased pipeline"
+author: "Kevin Linares"
+date: today
+format:
+  pdf:
+    toc: false
+    number-sections: true
+    geometry: margin=1in
+execute:
+  echo: false
+---
+
+# Abstract {.unnumbered}
+
+We describe a pipeline for latent class analysis (LCA) of categorical survey items collected under a stratified, clustered, weighted design. Parameters are estimated by design-weighted pseudo-maximum likelihood via an EM algorithm; model selection statistics are placed on the correct scale by weight normalization; all uncertainty is quantified by stratified delete-one jackknife (JKn) replication; respondents are assigned to classes, called segments throughout, from the posterior over their answered items subject to a minimum-information floor; and segment prevalence within demographic domains is estimated by design-based domain estimation on posterior probabilities. Class naming is delegated to a large language model operating under a certified, frozen prompt instrument with full analyst override. Every estimator below corresponds line for line to the implementation, and the unweighted special case is validated against an independent maximum likelihood implementation.
+
+# Introduction
+
+Latent class analysis identifies unobserved population subgroups from patterns in categorical indicators (Linzer and Lewis 2011). Applied to complex survey data, three requirements arise that standard software does not jointly meet in R: the likelihood must be weighted so that estimates describe the population rather than the achieved sample (Patterson, Dayton, and Graubard 2002); model selection statistics must account for the weighting (Lumley and Scott 2015); and variance estimation must respect stratification and clustering, for which no usable information matrix exists under a pseudo-likelihood. The closest existing software, the `baysc` package (Wu et al. 2024; JOSS 2026, 11(119), doi:10.21105/joss.08382), fits the same weighted objective in a Bayesian pseudo-posterior with a sandwich-based variance adjustment; the present pipeline is its frequentist counterpart, carrying replicate-based variance through to domain estimation, prediction, and a labelled data product for downstream analysts.
+
+# The model
+
+Let $\mathbf{y}_i = (y_{i1}, \dots, y_{iJ})$ denote respondent $i$'s responses to $J$ nominal items, item $j$ having $C_j$ categories. With $K$ latent segments, prevalences $\pi_k$, and conditional response probabilities $\rho_{jck} = P(y_{ij} = c \mid k)$,
+
+$$
+P(\mathbf{y}_i) \;=\; \sum_{k=1}^{K} \pi_k \prod_{j=1}^{J} \rho_{j\,y_{ij}\,k},
+\qquad \sum_{c=1}^{C_j} \rho_{jck} = 1 .
+$$
+
+Conditional independence of items given segment membership (local independence) is the load-bearing assumption; Sections 6 and 8 respectively test where it strains and exploit it for prediction.
+
+# Design-weighted pseudo-maximum likelihood
+
+Under a complex design with base weights $w_i$, estimation maximizes the pseudo-log-likelihood
+
+$$
+\ell_w(\boldsymbol\theta) \;=\; \sum_{i=1}^{n} w_i \,
+\log\!\Big( \sum_{k=1}^{K} \pi_k \prod_{j=1}^{J} \rho_{j\,y_{ij}\,k} \Big),
+$$
+
+the standard device for LCA under complex sampling (Patterson, Dayton, and Graubard 2002). The EM algorithm (Dempster, Laird, and Rubin 1977) alternates:
+
+E-step: posterior membership probabilities, computed with the log-sum-exp device for numerical stability,
+$$
+p_{ik} \;=\; \frac{\pi_k \prod_j \rho_{j\,y_{ij}\,k}}
+{\sum_{l} \pi_l \prod_j \rho_{j\,y_{ij}\,l}} .
+$$
+
+M-step: weights enter every sufficient statistic,
+$$
+\hat\pi_k = \frac{\sum_i w_i\, p_{ik}}{\sum_i w_i}, \qquad
+\hat\rho_{jck} = \frac{\sum_i w_i\, p_{ik}\, \mathbf{1}(y_{ij} = c)}
+{\sum_i w_i\, p_{ik}} .
+$$
+
+Iteration stops when $|\Delta \ell_w| < \varepsilon\,(|\ell_w| + 1)$ with $\varepsilon = 10^{-8}$, capped at 800 iterations. Because the pseudo-likelihood for finite mixtures can be multimodal with near-tied optima, each candidate model is fit from many random starts with deterministic seeding, and the reported solution is the best mode found; this claim discipline is stated rather than hidden. Point estimates are invariant to the scale of the weights.
+
+# Model selection
+
+Information criteria compare the maximized log-likelihood against a sample-size penalty, and the two must sit on the same scale. Base weights rarely sum to $n$; because $\ell_w$ is linear in the weights, multiplying it by $n / \sum_i w_i$ is exactly equivalent to fitting with weights rescaled to sum to $n$, leaving point estimates untouched and calibrating only model selection (Lumley and Scott 2015 develop the general design-based treatment; the sum-to-$n$ convention matches Mplus's default normalization, making criteria comparable across software). With $\ell^{*}_w = \ell_w \cdot n / \sum_i w_i$ and model dimension
+$$
+d_K = (K - 1) + K \sum_{j=1}^{J} (C_j - 1),
+$$
+the pipeline reports $\mathrm{BIC} = -2\ell^{*}_w + d_K \log n$ and $\mathrm{AIC} = -2\ell^{*}_w + 2 d_K$, alongside relative entropy
+$$
+R^2_E \;=\; 1 - \frac{-\sum_{i,k} p_{ik} \log p_{ik}}{\,n \log K\,},
+$$
+which indexes classification sharpness. The bootstrapped likelihood ratio test is deliberately omitted: its parametric bootstrap presumes independent observations, which fails under a design-weighted pseudo-likelihood on a clustered sample, matching the equivalent restriction in Mplus under complex-design analysis. The number of segments is never selected automatically; the analyst chooses $K$ by iterating over these statistics and the diagnostics of Section 6, and fixes it in configuration.
+
+# Variance estimation
+
+A pseudo-likelihood provides no usable information matrix, so all uncertainty statements come from stratified delete-one-PSU jackknife (JKn) replication (Wolter 2007; Lumley 2004). With $n_h$ PSUs in stratum $h$, deleting PSU $j$ of stratum $h$ and reweighting its stratum-mates by $n_h/(n_h - 1)$ yields replicate estimate $\hat\theta_{(hj)}$, and
+$$
+\widehat{V}(\hat\theta) \;=\; \sum_{h} \frac{n_h - 1}{n_h}
+\sum_{j=1}^{n_h} \big( \hat\theta_{(hj)} - \hat\theta \big)^2 .
+$$
+Replicate refits are warm-started from the full-sample solution, so the resulting variance is within-mode by construction; it carries design variance, not uncertainty about mode selection. Intervals for $\pi_k$ and $\rho_{jck}$ are Wald on the probability scale, truncated to $[0,1]$; the domain estimates of Section 9 instead use logit-scale intervals, which behave better near boundaries where domain prevalences often sit.
+
+# Model-fit diagnostics
+
+Item discrimination summarizes how much item $j$ separates the segments as the mean, over segment pairs, of the total variation distance between their response distributions:
+$$
+D_j \;=\; \frac{2}{K(K-1)} \sum_{k < l} \frac{1}{2} \sum_{c=1}^{C_j}
+\big| \rho_{jck} - \rho_{jcl} \big| .
+$$
+$D_j = 0$ means every segment answers item $j$ identically (a removal candidate for a sensitivity refit); values near 1 indicate sharp separation.
+
+Local independence is probed pairwise with a bivariate residual (BVR). For items $a, b$, let $\widehat{P}_{ab}(c,d)$ be the design-weighted observed proportion of the joint response $(c,d)$ and $\Pi_{ab} = \boldsymbol\rho_a \operatorname{diag}(\boldsymbol\pi)\, \boldsymbol\rho_b^{\top}$ the model-implied joint distribution. The statistic
+$$
+\mathrm{BVR}_{ab} \;=\; \frac{1}{(C_a - 1)(C_b - 1)}
+\; n \sum_{c,d} \frac{\big( \widehat{P}_{ab}(c,d) - \Pi_{ab}(c,d) \big)^2}{\Pi_{ab}(c,d)}
+$$
+is a Pearson-type residual per degree of freedom. In unweighted maximum likelihood settings its null distribution is already not chi-square and bootstrap calibration is advised (Oberski, van Kollenburg, and Vermunt 2013); under weighting and pseudo-likelihood no reference distribution is valid, so the pipeline reports BVR strictly as a descriptive ranking of the item pairs the model explains least well, with large persistent values arguing for item removal, merging, or $K+1$.
+
+# Validation against an independent implementation
+
+At unit weights, $\ell_w$ reduces to the ordinary log-likelihood, so the weighted EM and `poLCA` (Linzer and Lewis 2011) maximize the same function and must agree up to optimizer tolerance and mode selection. The pipeline enforces this as a runtime check: the unit-weight EM solution is aligned to the `poLCA` solution by Hungarian matching on response profiles, maximum absolute gaps in prevalences and conditional probabilities are printed with a verdict, and, where the verdict flags a gap, comparison of the two log-likelihoods separates flat-ridge drift under the stopping rule (equal log-likelihoods), an inferior `poLCA` mode (ours higher), and an inferior EM mode calling for more starts (theirs higher). The same reasoning positions the pipeline against Mplus (TYPE = MIXTURE COMPLEX) and Stata (`gsem` under `svy`): identical objective and weight convention imply matching point estimates and criteria up to mode selection, with linearization rather than replication standard errors, both design-consistent.
+
+# Segment assignment
+
+Membership is assigned from the posterior evaluated at the fitted parameters. Local independence makes assignment for item-partial respondents honest: a missing item drops out of the within-segment product, so for respondent $i$ with answered set $A_i$,
+$$
+p_{ik}^{\mathrm{obs}} \;=\;
+\frac{\pi_k \prod_{j \in A_i} \rho_{j\,y_{ij}\,k}}
+{\sum_l \pi_l \prod_{j \in A_i} \rho_{j\,y_{ij}\,l}},
+$$
+and the assigned segment is $\arg\max_k p_{ik}^{\mathrm{obs}}$. An information floor $m^{*}$ (configured; default half the items) is enforced: respondents with $|A_i| < m^{*}$ receive no assignment rather than a weakly informed one. The model itself is fit on complete cases only; assignment extends to the preserved full frame, and the exported labelled data record which respondents were assigned.
+
+# Domain profiling on demographics
+
+Segment prevalence within demographic domain $d$ is estimated from soft posteriors,
+$$
+\hat p_{dk} \;=\; \frac{\sum_{i \in d} w_i\, p_{ik}}{\sum_{i \in d} w_i},
+$$
+a design-based domain mean of the posterior probability, with variance from the same JKn replicates. Intervals are formed on the logit scale with the delta-method standard error $\mathrm{se}_{\mathrm{logit}} = \mathrm{se} / \{\hat p (1 - \hat p)\}$ and back-transformed, keeping them inside $[0,1]$. This is a deliberate domain-estimation design, not a bias-adjusted three-step regression; users of R3STEP or BCH should expect agreement in direction and ordering, not magnitude, as the estimands differ. The estimator treats the fitted measurement model as fixed; replicate intervals carry design variance, not parameter uncertainty in $\boldsymbol\pi, \boldsymbol\rho$.
+
+# LLM-assisted, analyst-controlled labeling
+
+Segment naming is drafted by a large language model under a fixed instrument: a persona and rule set instructing interpretation strictly from the displayed response probabilities and item wording, one isolated call per segment (joint prompts empirically confused near-neighbor segments), an optional survey-context paragraph fenced to referent resolution only, and a collision-gated harmonization pass that may edit labels, never descriptions. Labels follow one rule: a `segment_labels.csv` on disk is used when present and validated against $K$; otherwise the model drafts once and the result is frozen to that file, which the analyst edits to take over naming; the freeze file, not a sampling seed, is the reproducibility mechanism. The instrument is treated as a measurement device: a certification harness plants a known-meaning model, including near-neighbor segments, a diffuse segment, nonresponse-labelled items, and a fictional context, and checks output format, grounding, hedging on diffuse profiles, persona integrity, context-leak fencing, harmonizer properties, and adoption of the segment terminology; any edit to the instrument obliges re-certification. Labels are drafts, verified by the analyst against the conditional-probability profiles before use.
+
+# Limitations
+
+The pseudo-likelihood can be multimodal with near-tied optima at moderate sample sizes; the pipeline's claim is the best mode found under many seeded starts, and JKn replication expresses within-mode variance only. The domain step conditions on the fitted measurement model. Analysis uses complete cases, with assignment, not imputation, extending results to item-partial respondents above the information floor. Finally, LLM-drafted labels are a convenience with an audited override path, not a measurement claim.
+
+# References {.unnumbered}
+
+Dempster, A. P., N. M. Laird, and D. B. Rubin (1977). Maximum likelihood from incomplete data via the EM algorithm. *Journal of the Royal Statistical Society, Series B* 39(1), 1-38.
+
+Linzer, D. A., and J. B. Lewis (2011). poLCA: An R package for polytomous variable latent class analysis. *Journal of Statistical Software* 42(10), 1-29.
+
+Lumley, T. (2004). Analysis of complex survey samples. *Journal of Statistical Software* 9(8), 1-19.
+
+Lumley, T., and A. Scott (2015). AIC and BIC for modeling with complex survey data. *Journal of Survey Statistics and Methodology* 3(1), 1-18. doi:10.1093/jssam/smu021.
+
+Oberski, D. L., G. H. van Kollenburg, and J. K. Vermunt (2013). A Monte Carlo evaluation of three methods to detect local dependence in binary data latent class models. *Advances in Data Analysis and Classification* 7(3), 267-279. doi:10.1007/s11634-013-0146-2.
+
+Patterson, B. H., C. M. Dayton, and B. I. Graubard (2002). Latent class analysis of complex sample survey data: application to dietary data. *Journal of the American Statistical Association* 97(459), 721-728.
+
+Stephenson, B. J. K., et al. (2026). baysc: An R package for Bayesian survey clustering. *Journal of Open Source Software* 11(119). doi:10.21105/joss.08382.
+
+Wolter, K. M. (2007). *Introduction to Variance Estimation*, 2nd ed. New York: Springer.
+
+Wu, S. M., B. J. K. Stephenson, T. D. Savitsky, et al. (2024). Weighted overfitted latent class analysis for complex survey data. *Biometrics* 80(4), ujae122. doi:10.1093/biomtc/ujae122.

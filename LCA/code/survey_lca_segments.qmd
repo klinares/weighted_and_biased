@@ -1,0 +1,296 @@
+---
+title: "Design-Weighted LCA: Segments, Prediction, and Handoff"
+subtitle: "Institutional trust in Mexico: LAPOP AmericasBarometer 2023"
+author: "Kevin"
+date: today
+format:
+  pdf:
+    toc: false
+    number-sections: true
+    fig-width: 7
+    fig-height: 4.5
+    fig-align: center
+    df-print: kable
+    geometry: margin=1in
+    fig-crop: false   # MiKTeX's pdfcrop is fragile; cropping is cosmetic only
+execute:
+  warning: false
+  message: false
+---
+
+# Purpose
+
+This script is the fast, interpretive half of the pipeline. It reads the fitted objects the modeling script saved to `{cfg$out_dir}`, drafts (or reads) the segment labels, presents the measurement model with design-based intervals alongside the unweighted `poLCA` benchmark and its validation verdict, predicts segment membership back to every respondent who answered enough items, profiles the segments on the configured demographics (one page each), and writes the analyst handoff: a labelled `.sav` plus CSVs. Throughout, a latent class is called a **segment**, a word-choice preference; the statistical object is unchanged.
+
+```{r setup}
+#| include: false
+library(matrixStats); library(clue); library(survey); library(furrr)
+library(arrow); library(tidyverse)   # tidyverse LAST (masking)
+source("survey_lca_source.R")
+source("survey_data_config.R")
+stopifnot(!is.null(cfg$K_force))     # this script only runs on a chosen K
+fit_w      <- readRDS(file.path(cfg$out_dir, "fit_weighted.rds"))
+fit_unw    <- readRDS(file.path(cfg$out_dir, "fit_unweighted.rds"))
+pl_aligned <- readRDS(file.path(cfg$out_dir, "polca_aligned.rds"))
+ci_tbl     <- arrow::read_parquet(file.path(cfg$out_dir, "ci_tbl.parquet"))
+K_star     <- length(fit_w$pi)
+prep_fit     <- prepare_items(cfg)      # rebuilt identically from the config script
+dat_prepared <- prep_fit$dat_prepared
+cats         <- prep_fit$cats
+w_vec        <- prep_fit$w_vec
+
+# Posteriors are recomputed here from the SAVED parameters (they lived in the
+# modeling session, not on disk). Deterministic: no refitting, no seed needed.
+inp_full  <- make_inputs(dat_prepared, cfg$items, cats)
+post_w    <- posterior_of(fit_w$pi, fit_w$rho, inp_full$Y)
+colnames(post_w) <- paste0("post_class", seq_len(K_star))
+modal_int <- max.col(post_w, ties.method = "first")
+dat_prepared <- dat_prepared |>
+  bind_cols(as_tibble(post_w)) |>
+  mutate(modal_class   = factor(modal_int, levels = seq_len(K_star)),
+         max_posterior = post_w[cbind(seq_len(n()), modal_int)])
+
+# The sampling design and its JKn replicates are rebuilt from cfg the same way
+# the modeling script built them, so every interval here rests on the design.
+options(survey.lonely.psu = "adjust")
+des     <- svydesign(ids = as.formula(paste0("~", cfg$psu)),
+                     strata = as.formula(paste0("~", cfg$strata)),
+                     weights = as.formula(paste0("~", cfg$weight)),
+                     data = dat_prepared, nest = TRUE)
+rep_des <- as.svrepdesign(des, type = "JKn")
+```
+
+# What the segment labeler is asked
+
+Before any label is trusted, here is the instrument verbatim: the system prompt (the persona) and one real user prompt, built for segment 1 from this survey's own wording and probabilities. Three properties to note while reading: the prompt carries only ONE segment (isolated calls, an empirical design: joint prompts confused near-neighbor segments); every probability is shown against the item's actual response labels; and rule 1 fences the survey context to referent resolution, so nothing outside the shown probabilities may be attributed to a segment. This instrument, including the segment terminology, is certified by `llm_label_obedience_experiment.R`; any edit to it obliges a re-run.
+
+```{r prompt-example}
+meta_preview <- item_meta(survey_dat, cfg$items, cfg$na_codes, questions)
+cat("=========== SYSTEM PROMPT (persona) ===========\n")
+cat(lca_persona(), "\n\n")
+cat("=========== USER PROMPT (segment 1) ===========\n")
+cat(prompt_class_label(fit_w, 1, meta_preview, cfg$items, cfg$survey_context), "\n")
+```
+
+# Naming the segments
+
+One rule: `segment_labels.csv` in `{cfg$out_dir}` is used when it exists (validated against K); otherwise the LLM drafts once, one call per segment, and writes it, with any harmonizer edit recorded in `Label_draft`. **Editing that file is taking over the naming**; the labels below are drafts to verify against the profile heatmap.
+
+```{r segment-labels}
+# get_class_labels() implements the one rule above (survey_lca_source.R,
+# Section 4). The cache file freezes the LLM output for reproducibility.
+# cfg$data, NOT dat_prepared: recode_consecutive() strips attributes, so a
+# recoded copy would silently cost the prompts all wording and labels.
+segment_labels <- get_class_labels(fit_w, survey_dat, cfg$items, cfg,
+                                 questions = set_names(dictionary$question,
+                                                       dictionary$item))
+
+knitr::kable(segment_labels,
+             caption = "Segment labels and descriptions in use (segment_labels.csv in cfg$out_dir). Verify each against its response profile before quoting; edit the file to take over naming.")
+
+# Display labels for every downstream table and figure: short, wrapped, fixed
+# class order so factor levels are stable everywhere.
+# Three display tiers, because one label format cannot serve every surface:
+#   lab_of    wrapped factor, for FIGURE legends and facets (newlines are fine there)
+#   lab_line  single line "Ck: Label", for SMALL tables (a newline inside a kable
+#             cell breaks Typst layout)
+#   lab_short "Ck" only, for LARGE tables; the class-label table above is the legend
+lab_lev   <- stringr::str_wrap(paste0("S", segment_labels$K, ": ", segment_labels$Label), 22)
+lab_of    <- function(k) factor(lab_lev[k], levels = lab_lev)
+lab_line  <- function(k) paste0("S", k, ": ", segment_labels$Label[k])
+lab_short <- function(k) paste0("S", k)
+```
+
+# The measurement model: inclusion probabilities, benchmark, and validation
+
+One table carries the design-weighted segment prevalences with their JKn intervals, the unweighted `poLCA` prevalences, and the gap. The printed validation line is the trust check: at unit weights our pseudo-EM and `poLCA` maximize the same likelihood, so their prevalences must match to optimization tolerance before the weighted output deserves belief.
+
+```{r tbl-inclusion}
+max_diff <- max(abs(fit_unw$pi - pl_aligned$pi))
+cat(sprintf("VALIDATION: max |pi difference|, unit-weight pseudo-EM vs poLCA = %.5f -> %s\n",
+            max_diff,
+            ifelse(max_diff < 0.005, "MATCH (implementations agree)",
+                   "MISMATCH - investigate before trusting weighted results")))
+
+# ci_tbl columns (from the modeling script): kind, item, category, class,
+# estimate, se, lo, hi. Renamed here to short names for the display code.
+pi_ci <- ci_tbl |> dplyr::filter(kind == "pi") |>
+  transmute(K = class, est = estimate, lo, hi)
+incl_tbl <- pi_ci |>
+  mutate(Segment = lab_line(K),
+         `Weighted pi [95% CI]` = sprintf("%.3f [%.3f, %.3f]", est, lo, hi),
+         `poLCA (unweighted)`   = sprintf("%.3f", pl_aligned$pi[K]),
+         Gap = sprintf("%+.3f", est - pl_aligned$pi[K])) |>
+  dplyr::select(Segment:Gap)
+knitr::kable(incl_tbl, align = "lrrr",
+             caption = "Segment inclusion probabilities: design-weighted estimates with JKn intervals, the unweighted poLCA benchmark, and the weighting gap. The validation line above certifies the implementations agree at unit weights.")
+```
+
+```{r fig-inclusion}
+#| fig-cap: "Weighted segment prevalences with 95% JKn intervals (points and bars) against the unweighted poLCA benchmark (open diamonds). Gaps are what the design corrects."
+pi_ci |>
+  mutate(Segment = lab_of(K)) |>
+  ggplot(aes(Segment, est)) +
+  geom_pointrange(aes(ymin = lo, ymax = hi), linewidth = 0.5) +
+  geom_point(aes(y = pl_aligned$pi[K]), shape = 5, size = 2.6) +
+  scale_y_continuous(limits = c(0, NA)) +
+  labs(x = NULL, y = "Inclusion probability") +
+  theme_lca() +
+  theme(axis.text.x = element_text(angle = 20, hjust = 1))
+```
+
+# Segment profiles: conditional response probabilities
+
+```{r fig-profiles}
+#| fig-width: 8
+#| fig-height: 7.5
+#| fig-cap: "P(response | segment) for every item. Panel headers carry the drafted segment labels; verify each label against its panel before quoting it."
+ci_tbl |>
+  dplyr::filter(kind == "rho") |>
+  mutate(Segment = lab_of(class),
+         item = factor(item, levels = cfg$items),
+         est = estimate) |>
+  ggplot(aes(factor(category), item, fill = est)) +
+  geom_tile() +
+  geom_text(aes(label = sprintf("%.2f", est)), size = 2.1) +
+  scale_fill_viridis_c(name = "P", limits = c(0, 1)) +
+  facet_wrap(~ Segment, ncol = min(3, K_star)) +
+  labs(x = "Response category", y = NULL) +
+  theme_lca() +
+  theme(axis.text.y = element_text(size = 7))
+```
+
+# Predicting segment membership
+
+Prediction runs on the FULL preserved frame: local independence lets a missing item drop out of the within-segment product, so partial responders are predictable, with `cfg$min_items_predict` as the evidence floor (below it, no prediction rather than a guess). Items must be coded exactly as fitted; the config script guarantees that here.
+
+```{r predict}
+pred <- predict_segments(survey_dat_original, fit_w, cfg$items,
+                         min_items = cfg$min_items_predict)
+survey_scored <- bind_cols(survey_dat_original, pred)
+cat(sprintf(
+  "Predicted %d complete and %d incomplete cases of %d total (floor: %d items); mean max posterior among predicted = %.3f.\n",
+  sum(!is.na(pred$segment) & survey_scored$keep),
+  sum(!is.na(pred$segment) & !survey_scored$keep),
+  nrow(survey_scored), cfg$min_items_predict,
+  mean(pred$max_posterior, na.rm = TRUE)))
+```
+
+# Segment composition by demographics
+
+Design-based segment prevalence within each demographic level: the design-weighted mean posterior in that subpopulation, with JKn intervals on the logit scale, the standard domain estimate. One demographic per page, table above plot, so nothing crowds.
+
+```{r domain-setup}
+# The segment-membership target is the soft posterior attached in the setup
+# chunk; post_cols are the K posterior columns in segment order. des and rep_des
+# (the design and its JKn replicates) were also built in setup.
+post_cols <- paste0("post_class", seq_len(K_star))
+
+# Fixed layout for the flattened statistic: every (demographic, level, class) cell,
+# levels in factor order, class varying fastest within a level. dom_meta names and
+# orders the estimate vector so nothing is recovered by string parsing later.
+dom_meta <- map_dfr(cfg$aux, function(v)
+  expand_grid(plevel = levels(dat_prepared[[v]]), class = seq_len(K_star)) |>
+    mutate(pvar = v)) |>
+  dplyr::select(pvar, plevel, class) |>
+  mutate(idx = row_number())
+
+# The statistic survey::withReplicates evaluates on each replicate. For each
+# demographic it forms a level-indicator matrix, then the weighted mean of each
+# class posterior within each level: crossprod(M, w * P) / crossprod(M, w). The
+# result is flattened to ONE named numeric vector in dom_meta's order (level-major,
+# class-minor), because withReplicates needs a vector to build the covariance.
+domain_theta <- function(w_rep, data) {
+  P  <- as.matrix(data[, post_cols, drop = FALSE])      # n x K, fixed across replicates
+  wP <- w_rep * P                                       # n x K, weighted posteriors
+  flat <- map(cfg$aux, function(v) {
+    f   <- factor(data[[v]], levels = levels(dat_prepared[[v]]))
+    M   <- model.matrix(~ f - 1)                        # n x L, one column per level
+    num <- crossprod(M, wP)                             # L x K: weighted class sums per level
+    den <- as.numeric(crossprod(M, w_rep))              # L: weighted total per level
+    as.vector(t(num / den))                             # level-major, class-minor
+  })
+  unlist(flat, use.names = FALSE)
+}
+
+dom_rep <- withReplicates(rep_des, domain_theta)        # design-based covariance of every cell
+dom_est <- domain_theta(weights(des), dat_prepared)     # full-sample point estimates
+dom_V   <- vcov(dom_rep)                                # full covariance, for the contrasts below
+dom_se  <- sqrt(diag(dom_V))
+stopifnot(length(dom_est) == nrow(dom_meta))
+```
+
+```{r domain-prevalence}
+# Per-level class prevalence with a design-based interval. The interval is formed
+# on the logit scale and back-transformed so it stays inside [0, 1]; the standard
+# error is mapped through the delta method, se_logit = se / (p (1 - p)). Estimates
+# are clamped a hair off 0 and 1 only to keep the transform finite.
+dom_tbl <- dom_meta |>
+  mutate(p = as.numeric(dom_est), se = as.numeric(dom_se)) |>
+  mutate(p_c = pmin(pmax(p, 1e-6), 1 - 1e-6),
+         gse = se / (p_c * (1 - p_c)),
+         lo  = plogis(qlogis(p_c) - 1.96 * gse),
+         hi  = plogis(qlogis(p_c) + 1.96 * gse)) |>
+  dplyr::select(pvar, plevel, class, p, se, lo, hi)
+```
+
+```{r domain-pages}
+#| results: asis
+#| fig-height: 3.6
+walk(cfg$aux, function(v) {
+  d <- dom_tbl |> dplyr::filter(pvar == v)
+  d |>
+    transmute(Level = plevel, Segment = lab_short(class),
+              cell = sprintf("%.2f [%.2f, %.2f]", p, lo, hi)) |>
+    pivot_wider(names_from = Segment, values_from = cell) |>
+    # format = "pipe" + cat(): guaranteed emission under results: asis, and a
+    # Pandoc table that wraps instead of overflowing (the kable |> print()
+    # pattern is silently swallowed by some render paths).
+    knitr::kable(format = "pipe", align = str_c("l", strrep("r", K_star)),
+                 caption = paste0("Segment prevalence within ", v,
+                                  " (95% JKn intervals; rows sum to one across segments; S1..S",
+                                  K_star, " named in the segment-label table).")) |>
+    cat(sep = "\n")
+  cat("\n\n")
+  p <- d |>
+    mutate(Segment = lab_of(class)) |>
+    ggplot(aes(p, plevel, color = Segment)) +
+    geom_pointrange(aes(xmin = lo, xmax = hi), size = 0.35, linewidth = 0.4,
+                    position = position_dodge(width = 0.6)) +
+    scale_color_viridis_d(begin = 0.1, end = 0.8) +
+    scale_x_continuous(limits = c(0, NA)) +
+    labs(x = "Prevalence of segment membership", y = NULL, color = NULL,
+         title = v) +
+    theme_lca()
+  print(p)
+  cat("\n\n\\newpage\n\n")
+})
+```
+
+# The handoff
+
+Three artifacts: the labelled `.sav` for analysts (numeric `segment` with the LLM/analyst labels as value labels, `NA` below the prediction floor, plus `segment_label` as text and the diagnostics from prediction), and CSVs of the measurement model and the demographic results.
+
+```{r handoff}
+seg_labelled <- haven::labelled(
+  survey_scored$segment,
+  labels = set_names(segment_labels$K, segment_labels$Label),
+  label  = "Segment (design-weighted LCA)")
+out_sav <- survey_scored |>
+  mutate(segment = seg_labelled,
+         segment_label = ifelse(is.na(segment), NA_character_,
+                                segment_labels$Label[survey_scored$segment]))
+haven::write_sav(out_sav, file.path(cfg$out_dir, "survey_with_segments.sav"))
+
+readr::write_csv(ci_tbl |>
+                   mutate(segment_label = segment_labels$Label[class]),
+                 file.path(cfg$out_dir, "measurement_model_with_CIs.csv"))
+readr::write_csv(dom_tbl |>
+                   transmute(demographic = pvar, level = plevel,
+                             segment = class,
+                             segment_label = segment_labels$Label[class],
+                             prevalence = p, lo, hi),
+                 file.path(cfg$out_dir, "segment_demographics.csv"))
+cat("Wrote survey_with_segments.sav (", sum(!is.na(out_sav$segment)), "assigned ),",
+    "measurement_model_with_CIs.csv, segment_demographics.csv to", cfg$out_dir, "\n")
+```

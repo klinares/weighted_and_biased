@@ -90,7 +90,12 @@ prepare_items <- function(cfg) {
 
   dat_all <- dat |>
     mutate(across(all_of(cfg$items),
-                  ~ recode_consecutive(to_na(as.integer(.x), cfg$na_codes))),
+                  # strip_labelled() first: items may still carry SPSS value
+                  # labels (they are kept upstream so the dictionary and the
+                  # labeling prompts can read them), and vctrs forbids treating
+                  # haven_labelled as a plain integer.
+                  ~ recode_consecutive(to_na(as.integer(strip_labelled(.x)),
+                                             cfg$na_codes))),
            across(all_of(cfg$aux), as.factor))
   cats <- map_int(cfg$items, ~ max(dat_all[[.x]], na.rm = TRUE)) |>
     set_names(cfg$items)
@@ -107,16 +112,22 @@ prepare_items <- function(cfg) {
 }
 
 # Stacked response-proportion bars for a set of items (before/after views).
-plot_item_stack <- function(df, items, title) {
-  df |>
+plot_item_stack <- function(df, items, title, show_missing = TRUE) {
+  long <- df |>
     dplyr::select(all_of(items)) |>
     mutate(across(everything(), as.numeric)) |>
-    pivot_longer(everything(), names_to = "item", values_to = "value") |>
-    dplyr::filter(!is.na(value)) |>
+    pivot_longer(everything(), names_to = "item", values_to = "value")
+  if (!show_missing) long <- long |> dplyr::filter(!is.na(value))
+  lev <- as.character(sort(unique(long$value[!is.na(long$value)])))
+  long |>
+    mutate(value = factor(ifelse(is.na(value), "Missing", as.character(value)),
+                          levels = c(lev, if (show_missing) "Missing"))) |>
     dplyr::count(item, value) |>
-    ggplot(aes(item, n, fill = factor(value))) +
+    ggplot(aes(item, n, fill = value)) +
     geom_col(position = "fill") +
-    scale_fill_viridis_d(name = "Response") +
+    scale_fill_manual(name = "Response",
+                      values = c(setNames(viridisLite::viridis(length(lev)), lev),
+                                 Missing = "grey75")) +
     labs(x = NULL, y = "Proportion", title = title) +
     theme_lca() +
     theme(axis.text.x = element_text(angle = 45, hjust = 1))
@@ -288,7 +299,7 @@ entropy_R2 <- function(post, K) {
 # the response profiles; they never feed back into estimation.
 #
 # Labels (get_class_labels): ONE rule. cfg$K_force must be set. When
-# out_dir/llm_labels.csv exists it is used (validated against K); otherwise the
+# out_dir/segment_labels.csv exists it is used (validated against K); otherwise the
 # LLM drafts once per class and writes it. Edit the file to take over naming.
 #
 # Optional context (cfg$survey_context): ONE free-text sentence (country, year,
@@ -312,29 +323,44 @@ entropy_R2 <- function(post, K) {
 # substantive values to 1..C). Pass df with ORIGINAL values (cfg$data), never a
 # recoded copy, or the labels are gone. `questions` optionally overrides the
 # extracted wording (e.g. the dictionary's question_used column).
+# Reads BASE attributes, not sjlabelled accessors: haven stores the question in
+# attr(x, "label") and the value labels in attr(x, "labels"), a named numeric
+# vector whose NAMES are the response texts. Accessor-based extraction failed
+# silently once (the dictionary bug); attributes cannot.
 item_meta <- function(df, items, na_codes = NULL, questions = NULL) {
   map(set_names(items), function(it) {
     x    <- df[[it]]
-    vals <- setdiff(sort(unique(as.numeric(x[!is.na(x)]))), na_codes)
-    lookup <- set_names(as.character(sjlabelled::get_labels(x)),
-                        sjlabelled::get_values(x))
-    q <- questions[[it]] %||% sjlabelled::get_label(x)
-    list(question  = if (length(q) == 1 && nzchar(q)) q else it,
-         responses = unname(coalesce(lookup[as.character(vals)],
-                                     as.character(vals))))
+    v    <- unclass(x)
+    vals <- setdiff(sort(unique(as.numeric(v[!is.na(v)]))), na_codes)
+    vl   <- attr(x, "labels", exact = TRUE)
+    lookup <- if (length(vl)) set_names(names(vl), as.character(unname(vl)))
+              else character(0)
+    q_attr <- attr(x, "label", exact = TRUE)
+    q <- questions[[it]] %||%
+      (if (is.character(q_attr) && length(q_attr) == 1 && nzchar(q_attr)) q_attr
+       else NULL)
+    list(question  = q %||% it,
+         responses = unname(ifelse(as.character(vals) %in% names(lookup),
+                                   lookup[as.character(vals)],
+                                   as.character(vals))))
   })
 }
 
-# The persona and rules are the measurement instrument; edit them only with the
-# obedience experiment (llm_label_obedience_experiment.R) re-run afterwards.
+# The persona and rules are the measurement instrument (SEGMENT terminology:
+# user-facing word for a latent class; the statistical object is unchanged and
+# the JSON keys stay 'label'/'description'/'class' for API stability). Edit
+# them only with the obedience experiment re-run afterwards; the segment
+# wording itself was certified by that experiment.
 lca_persona <- function() {
   paste(
-    "You are a senior survey methodologist who reads latent class measurement",
-    "models. Each class is described only by its item-response probabilities:",
-    "for every survey item, the probability that a member of that class gives",
-    "each answer. A class leans toward the answers with high probability. You",
-    "interpret a class strictly from these probabilities and the item wording,",
-    "never from outside assumptions."
+    "You are a senior survey methodologist who reads latent class analysis",
+    "(LCA) measurement models. In this work each latent class is called a",
+    "SEGMENT; that is a word-choice preference and the statistical object is",
+    "unchanged. Each segment is described only by its item-response",
+    "probabilities: for every survey item, the probability that a member of",
+    "that segment gives each answer. A segment leans toward the answers with",
+    "high probability. You interpret a segment strictly from these",
+    "probabilities and the item wording, never from outside assumptions."
   )
 }
 # Rule 1 gains a fence when survey context is supplied: context resolves what
@@ -344,10 +370,10 @@ lca_rules <- function(context = FALSE) {
   r1 <- if (context)
     paste("1. Use only the response probabilities and item wording shown. The survey",
           "   context only clarifies what the items refer to; attribute nothing to",
-          "   the class that the probabilities do not show.", sep = "\n")
+          "   the segment that the probabilities do not show.", sep = "\n")
   else "1. Use only the response probabilities and item wording shown."
   paste("RULES:", r1,
-        "2. Anchor every statement to the high-probability answers of this class.",
+        "2. Anchor every statement to the high-probability answers of this segment.",
         "3. If the profile is diffuse (no clear high-probability answers), say so.",
         "4. Return only valid JSON: no prose before or after, no markdown fences.",
         sep = "\n")
@@ -363,7 +389,7 @@ format_class_block <- function(fit, k, meta, items) {
     stringr::str_glue('  {items[j]} "{m$question}"\n      {probs}')
   })
   stringr::str_glue(
-    "CLASS {k} (estimated prevalence {round(100 * fit$pi[k])}%):\n",
+    "SEGMENT {k} (estimated prevalence {round(100 * fit$pi[k])}%):\n",
     paste(lines, collapse = "\n"))
 }
 
@@ -376,11 +402,11 @@ prompt_class_label <- function(fit, k, meta, items, context = NULL) {
   rules_txt <- lca_rules(context = has_ctx)
   stringr::str_glue(
     "{ctx}",
-    "ONE CLASS FROM A LATENT CLASS MEASUREMENT MODEL\n",
+    "ONE SEGMENT FROM A LATENT CLASS ANALYSIS (LCA) MEASUREMENT MODEL\n",
     "{format_class_block(fit, k, meta, items)}\n\n",
     "TASK\n",
-    "Read this single class and return: a short DRAFT label (2 to 5 words) for ",
-    "an analyst to refine, and a one or two sentence factual description ",
+    "Read this single segment and return: a short DRAFT label (2 to 5 words) ",
+    "for an analyst to refine, and a one or two sentence factual description ",
     "anchored to its high-probability answers.\n\n",
     "{rules_txt}\n",
     'JSON (one object): {{"label": "...", "description": "..."}}')
@@ -394,18 +420,21 @@ prompt_class_label <- function(fit, k, meta, items, context = NULL) {
 # your ellmer version rejects params(), the documented fallback is
 # api_args = list(temperature = 0, seed = cfg$seed).
 lca_chat <- function(cfg) {
-  prm <- ellmer::params(temperature = 0, seed = cfg$seed)
-  if (is.null(cfg$llm_key_env)) {
-    # key resolved by ellmer's default (OPENAI_API_KEY), supplied by .Rprofile
-    ellmer::chat_openai(base_url = cfg$compass_base_url, model = cfg$llm_model,
-                        system_prompt = lca_persona(), params = prm)
-  } else {
-    # key read from the NAMED env var (e.g. OPENROUTER_API_KEY in .Renviron);
-    # nothing is ever stored in code
-    ellmer::chat_openai(base_url = cfg$compass_base_url, model = cfg$llm_model,
-                        api_key = Sys.getenv(cfg$llm_key_env),
-                        system_prompt = lca_persona(), params = prm)
-  }
+  # No secret ever appears in code; this maps VARIABLE NAMES only. ellmer
+  # resolves credentials internally via its own OPENAI_API_KEY lookup (passing
+  # api_key= is not honored across ellmer versions), so the reliable,
+  # version-proof route is bridging the env var itself: if only
+  # OPENROUTER_API_KEY is set (home), mirror it for this session. This is the
+  # exact bridge the certified obedience-experiment run used.
+  if (!nzchar(Sys.getenv("OPENAI_API_KEY")) &&
+      nzchar(Sys.getenv("OPENROUTER_API_KEY")))
+    Sys.setenv(OPENAI_API_KEY = Sys.getenv("OPENROUTER_API_KEY"))
+  if (!nzchar(Sys.getenv("OPENAI_API_KEY")))
+    stop("No API key found. Add OPENAI_API_KEY=<your key> (or OPENROUTER_API_KEY) ",
+         "to .Renviron and restart R; quarto renders read .Renviron fresh each run.")
+  ellmer::chat_openai(base_url = cfg$compass_base_url, model = cfg$llm_model,
+                      system_prompt = lca_persona(),
+                      params = ellmer::params(temperature = 0, seed = cfg$seed))
 }
 
 # Pull the single JSON object out of a reply. Markdown fences are stripped
@@ -455,9 +484,9 @@ labels_collide <- function(labels) {
 }
 
 prompt_harmonize <- function(lab) {
-  rows <- stringr::str_glue_data(lab, "CLASS {K}: LABEL \"{Label}\" | DESCRIPTION: {Description}")
+  rows <- stringr::str_glue_data(lab, "SEGMENT {K}: LABEL \"{Label}\" | DESCRIPTION: {Description}")
   stringr::str_glue(
-    "DRAFT LABELS FOR THE CLASSES OF ONE LATENT CLASS MODEL\n",
+    "DRAFT LABELS FOR THE SEGMENTS OF ONE LATENT CLASS ANALYSIS (LCA) MODEL\n",
     "{paste(rows, collapse = '\n')}\n\n",
     "TASK\n",
     "Some labels are too similar to tell apart. Edit ONLY the labels that ",
@@ -465,7 +494,7 @@ prompt_harmonize <- function(lab) {
     "edit to that class's own description. Keep every non-overlapping label ",
     "verbatim. Do not change any description. Labels stay 2 to 5 words.\n\n",
     "{lca_rules()}\n",
-    'JSON (one array, all classes): [{{"class": 1, "label": "..."}}, ...]')
+    'JSON (one array, all segments): [{{"class": 1, "label": "..."}}, ...]')
 }
 
 harmonize_labels <- function(lab, cfg) {
@@ -486,16 +515,16 @@ harmonize_labels <- function(lab, cfg) {
 
 # The orchestrator the .qmd calls; implements the one rule documented above.
 get_class_labels <- function(fit, df, items, cfg, questions = NULL,
-                             cache = file.path(cfg$out_dir %||% ".", "llm_labels.csv")) {
+                             cache = file.path(cfg$out_dir %||% ".", "segment_labels.csv")) {
   if (is.null(cfg$K_force))
-    stop("Set cfg$K_force before labeling: labels are only meaningful for a chosen K.")
+    stop("Set cfg$K_force before labeling: segment labels are only meaningful for a chosen K.")
   K    <- length(fit$pi)
   need <- c("K", "Label", "Description")
   check <- function(lab, src) {
     miss <- setdiff(need, names(lab))
     if (length(miss)) stop(src, " is missing column(s): ", paste(miss, collapse = ", "))
     if (nrow(lab) != K) stop(src, " has ", nrow(lab), " rows but the model has K = ",
-                             K, " classes; delete or fix it.")
+                             K, " segments; delete or fix it.")
     lab |> arrange(K) |> dplyr::select(all_of(need))
   }
   if (file.exists(cache))
@@ -505,4 +534,43 @@ get_class_labels <- function(fit, df, items, cfg, questions = NULL,
     harmonize_labels(cfg)
   readr::write_csv(lab, cache)   # freeze: Label_draft records any harmonizer edit
   lab |> dplyr::select(all_of(need))
+}
+
+# ---- Segment prediction ----------------------------------------------------
+# Posterior segment membership for ANY respondents carrying the item columns,
+# coded 1..C exactly as fitted. Local independence lets a missing item drop
+# out of the within-segment product, so partial responders are predictable;
+# min_items is the evidence floor below which no prediction is made
+# (segment = NA). Loop-free: log-probability accumulation via Reduce over
+# items. Returns one row per input row: segment (modal), max_posterior,
+# n_items_answered.
+# NOTE fit$rho is an UNNAMED list in item order (em_run builds it from unnamed
+# one-hot inputs); anything comparing it to a named list (e.g. poLCA output
+# routed through align_to) must index by POSITION, never by name.
+predict_segments <- function(df, fit, items, min_items) {
+  K <- length(fit$pi)
+  logB <- reduce(seq_along(items), .init = matrix(0, nrow(df), K),
+                 function(acc, j) {
+    # unclass() first: items may arrive as haven_labelled (the cleaning chunk
+    # preserves SPSS attributes for the dictionary and the prompts). unclass
+    # exposes the underlying double without depending on any class-registered
+    # cast method, so labelled, numeric, and integer inputs all work.
+    y   <- as.integer(unclass(df[[items[j]]]))
+    ok  <- !is.na(y)
+    lrho <- log(pmax(fit$rho[[j]], 1e-12))
+    add  <- matrix(0, nrow(df), K)
+    add[ok, ] <- lrho[y[ok], , drop = FALSE]
+    acc + add
+  })
+  logpost <- sweep(logB, 2, log(fit$pi), "+")
+  post    <- exp(logpost - matrixStats::rowLogSumExps(logpost))
+  # NOT as.matrix(): on a tibble with haven_labelled columns that coerces via
+  # format() and can silently miscount. is.na() works on labelled directly.
+  answered <- reduce(items, .init = integer(nrow(df)),
+                     ~ .x + as.integer(!is.na(df[[.y]])))
+  seg  <- max.col(post, ties.method = "first")
+  seg[answered < min_items] <- NA_integer_
+  tibble(segment = seg,
+         max_posterior = ifelse(is.na(seg), NA_real_, matrixStats::rowMaxs(post)),
+         n_items_answered = as.integer(answered))
 }

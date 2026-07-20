@@ -1,6 +1,0 @@
-K,Label,Description,Label_draft
-1,Moderate Institutional Trust,"This class shows a tendency toward moderate trust (rating 4) across most institutions, with notably higher trust in the president and armed forces, and lower trust in the police and political parties.",Moderate to High Institutional Trust
-2,Maximum Institutional Trust,"This class is characterized by very high probabilities of reporting maximum trust (7) across nearly all institutions, most notably the president (0.82), public ministry (0.74), and armed forces (0.72).",High Institutional Trust
-3,High Institutional Trust,"This class is characterized by high levels of trust across all institutions, with the strongest probabilities concentrated on ratings of 5, 6, or 7, particularly for the president, armed forces, and supreme court.",High Institutional Trust
-4,Generalized Institutional Distrust,"This class is characterized by very high probabilities of reporting the lowest level of trust (1) across nearly all institutions, most notably for political parties (85%) and the police (76%).",Generalized Institutional Distrust
-5,Presidential and Military Trust,"This class is characterized by high distrust of political parties and police, while showing relatively higher trust in the president and armed forces compared to other institutions.",Presidential and Military Trust
