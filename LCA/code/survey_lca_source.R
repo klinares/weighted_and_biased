@@ -60,6 +60,106 @@ init_parallel <- function(cfg) {
   invisible(NULL)
 }
 
+
+# ---- column views: robust to labelled / numeric / character / factor --------
+# The single fix for "some already numeric, some character": every recode
+# declares which VIEW of its source it needs, and these two helpers extract
+# that view correctly from any storage type. haven keeps value labels in
+# attr(x, "labels"); read them with base attr (no sjlabelled dependency).
+as_label_text <- function(x) {
+  labs <- attr(x, "labels", exact = TRUE)
+  if (length(labs)) {
+    key       <- set_names(names(labs), as.character(unname(labs)))
+    code      <- as.character(as.numeric(unclass(x)))
+    out       <- unname(key[code])
+    unlabeled <- is.na(out) & !is.na(x)          # a value with no label prints as itself
+    out[unlabeled] <- code[unlabeled]
+    out
+  } else if (is.factor(x)) as.character(x)
+  else if (is.character(x)) x
+  else as.character(x)
+}
+
+as_num <- function(x, na_codes = NULL) {
+  v <- if (is.factor(x))    suppressWarnings(as.numeric(as.character(x)))
+  else if (is.character(x)) suppressWarnings(as.numeric(x))
+  else as.numeric(unclass(x))               # numeric or haven_labelled
+  if (length(na_codes)) v[v %in% na_codes] <- NA
+  v
+}
+
+# ---- one declarative recode -> one character column -------------------------
+apply_recode <- function(df, name, r, na_codes) {
+  src <- df[[r$from]]
+  v <- switch(r$type,
+              cut   = as.character(cut(as_num(src, na_codes),
+                                       breaks = r$breaks, labels = r$labels)),
+              index = r$labels[as_num(src, na_codes)],
+              map   = {                                     # NA source stays NA (matches ifelse)
+                lab <- as_label_text(src)
+                out <- unname(r$map[lab])
+                hit <- is.na(out) & !is.na(lab)
+                out[hit] <- r$default %||% NA_character_
+                out
+              },
+              regex = {                                     # first rule that matches wins (case_when order)
+                lab <- as_label_text(src)
+                reduce(names(r$rules), .init = rep(NA_character_, length(lab)),
+                       function(acc, nm)
+                         ifelse(is.na(acc) & str_detect(lab, r$rules[[nm]]), nm, acc))
+              },
+              stop("unknown recode type: ", r$type))
+  dplyr::mutate(df, !!name := v)
+}
+
+# ---- items: rename, NA the nonresponse codes (attrs kept), strip their labels
+remove_value_labels <- function(x, drop_values) {
+  labs <- attr(x, "labels", exact = TRUE)
+  if (length(labs)) attr(x, "labels") <- labs[!(unname(labs) %in% drop_values)]
+  x
+}
+process_items <- function(df, items, na_codes) {
+  df |>
+    rename(!!!items) |>
+    mutate(across(all_of(names(items)),
+                  ~ { y <- .x; y[y %in% na_codes] <- NA; y })) |>   # [<- keeps haven attrs
+    mutate(across(all_of(names(items)), ~ remove_value_labels(.x, na_codes)))
+}
+
+# ---- design variables to plain base types (weight numeric; ids/strata as-is)-
+# Robust where the old across(..., as.numeric) broke: a character stratum or PSU
+# stays character (svydesign accepts it) instead of being coerced to NA.
+coerce_design <- function(df, design_vars) {
+  reduce(names(design_vars), .init = df, function(acc, role) {
+    col <- design_vars[[role]]
+    acc[[col]] <- if (role == "weight") as_num(acc[[col]])
+    else if (is.character(acc[[col]]) || is.factor(acc[[col]]))
+      as.character(acc[[col]])
+    else as.numeric(unclass(acc[[col]]))
+    acc
+  })
+}
+
+# ---- assemble process_survey_dat identically to the hand-written chunk -------
+build_process_survey_dat <- function(raw, items, design_vars, recodes, na_codes) {
+  srcs <- unique(unname(map_chr(recodes, "from")))
+  base <- raw |>
+    dplyr::select(all_of(unname(design_vars)), all_of(unname(items)), all_of(srcs)) |>
+    process_items(items, na_codes) |>
+    coerce_design(design_vars)
+  reduce(names(recodes),
+         function(acc, nm) apply_recode(acc, nm, recodes[[nm]], na_codes),
+         .init = base) |>
+    dplyr::select(-all_of(srcs)) |>
+    mutate(keep = stats::complete.cases(
+      dplyr::across(c(all_of(names(items)), all_of(names(recodes))))))
+}
+
+
+
+
+
+
 # Prepare the configured data for estimation. Machinery, not analysis:
 #  - verifies every configured column exists (loud, early failure);
 #  - coerces design columns to base types (haven_labelled arithmetic is

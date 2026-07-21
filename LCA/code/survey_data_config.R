@@ -19,67 +19,51 @@
 raw_survey_dat <- haven::read_sav(
   "D:/repos/Latent_to_Language/lapop/MEX_2023_LAPOP_AmericasBarometer_v1.0_w.sav")
 
-
-
 items       <- c(justice_system = "b10a", electoral_tribunal = "b11",
-                 armed_forces = "b12",  legislature = "b13",
+                 armed_forces = "b12", legislature = "b13",
                  public_ministry = "b15", police = "b18", auditor = "b19",
                  political_parties = "b21", president = "b21a",
                  supreme_court = "b31", municipality = "b32", media = "b37",
                  elections = "b47a")
 design_vars <- c(id = "idnum", strata = "strata", psu = "upm", weight = "wt")
-na_codes    <- c(888888, 988888, 999999)   # DK / NR / N-A in this file
+na_codes    <- c(888888, 988888, 999999)
 
-process_survey_dat <- raw_survey_dat |>
-  dplyr::select(all_of(unname(design_vars)), all_of(unname(items)),
-                q1tc_r, q2, edre, ur, ocup4a, pn4, m1) |>
-  rename(!!!items) |>
-  # items and design variables stay numeric; nonresponse codes to NA
-  # Items KEEP their SPSS attributes here: as.numeric() would drop the variable
-  # label and the value labels, which the dictionary and the segment-labeling
-  # prompts both read. prepare_items() coerces them safely at model time.
-  mutate(across(all_of(names(items)), ~ replace(.x, .x %in% na_codes, NA)),
-         across(all_of(unname(design_vars)), as.numeric),
-         across(c(pn4, m1, q2), ~ replace(as.numeric(.x), .x %in% na_codes, NA))) |>
-  # demographics recoded through their label text (as_character), kept character
-  mutate(
-    age_cat = as.character(cut(q2, breaks = c(17, 29, 44, 59, Inf),
-                               labels = c("18-29", "30-44", "45-59", "60+"))),
-    male    = ifelse(sjlabelled::as_character(q1tc_r) == "Mujer/femenino",
-                     "Female", "Male"),
-    Edu     = case_when(
-      sjlabelled::as_character(edre) == "Ninguna" ~ "none",
-      str_detect(sjlabelled::as_character(edre), "^Primaria") ~ "primary",
-      str_detect(sjlabelled::as_character(edre), "^Secundaria") ~ "secondary",
-      str_detect(sjlabelled::as_character(edre), "^Universitaria") ~ "higher_ed",
-      TRUE ~ NA_character_),
-    Urban   = ifelse(sjlabelled::as_character(ur) == "Urbano", "urban", "rural"),
-    Employment = case_when(
-      str_detect(sjlabelled::as_character(ocup4a),
-                 "^Trabajando|pero tiene trabajo") ~ "Employed",
-      str_detect(sjlabelled::as_character(ocup4a), "quehaceres") ~ "house_keeper",
-      str_detect(sjlabelled::as_character(ocup4a), "estudiante")  ~ "Student",
-      str_detect(sjlabelled::as_character(ocup4a), "jubilado|pensionado") ~ "Retired",
-      str_detect(sjlabelled::as_character(ocup4a), "buscando") ~ "Unemployed",
-      TRUE ~ NA_character_),
-    satis_demo  = c("Very satisfied", "Satisfied", "Dissatisfied",
-                    "Very dissatisfied")[pn4],
-    prez_rating = c("Very good", "Good", "Neither good nor bad", "Bad",
-                    "Very bad")[m1]
-  ) |>
-  dplyr::select(-q1tc_r, -q2, -edre, -ur, -ocup4a, -pn4, -m1) |>
-  # strip nonresponse value labels so every label left on an item is a response
-  mutate(across(all_of(names(items)),
-                ~ sjlabelled::remove_labels(.x, labels = na_codes))) |>
-  # the analysis flag: complete on items AND demographics (complete cases only)
-  mutate(keep = stats::complete.cases(
-    across(c(all_of(names(items)), age_cat, male, Edu, Urban, Employment,
-             satis_demo, prez_rating))))
+# Each demographic: source column, idiom, and its parameters. Four idioms cover
+# every case here. cut/index read the numeric view; map/regex read label text;
+# the engine resolves that view regardless of how the column is stored.
+recodes <- list(
+  age_cat     = list(from = "q2",     type = "cut",
+                     breaks = c(17, 29, 44, 59, Inf),
+                     labels = c("18-29", "30-44", "45-59", "60+")),
+  male        = list(from = "q1tc_r", type = "map",
+                     map = c("Mujer/femenino" = "Female"), default = "Male"),
+  Edu         = list(from = "edre",   type = "regex",
+                     rules = c(none = "^Ninguna", primary = "^Primaria",
+                               secondary = "^Secundaria", higher_ed = "^Universitaria")),
+  Urban       = list(from = "ur",     type = "map",
+                     map = c("Urbano" = "urban"), default = "rural"),
+  Employment  = list(from = "ocup4a", type = "regex",
+                     rules = c(Employed     = "^Trabajando|pero tiene trabajo",
+                               house_keeper = "quehaceres",
+                               Student      = "estudiante",
+                               Retired      = "jubilado|pensionado",
+                               Unemployed   = "buscando")),
+  # index: 1-based numeric codes map to positions in `labels`; the inline value
+  # labels below are for the reviewer to confirm the code order is right.
+  satis_demo  = list(from = "pn4",    type = "index",   # 1=Very satisfied ... 4=Very dissatisfied
+                     labels = c("Very satisfied", "Satisfied",
+                                "Dissatisfied", "Very dissatisfied")),
+  prez_rating = list(from = "m1",     type = "index",   # 1=Very good ... 5=Very bad
+                     labels = c("Very good", "Good", "Neither good nor bad",
+                                "Bad", "Very bad"))
+)
 
-survey_dat_original <- process_survey_dat            # preserved for the export
+process_survey_dat  <- build_process_survey_dat(raw_survey_dat, items, design_vars,
+                                                recodes, na_codes)
+survey_dat_original <- process_survey_dat
 survey_dat          <- process_survey_dat |> dplyr::filter(keep)
-item_codes          <- items          # named vector: analysis name -> .sav variable
-items               <- names(items)   # analysis names, used everywhere downstream
+item_codes          <- items
+items               <- names(items)
 
 # ---- 2. Dictionary: what the model and the segment labeler will see --------
 dictionary <- tibble(
