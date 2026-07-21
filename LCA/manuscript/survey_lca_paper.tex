@@ -236,9 +236,9 @@ measurement model to labelled analytic data product. The \texttt{poLCA}
 package \citep{linzer2011} fits unweighted maximum likelihood only. The
 \texttt{survey} package \citep{lumley2004} supplies design declaration
 and replication machinery but no mixture models. The closest existing
-software, the \texttt{baysc} package \citep{wu2024, stephenson2026},
-fits the same weighted objective within a Bayesian pseudo-posterior with
-a sandwich-based variance adjustment; the pipeline described here is its
+software, the \texttt{baysc} package \citep{wu2024, wu2026joss}, fits
+the same weighted objective within a Bayesian pseudo-posterior with a
+sandwich-based variance adjustment; the pipeline described here is its
 frequentist counterpart, carrying replicate-based variance through model
 selection, measurement-model inference, bias-adjusted profiling on
 external variables, prediction for item-partial respondents, and a
@@ -300,8 +300,10 @@ With \(K\) latent segments, prevalences \(\pi_k\), and conditional
 response probabilities \(\rho_{jck} = P(y_{ij} = c \mid k)\), the
 marginal probability of a response pattern is
 
-\[P(\mathbf{y}_i) \;=\; \sum_{k=1}^{K} \pi_k \prod_{j=1}^{J} \rho_{j\,y_{ij}\,k},
-\qquad \sum_{c=1}^{C_j} \rho_{jck} = 1 .\] \{\#eq-lca\}
+\begin{equation}\phantomsection\label{eq-lca}{
+P(\mathbf{y}_i) \;=\; \sum_{k=1}^{K} \pi_k \prod_{j=1}^{J} \rho_{j\,y_{ij}\,k},
+\qquad \sum_{c=1}^{C_j} \rho_{jck} = 1 .
+}\end{equation}
 
 Conditional independence of the items given segment membership, local
 independence, is the load-bearing assumption;
@@ -314,23 +316,28 @@ nonresponse.
 Under a complex design with base weights \(w_i\), estimation maximizes
 the pseudo-log-likelihood
 
-\[\ell_w(\boldsymbol\theta) \;=\; \sum_{i=1}^{n} w_i \,
-\log\!\Big( \sum_{k=1}^{K} \pi_k \prod_{j=1}^{J} \rho_{j\,y_{ij}\,k} \Big),\]
-\{\#eq-pll\}
+\begin{equation}\phantomsection\label{eq-pll}{
+\ell_w(\boldsymbol\theta) \;=\; \sum_{i=1}^{n} w_i \,
+\log\!\Big( \sum_{k=1}^{K} \pi_k \prod_{j=1}^{J} \rho_{j\,y_{ij}\,k} \Big),
+}\end{equation}
 
 the standard device for LCA under complex sampling
 \citep{patterson2002, skinner1989}. The EM algorithm
 \citep{dempster1977} alternates an E-step computing posterior membership
 probabilities with the log-sum-exp device for numerical stability,
 
-\[p_{ik} \;=\; \frac{\pi_k \prod_j \rho_{j\,y_{ij}\,k}}
-{\sum_{l} \pi_l \prod_j \rho_{j\,y_{ij}\,l}},\] \{\#eq-estep\}
+\begin{equation}\phantomsection\label{eq-estep}{
+p_{ik} \;=\; \frac{\pi_k \prod_j \rho_{j\,y_{ij}\,k}}
+{\sum_{l} \pi_l \prod_j \rho_{j\,y_{ij}\,l}},
+}\end{equation}
 
 and an M-step in which the weights enter every sufficient statistic,
 
-\[\hat\pi_k = \frac{\sum_i w_i\, p_{ik}}{\sum_i w_i}, \qquad
+\begin{equation}\phantomsection\label{eq-mstep}{
+\hat\pi_k = \frac{\sum_i w_i\, p_{ik}}{\sum_i w_i}, \qquad
 \hat\rho_{jck} = \frac{\sum_i w_i\, p_{ik}\, \mathbf{1}(y_{ij} = c)}
-{\sum_i w_i\, p_{ik}} .\] \{\#eq-mstep\}
+{\sum_i w_i\, p_{ik}} .
+}\end{equation}
 
 Iteration stops when \(|\Delta \ell_w| < \varepsilon\,(|\ell_w| + 1)\).
 During enumeration \(\varepsilon = 10^{-8}\) with at most 800 iterations
@@ -358,13 +365,16 @@ matches the default weight normalization in Mplus, making criteria
 comparable across software{]}. With
 \(\ell^{*}_w = \ell_w \cdot n / \sum_i w_i\) and model dimension
 
-\[d_K = (K - 1) + K \sum_{j=1}^{J} (C_j - 1),\] \{\#eq-df\}
+\begin{equation}\phantomsection\label{eq-df}{
+d_K = (K - 1) + K \sum_{j=1}^{J} (C_j - 1),
+}\end{equation}
 
 we report \(\mathrm{BIC} = -2\ell^{*}_w + d_K \log n\) and
 \(\mathrm{AIC} = -2\ell^{*}_w + 2 d_K\), alongside the relative entropy
 
-\[R^2_E \;=\; 1 - \frac{-\sum_{i,k} p_{ik} \log p_{ik}}{\,n \log K\,},\]
-\{\#eq-entropy\}
+\begin{equation}\phantomsection\label{eq-entropy}{
+R^2_E \;=\; 1 - \frac{-\sum_{i,k} p_{ik} \log p_{ik}}{\,n \log K\,},
+}\end{equation}
 
 which indexes classification sharpness \citep{ramaswamy1993}. The
 bootstrapped likelihood ratio test, often recommended for class
@@ -387,9 +397,10 @@ PSUs in stratum \(h\), deleting PSU \(j\) of stratum \(h\) and
 reweighting its stratum-mates by \(n_h/(n_h - 1)\) yields the replicate
 estimate \(\hat\theta_{(hj)}\), and
 
-\[\widehat{V}(\hat\theta) \;=\; \sum_{h} \frac{n_h - 1}{n_h}
-\sum_{j=1}^{n_h} \big( \hat\theta_{(hj)} - \hat\theta \big)^2 .\]
-\{\#eq-jkn\}
+\begin{equation}\phantomsection\label{eq-jkn}{
+\widehat{V}(\hat\theta) \;=\; \sum_{h} \frac{n_h - 1}{n_h}
+\sum_{j=1}^{n_h} \big( \hat\theta_{(hj)} - \hat\theta \big)^2 .
+}\end{equation}
 
 Each replicate refits the weighted EM on the replicate weights,
 warm-started from the full-sample solution, so the resulting variance is
@@ -420,8 +431,10 @@ Item discrimination summarizes how much item \(j\) separates the
 segments as the mean, over segment pairs, of the total variation
 distance between their conditional response distributions:
 
-\[D_j \;=\; \frac{2}{K(K-1)} \sum_{k < l} \frac{1}{2} \sum_{c=1}^{C_j}
-\big| \rho_{jck} - \rho_{jcl} \big| .\] \{\#eq-discrim\}
+\begin{equation}\phantomsection\label{eq-discrim}{
+D_j \;=\; \frac{2}{K(K-1)} \sum_{k < l} \frac{1}{2} \sum_{c=1}^{C_j}
+\big| \rho_{jck} - \rho_{jcl} \big| .
+}\end{equation}
 
 \(D_j = 0\) means every segment answers item \(j\) identically, a
 removal candidate for a sensitivity refit; values near 1 indicate sharp
@@ -448,9 +461,10 @@ observed proportion of the joint response \((c,d)\) and
 \(\Pi_{ab} = \boldsymbol\rho_a \operatorname{diag}(\boldsymbol\pi)\, \boldsymbol\rho_b^{\top}\)
 the model-implied joint distribution. The statistic
 
-\[\mathrm{BVR}_{ab} \;=\; \frac{1}{(C_a - 1)(C_b - 1)}
-\; n \sum_{c,d} \frac{\big( \widehat{P}_{ab}(c,d) - \Pi_{ab}(c,d) \big)^2}{\Pi_{ab}(c,d)}\]
-\{\#eq-bvr\}
+\begin{equation}\phantomsection\label{eq-bvr}{
+\mathrm{BVR}_{ab} \;=\; \frac{1}{(C_a - 1)(C_b - 1)}
+\; n \sum_{c,d} \frac{\big( \widehat{P}_{ab}(c,d) - \Pi_{ab}(c,d) \big)^2}{\Pi_{ab}(c,d)}
+}\end{equation}
 
 is a Pearson-type residual per degree of freedom. In unweighted maximum
 likelihood settings its null distribution is already not chi-square and
@@ -463,7 +477,7 @@ removal, merging, or \(K+1\).
 \section{Validation against an independent
 implementation}\label{sec-validation}
 
-At unit weights, \textbf{?@eq-pll} reduces to the ordinary
+At unit weights, Equation~\ref{eq-pll} reduces to the ordinary
 log-likelihood, so the weighted EM and \texttt{poLCA} \citep{linzer2011}
 maximize the same function and must agree up to optimizer tolerance and
 mode selection. The pipeline enforces this as a runtime check. The
@@ -493,9 +507,11 @@ parameters. Local independence makes assignment honest for item-partial
 respondents: a missing item drops out of the within-segment product, so
 for respondent \(i\) with answered item set \(A_i\),
 
-\[p_{ik}^{\mathrm{obs}} \;=\;
+\begin{equation}\phantomsection\label{eq-partial}{
+p_{ik}^{\mathrm{obs}} \;=\;
 \frac{\pi_k \prod_{j \in A_i} \rho_{j\,y_{ij}\,k}}
-{\sum_l \pi_l \prod_{j \in A_i} \rho_{j\,y_{ij}\,l}},\] \{\#eq-partial\}
+{\sum_l \pi_l \prod_{j \in A_i} \rho_{j\,y_{ij}\,l}},
+}\end{equation}
 
 and the assigned segment is \(\arg\max_k p_{ik}^{\mathrm{obs}}\). An
 information floor \(m^{*}\), configured at seven of the thirteen items
@@ -518,9 +534,10 @@ Step two computes the modal assignment \(W_i = \arg\max_k p_{ik}\) and
 the design-weighted classification-error matrix \(\mathbf{D}\) with
 entries
 
-\[D_{ks} \;=\; \widehat{P}(W = s \mid X = k) \;=\;
-\frac{\sum_i w_i\, p_{ik}\, \mathbf{1}(W_i = s)}{\sum_i w_i\, p_{ik}},\]
-\{\#eq-bchD\}
+\begin{equation}\phantomsection\label{eq-bchD}{
+D_{ks} \;=\; \widehat{P}(W = s \mid X = k) \;=\;
+\frac{\sum_i w_i\, p_{ik}\, \mathbf{1}(W_i = s)}{\sum_i w_i\, p_{ik}},
+}\end{equation}
 
 the weighted posterior mass of true segment \(k\) landing in assigned
 segment \(s\); rows of \(\mathbf{D}\) sum to one. Step three replaces
@@ -530,8 +547,9 @@ of \(\mathbf{D}^{-1}\). Weighted by \(w_i\), the \(\mathbf{u}_i\) are
 unbiased for true-segment membership, so the BCH-corrected prevalence of
 segment \(k\) within domain \(d\) is the design-based domain mean
 
-\[\hat p_{dk} \;=\; \frac{\sum_{i \in d} w_i\, u_{ik}}{\sum_{i \in d} w_i}.\]
-\{\#eq-bchdom\}
+\begin{equation}\phantomsection\label{eq-bchdom}{
+\hat p_{dk} \;=\; \frac{\sum_{i \in d} w_i\, u_{ik}}{\sum_{i \in d} w_i}.
+}\end{equation}
 
 Two properties of the correction deserve note. Entries of
 \(\mathbf{u}_i\) can be negative, so individual cell estimates can fall
@@ -623,7 +641,7 @@ K & Log-likelihood & df & AIC & BIC & Entropy \\
 
 \centering{
 
-\includegraphics{manuscript_files/figure-pdf/fig-enum-1.pdf}
+\includegraphics{survey_lca_paper_files/figure-pdf/fig-enum-1.pdf}
 
 }
 
@@ -708,7 +726,7 @@ S5: Broad Institutional Trust & 0.208 {[}0.173, 0.249{]} & 0.207 &
 
 \centering{
 
-\includegraphics{manuscript_files/figure-pdf/fig-profiles-1.pdf}
+\includegraphics{survey_lca_paper_files/figure-pdf/fig-profiles-1.pdf}
 
 }
 
@@ -755,7 +773,7 @@ suggest.
 
 \centering{
 
-\includegraphics{manuscript_files/figure-pdf/fig-discrim-1.pdf}
+\includegraphics{survey_lca_paper_files/figure-pdf/fig-discrim-1.pdf}
 
 }
 
@@ -820,8 +838,8 @@ maximize the same function and find the same optimum, which certifies
 the weighted estimator's machinery before any weighted result is
 interpreted.
 
-Prediction under \textbf{?@eq-partial} assigned a segment to 1,618 of
-1,622 respondents: all 1,430 complete cases plus 188 item-partial
+Prediction under Equation~\ref{eq-partial} assigned a segment to 1,618
+of 1,622 respondents: all 1,430 complete cases plus 188 item-partial
 respondents answering at least the seven-item floor. Four respondents
 fell below the floor and were left unassigned rather than guessed. The
 delivered data product is a labelled SPSS file carrying the numeric
@@ -887,7 +905,7 @@ Very good & 0.30 {[}0.25, 0.35{]} & 0.07 {[}0.05, 0.10{]} & 0.21
 
 \centering{
 
-\includegraphics{manuscript_files/figure-pdf/fig-prez-1.pdf}
+\includegraphics{survey_lca_paper_files/figure-pdf/fig-prez-1.pdf}
 
 }
 
@@ -971,8 +989,6 @@ Replication materials, including all source code, the rendered analysis
 documents, and the frozen output objects from which every table and
 figure in this article is generated, are available in the project
 repository.
-
-\newpage
 
 References
 

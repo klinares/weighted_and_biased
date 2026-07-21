@@ -69,7 +69,7 @@ theme_paper <- function() {
 
 Latent class analysis identifies unobserved population subgroups from response patterns over categorical indicators [@lazarsfeld1968; @goodman1974]. When the indicators come from a complex probability sample, three methodological requirements arise jointly. First, the likelihood must be weighted so that the recovered classes and their prevalences describe the target population rather than the achieved sample [@patterson2002; @asparouhov2005]. Second, model selection statistics must sit on a scale consistent with the weighted objective, since base weights rarely sum to the sample size and the pseudo-log-likelihood is otherwise miscalibrated against the penalty term [@lumley2015]. Third, variance estimation must respect the stratification and clustering of the design; under a pseudo-likelihood the inverse information matrix is not a valid variance estimator, so design-based replication is the natural device [@wolter2007; @rust1996].
 
-No R package meets these three requirements together with a path from measurement model to labelled analytic data product. The `poLCA` package [@linzer2011] fits unweighted maximum likelihood only. The `survey` package [@lumley2004] supplies design declaration and replication machinery but no mixture models. The closest existing software, the `baysc` package [@wu2024; @stephenson2026], fits the same weighted objective within a Bayesian pseudo-posterior with a sandwich-based variance adjustment; the pipeline described here is its frequentist counterpart, carrying replicate-based variance through model selection, measurement-model inference, bias-adjusted profiling on external variables, prediction for item-partial respondents, and a labelled data file for downstream analysts. Commercial options exist, notably Mplus with `TYPE = MIXTURE COMPLEX` and Latent GOLD, and Stata's `gsem` under `svy`; the contribution here is an open, auditable implementation in R in which every estimator corresponds line for line to documented source code, with the unweighted special case validated against an independent implementation.
+No R package meets these three requirements together with a path from measurement model to labelled analytic data product. The `poLCA` package [@linzer2011] fits unweighted maximum likelihood only. The `survey` package [@lumley2004] supplies design declaration and replication machinery but no mixture models. The closest existing software, the `baysc` package [@wu2024; @wu2026joss], fits the same weighted objective within a Bayesian pseudo-posterior with a sandwich-based variance adjustment; the pipeline described here is its frequentist counterpart, carrying replicate-based variance through model selection, measurement-model inference, bias-adjusted profiling on external variables, prediction for item-partial respondents, and a labelled data file for downstream analysts. Commercial options exist, notably Mplus with `TYPE = MIXTURE COMPLEX` and Latent GOLD, and Stata's `gsem` under `svy`; the contribution here is an open, auditable implementation in R in which every estimator corresponds line for line to documented source code, with the unweighted special case validated against an independent implementation.
 
 Throughout, we refer to latent classes as segments in all user-facing output, a terminological preference of applied audiences; the statistical object is unchanged.
 
@@ -87,9 +87,10 @@ Estimation uses complete cases on the thirteen items and the profiling covariate
 
 Let $\mathbf{y}_i = (y_{i1}, \dots, y_{iJ})$ denote respondent $i$'s responses to $J$ nominal items, item $j$ having $C_j$ categories. With $K$ latent segments, prevalences $\pi_k$, and conditional response probabilities $\rho_{jck} = P(y_{ij} = c \mid k)$, the marginal probability of a response pattern is
 
-$$P(\mathbf{y}_i) \;=\; \sum_{k=1}^{K} \pi_k \prod_{j=1}^{J} \rho_{j\,y_{ij}\,k},
-\qquad \sum_{c=1}^{C_j} \rho_{jck} = 1 .$$
- {#eq-lca}
+$$
+P(\mathbf{y}_i) \;=\; \sum_{k=1}^{K} \pi_k \prod_{j=1}^{J} \rho_{j\,y_{ij}\,k},
+\qquad \sum_{c=1}^{C_j} \rho_{jck} = 1 .
+$$ {#eq-lca}
 
 Conditional independence of the items given segment membership, local independence, is the load-bearing assumption; @sec-diagnostics probes where it strains and @sec-assignment exploits it for prediction under item nonresponse.
 
@@ -97,22 +98,25 @@ Conditional independence of the items given segment membership, local independen
 
 Under a complex design with base weights $w_i$, estimation maximizes the pseudo-log-likelihood
 
-$$\ell_w(\boldsymbol\theta) \;=\; \sum_{i=1}^{n} w_i \,
-\log\!\Big( \sum_{k=1}^{K} \pi_k \prod_{j=1}^{J} \rho_{j\,y_{ij}\,k} \Big),$$
- {#eq-pll}
+$$
+\ell_w(\boldsymbol\theta) \;=\; \sum_{i=1}^{n} w_i \,
+\log\!\Big( \sum_{k=1}^{K} \pi_k \prod_{j=1}^{J} \rho_{j\,y_{ij}\,k} \Big),
+$$ {#eq-pll}
 
 the standard device for LCA under complex sampling [@patterson2002; @skinner1989]. The EM algorithm [@dempster1977] alternates an E-step computing posterior membership probabilities with the log-sum-exp device for numerical stability,
 
-$$p_{ik} \;=\; \frac{\pi_k \prod_j \rho_{j\,y_{ij}\,k}}
-{\sum_{l} \pi_l \prod_j \rho_{j\,y_{ij}\,l}},$$
- {#eq-estep}
+$$
+p_{ik} \;=\; \frac{\pi_k \prod_j \rho_{j\,y_{ij}\,k}}
+{\sum_{l} \pi_l \prod_j \rho_{j\,y_{ij}\,l}},
+$$ {#eq-estep}
 
 and an M-step in which the weights enter every sufficient statistic,
 
-$$\hat\pi_k = \frac{\sum_i w_i\, p_{ik}}{\sum_i w_i}, \qquad
+$$
+\hat\pi_k = \frac{\sum_i w_i\, p_{ik}}{\sum_i w_i}, \qquad
 \hat\rho_{jck} = \frac{\sum_i w_i\, p_{ik}\, \mathbf{1}(y_{ij} = c)}
-{\sum_i w_i\, p_{ik}} .$$
- {#eq-mstep}
+{\sum_i w_i\, p_{ik}} .
+$$ {#eq-mstep}
 
 Iteration stops when $|\Delta \ell_w| < \varepsilon\,(|\ell_w| + 1)$. During enumeration $\varepsilon = 10^{-8}$ with at most 800 iterations per start; the chosen model is refit at terminal precision, $\varepsilon = 10^{-10}$ with at most 5,000 iterations, matching the stopping behavior of the reference implementation used for validation so that the comparison in @sec-validation contrasts optima rather than stopping rules. Because the pseudo-likelihood of a finite mixture can be multimodal with near-tied optima, each candidate model is fit from twenty random starts with deterministic seeding, and the reported solution is the best mode found; this claim discipline is stated rather than hidden. Point estimates are invariant to the scale of the weights.
 
@@ -120,13 +124,15 @@ Iteration stops when $|\Delta \ell_w| < \varepsilon\,(|\ell_w| + 1)$. During enu
 
 Information criteria compare the maximized log-likelihood against a sample-size penalty, and the two must sit on the same scale. Base weights rarely sum to $n$; because $\ell_w$ is linear in the weights, multiplying it by $n / \sum_i w_i$ is exactly equivalent to fitting with weights rescaled to sum to $n$, leaving point estimates untouched and calibrating only model selection [@lumley2015 develop the general design-based treatment; the sum-to-$n$ convention matches the default weight normalization in Mplus, making criteria comparable across software]. With $\ell^{*}_w = \ell_w \cdot n / \sum_i w_i$ and model dimension
 
-$$d_K = (K - 1) + K \sum_{j=1}^{J} (C_j - 1),$$
- {#eq-df}
+$$
+d_K = (K - 1) + K \sum_{j=1}^{J} (C_j - 1),
+$$ {#eq-df}
 
 we report $\mathrm{BIC} = -2\ell^{*}_w + d_K \log n$ and $\mathrm{AIC} = -2\ell^{*}_w + 2 d_K$, alongside the relative entropy
 
-$$R^2_E \;=\; 1 - \frac{-\sum_{i,k} p_{ik} \log p_{ik}}{\,n \log K\,},$$
- {#eq-entropy}
+$$
+R^2_E \;=\; 1 - \frac{-\sum_{i,k} p_{ik} \log p_{ik}}{\,n \log K\,},
+$$ {#eq-entropy}
 
 which indexes classification sharpness [@ramaswamy1993]. The bootstrapped likelihood ratio test, often recommended for class enumeration under simple random sampling [@nylund2007], is deliberately omitted: its parametric bootstrap presumes independent observations, which fails under a design-weighted pseudo-likelihood on a clustered sample, matching the equivalent restriction imposed by Mplus under complex-design analysis. The number of segments is never selected automatically. The analyst chooses $K$ by iterating over these statistics and the diagnostics of @sec-diagnostics, and fixes it in configuration; @sec-enumeration reports that reasoning for the present application.
 
@@ -134,9 +140,10 @@ which indexes classification sharpness [@ramaswamy1993]. The bootstrapped likeli
 
 A pseudo-likelihood provides no usable information matrix, so all uncertainty statements come from stratified delete-one-PSU jackknife (JKn) replication [@wolter2007; @rust1996; @lumley2004]. With $n_h$ PSUs in stratum $h$, deleting PSU $j$ of stratum $h$ and reweighting its stratum-mates by $n_h/(n_h - 1)$ yields the replicate estimate $\hat\theta_{(hj)}$, and
 
-$$\widehat{V}(\hat\theta) \;=\; \sum_{h} \frac{n_h - 1}{n_h}
-\sum_{j=1}^{n_h} \big( \hat\theta_{(hj)} - \hat\theta \big)^2 .$$
- {#eq-jkn}
+$$
+\widehat{V}(\hat\theta) \;=\; \sum_{h} \frac{n_h - 1}{n_h}
+\sum_{j=1}^{n_h} \big( \hat\theta_{(hj)} - \hat\theta \big)^2 .
+$$ {#eq-jkn}
 
 Each replicate refits the weighted EM on the replicate weights, warm-started from the full-sample solution, so the resulting variance is within-mode by construction: it carries design variance, not uncertainty about mode selection. Label switching across replicates is resolved by Hungarian assignment [@kuhn1955; @hornik2005] on the conditional response profiles, aligning every replicate to the full-sample fit before differencing.
 
@@ -146,9 +153,10 @@ Confidence intervals for every probability, the prevalences $\pi_k$ and the cond
 
 Item discrimination summarizes how much item $j$ separates the segments as the mean, over segment pairs, of the total variation distance between their conditional response distributions:
 
-$$D_j \;=\; \frac{2}{K(K-1)} \sum_{k < l} \frac{1}{2} \sum_{c=1}^{C_j}
-\big| \rho_{jck} - \rho_{jcl} \big| .$$
- {#eq-discrim}
+$$
+D_j \;=\; \frac{2}{K(K-1)} \sum_{k < l} \frac{1}{2} \sum_{c=1}^{C_j}
+\big| \rho_{jck} - \rho_{jcl} \big| .
+$$ {#eq-discrim}
 
 $D_j = 0$ means every segment answers item $j$ identically, a removal candidate for a sensitivity refit; values near 1 indicate sharp separation.
 
@@ -156,9 +164,10 @@ Discrimination is an effect size; a companion screen asks whether each item earn
 
 Local independence is probed pairwise with a bivariate residual (BVR). For items $a, b$, let $\widehat{P}_{ab}(c,d)$ be the design-weighted observed proportion of the joint response $(c,d)$ and $\Pi_{ab} = \boldsymbol\rho_a \operatorname{diag}(\boldsymbol\pi)\, \boldsymbol\rho_b^{\top}$ the model-implied joint distribution. The statistic
 
-$$\mathrm{BVR}_{ab} \;=\; \frac{1}{(C_a - 1)(C_b - 1)}
-\; n \sum_{c,d} \frac{\big( \widehat{P}_{ab}(c,d) - \Pi_{ab}(c,d) \big)^2}{\Pi_{ab}(c,d)}$$
- {#eq-bvr}
+$$
+\mathrm{BVR}_{ab} \;=\; \frac{1}{(C_a - 1)(C_b - 1)}
+\; n \sum_{c,d} \frac{\big( \widehat{P}_{ab}(c,d) - \Pi_{ab}(c,d) \big)^2}{\Pi_{ab}(c,d)}
+$$ {#eq-bvr}
 
 is a Pearson-type residual per degree of freedom. In unweighted maximum likelihood settings its null distribution is already not chi-square and bootstrap calibration is advised [@oberski2013]; under weighting and pseudo-likelihood no reference distribution is valid, so we report BVR strictly as a descriptive ranking of the item pairs the model explains least well, with large persistent values arguing for item removal, merging, or $K+1$.
 
@@ -170,10 +179,11 @@ At unit weights, @eq-pll reduces to the ordinary log-likelihood, so the weighted
 
 Membership is assigned from the posterior evaluated at the fitted parameters. Local independence makes assignment honest for item-partial respondents: a missing item drops out of the within-segment product, so for respondent $i$ with answered item set $A_i$,
 
-$$p_{ik}^{\mathrm{obs}} \;=\;
+$$
+p_{ik}^{\mathrm{obs}} \;=\;
 \frac{\pi_k \prod_{j \in A_i} \rho_{j\,y_{ij}\,k}}
-{\sum_l \pi_l \prod_{j \in A_i} \rho_{j\,y_{ij}\,l}},$$
- {#eq-partial}
+{\sum_l \pi_l \prod_{j \in A_i} \rho_{j\,y_{ij}\,l}},
+$$ {#eq-partial}
 
 and the assigned segment is $\arg\max_k p_{ik}^{\mathrm{obs}}$. An information floor $m^{*}$, configured at seven of the thirteen items here, is enforced: respondents answering fewer than $m^{*}$ items receive no assignment rather than a weakly informed one. The model is fit on complete cases only; assignment extends to the preserved full frame, and the exported labelled data record which respondents were assigned.
 
@@ -181,14 +191,16 @@ and the assigned segment is $\arg\max_k p_{ik}^{\mathrm{obs}}$. An information f
 
 Cross-classifying modal assignments against external variables understates segment differences because assignment error, even at high entropy, attenuates composition toward the marginal [@bolck2004]. We therefore estimate segment prevalence within demographic domains by the BCH three-step correction [@bolck2004; @vermunt2010], adapted to the design-weighted setting. Step one is the fitted measurement model. Step two computes the modal assignment $W_i = \arg\max_k p_{ik}$ and the design-weighted classification-error matrix $\mathbf{D}$ with entries
 
-$$D_{ks} \;=\; \widehat{P}(W = s \mid X = k) \;=\;
-\frac{\sum_i w_i\, p_{ik}\, \mathbf{1}(W_i = s)}{\sum_i w_i\, p_{ik}},$$
- {#eq-bchD}
+$$
+D_{ks} \;=\; \widehat{P}(W = s \mid X = k) \;=\;
+\frac{\sum_i w_i\, p_{ik}\, \mathbf{1}(W_i = s)}{\sum_i w_i\, p_{ik}},
+$$ {#eq-bchD}
 
 the weighted posterior mass of true segment $k$ landing in assigned segment $s$; rows of $\mathbf{D}$ sum to one. Step three replaces each respondent's hard assignment with the correction vector $\mathbf{u}_i = \mathbf{e}_{W_i}^{\top} \mathbf{D}^{-1}$, row $W_i$ of $\mathbf{D}^{-1}$. Weighted by $w_i$, the $\mathbf{u}_i$ are unbiased for true-segment membership, so the BCH-corrected prevalence of segment $k$ within domain $d$ is the design-based domain mean
 
-$$\hat p_{dk} \;=\; \frac{\sum_{i \in d} w_i\, u_{ik}}{\sum_{i \in d} w_i}.$$
- {#eq-bchdom}
+$$
+\hat p_{dk} \;=\; \frac{\sum_{i \in d} w_i\, u_{ik}}{\sum_{i \in d} w_i}.
+$$ {#eq-bchdom}
 
 Two properties of the correction deserve note. Entries of $\mathbf{u}_i$ can be negative, so individual cell estimates can fall slightly outside $[0, 1]$; this is a documented property of the method, not an error. And each $\mathbf{u}_i$ sums to one because the rows of $\mathbf{D}$ do, so within every domain the estimated prevalences still sum to one across segments.
 
@@ -370,9 +382,9 @@ dom |>
   guides(color = guide_legend(nrow = 2))
 ```
 
-Composition is strongly ordered in presidential approval (@tbl-prez, @fig-prez). Among respondents rating the president's performance very bad, Generalized Institutional Distrust reaches 0.52 \[0.35, 0.68\]; among those rating it very good, that segment falls to 0.07 while Very High National Trust rises to 0.19 \[0.16, 0.24\]. The correction's behavior at sparse cells is visible in the Bad approval row, where the S4 estimate is a numerically negative zero with a truncated interval: no respondents rating the president badly belong, after correction, to the segment defined by near-uniform *mucho* responses that include the president item, exactly as coherence requires. Satisfaction with democracy behaves symmetrically: Generalized Distrust is 0.34 \[0.25, 0.45\] among the very dissatisfied against 0.06 among the very satisfied, while Very High National Trust is 0.34 \[0.25, 0.44\] among the very satisfied against 0.05 among the very dissatisfied.
+Composition is strongly ordered in presidential approval (@tbl-prez, @fig-prez). Among respondents rating the president's performance very bad, Generalized Institutional Distrust reaches 0.52 [0.35, 0.68]; among those rating it very good, that segment falls to 0.07 while Very High National Trust rises to 0.19 [0.16, 0.24]. The correction's behavior at sparse cells is visible in the Bad approval row, where the S4 estimate is a numerically negative zero with a truncated interval: no respondents rating the president badly belong, after correction, to the segment defined by near-uniform *mucho* responses that include the president item, exactly as coherence requires. Satisfaction with democracy behaves symmetrically: Generalized Distrust is 0.34 [0.25, 0.45] among the very dissatisfied against 0.06 among the very satisfied, while Very High National Trust is 0.34 [0.25, 0.44] among the very satisfied against 0.05 among the very dissatisfied.
 
-The remaining covariates show more modest structure. Presidential and Military Trust is more prevalent in urban areas (0.26 \[0.23, 0.29\]) than rural (0.18 \[0.14, 0.22\]) and declines with age, from 0.25 among respondents 18 to 29 to 0.17 among those 60 and over, while Broad Institutional Trust moves in the opposite direction with age. Respondents with no formal education are estimated predominantly in Very High National Trust (0.41 \[0.22, 0.64\]), though this cell rests on few observations and its interval is correspondingly wide. Differences by sex and employment status are small, with overlapping intervals throughout.
+The remaining covariates show more modest structure. Presidential and Military Trust is more prevalent in urban areas (0.26 [0.23, 0.29]) than rural (0.18 [0.14, 0.22]) and declines with age, from 0.25 among respondents 18 to 29 to 0.17 among those 60 and over, while Broad Institutional Trust moves in the opposite direction with age. Respondents with no formal education are estimated predominantly in Very High National Trust (0.41 [0.22, 0.64]), though this cell rests on few observations and its interval is correspondingly wide. Differences by sex and employment status are small, with overlapping intervals throughout.
 
 # Discussion {#sec-discussion}
 
@@ -383,8 +395,6 @@ The application illustrates why the machinery matters substantively. Institution
 Several limitations bound the claims. The pseudo-likelihood can be multimodal with near-tied optima; the reported solution is the best mode under many seeded starts, and JKn replication expresses within-mode design variance only. The BCH step conditions on the fitted measurement model; with relative entropy 0.907 the resulting understatement of variance is minor [@bakk2014], but it is an understatement. Estimation uses complete cases, with model-based assignment rather than imputation extending results to item-partial respondents above the information floor. The choice of $K$ is an argued analyst decision within a flat region of the criterion, and we report the full enumeration evidence precisely so that readers can weigh the neighboring six-segment solution. Finally, language-model-drafted labels are a documented convenience with a certified instrument and full analyst override, not a measurement claim; all substantive interpretation rests on the estimated conditional response probabilities.
 
 Replication materials, including all source code, the rendered analysis documents, and the frozen output objects from which every table and figure in this article is generated, are available in the project repository.
-
-\newpage
 
 # References {.unnumbered}
 
