@@ -1,5 +1,5 @@
 ---
-title: "Design-Weighted Latent Class Analysis with Jackknife Replicate Variance: Segmenting Institutional Trust in the 2023 AmericasBarometer Mexico"
+title: "Design-Based Variance Estimation for Latent Class Analysis of Complex Survey Data, with an Application to Institutional Trust in Mexico"
 format:
   jasa-pdf:
     keep-tex: true
@@ -13,17 +13,16 @@ author:
       - name: University of Maryland
         department: Joint Program in Survey Methodology
 abstract: |
-  Latent class analysis (LCA) of categorical items collected under a stratified, clustered, weighted sample design requires three things that no single R package currently provides together: a design-weighted objective so that estimates describe the population rather than the achieved sample, model selection statistics placed on a scale consistent with that objective, and variance estimation that respects the design in the absence of a usable information matrix. We present an integrated pipeline meeting all three requirements. Parameters are estimated by pseudo-maximum likelihood through a weighted EM algorithm; information criteria are calibrated by weight normalization; and all uncertainty statements derive from stratified delete-one jackknife (JKn) replication, with replicate refits warm-started and aligned to the full-sample solution. Segment composition across external variables is estimated by the BCH three-step correction with design-based replicate intervals, and the unweighted special case is validated to exact agreement against an independent maximum likelihood implementation. We illustrate the methodology with thirteen institutional trust items from the 2023 AmericasBarometer survey of Mexico, identifying five trust segments whose composition varies sharply with presidential approval and satisfaction with democracy. Class naming is drafted by a large language model operating under a certified, frozen prompt instrument with full analyst override.
+  Latent class analysis (LCA) of categorical items collected under a stratified, clustered, weighted sample design raises a variance problem before it raises an estimation problem. Design-weighted point estimation is well established and available in several packages; standard errors that respect stratification and clustering, carried without interruption from the measurement model through to domain estimates and covariate contrasts, are not available jointly in R. We present an integrated pipeline organized around that gap. Parameters are estimated by pseudo-maximum likelihood through a weighted EM algorithm and information criteria are calibrated by weight normalization, but the organizing commitment is that a single stratified delete-one jackknife (JKn) replicate design generates every standard error in the analysis: the measurement model parameters, the segment prevalences within domains, the bias-adjusted three-step correction, and the contrasts between domain levels. Replicate refits are warm-started and aligned to the full-sample solution. We show that reported design effects double as a specification check on the variance implementation, because a covariate that is constant within a sampling unit must have a design effect equal to the mean cluster size, and we use that identity to validate the implementation directly. The unweighted special case is validated to exact agreement against an independent maximum likelihood implementation. We illustrate the methodology with thirteen institutional trust items from the 2023 AmericasBarometer survey of Mexico, identifying five trust segments whose composition varies sharply with presidential approval and satisfaction with democracy. Segment naming is drafted by a large language model operating under a certified, frozen prompt instrument with full analyst override.
 keywords:
   - latent class analysis
   - complex survey data
-  - pseudo-maximum likelihood
   - replicate variance estimation
+  - jackknife
+  - design effects
   - three-step estimation
   - institutional trust
 bibliography: bibliography.bib
-params:
-  out_dir: "../output/mexico"
 execute:
   echo: false
   warning: false
@@ -32,30 +31,47 @@ execute:
 
 ```{r setup}
 #| include: false
-library(arrow)
 library(knitr)
 library(viridisLite)
+library(here)
 library(tidyverse)   # loaded last so dplyr verbs win
 
-out_dir        <- params$out_dir
-enum           <- arrow::read_parquet(file.path(out_dir, "enumeration.parquet"))
-ci_tbl         <- arrow::read_parquet(file.path(out_dir, "ci_tbl.parquet"))
-bvr_tbl        <- arrow::read_parquet(file.path(out_dir, "bvr_tbl.parquet"))
-validation     <- arrow::read_parquet(file.path(out_dir, "validation.parquet"))
-fit_w          <- readRDS(file.path(out_dir, "fit_weighted.rds"))
-pl_aligned     <- readRDS(file.path(out_dir, "polca_aligned.rds"))
-segment_labels <- readr::read_csv(file.path(out_dir, "segment_labels.csv"),
-                                  show_col_types = FALSE)
-dom            <- readr::read_csv(file.path(out_dir, "segment_demographics.csv"),
-                                  show_col_types = FALSE)
+# Same path the config writes to, so the two cannot drift.
+out_dir <- here::here("output", "mexico")
 
-K_star <- length(fit_w$pi)
-items  <- unique(dplyr::filter(ci_tbl, kind == "rho")$item)
+needed <- c("model_fit.rds", "segment_labels.csv", "segment_demographics.csv",
+            "segment_contrasts.csv")
+absent <- needed[!file.exists(file.path(out_dir, needed))]
+if (length(absent) > 0) {
+  stop("Not found in ", out_dir, ": ", paste(absent, collapse = ", "),
+       ". Render survey_lca_modeling.qmd, then survey_lca_segments.qmd.")
+}
+
+fit <- readRDS(file.path(out_dir, "model_fit.rds"))
+fit_w <- fit$fit_w
+pl_aligned <- fit$pl_aligned
+validation <- fit$validation
+enum <- fit$enum
+ci_tbl <- fit$ci_tbl
+bvr_tbl <- fit$bvr_tbl
+segment_labels <- read_csv(file.path(out_dir, "segment_labels.csv"),
+                           show_col_types = FALSE)
+dom_all <- read_csv(file.path(out_dir, "segment_demographics.csv"),
+                    show_col_types = FALSE)
+contrasts <- read_csv(file.path(out_dir, "segment_contrasts.csv"),
+                      show_col_types = FALSE)
+
+K_star <- fit$K
+items <- unique(dplyr::filter(ci_tbl, kind == "rho")$item)
+
+# Two estimators are exported; the design-based one is primary, BCH the correction.
+dom_design <- dplyr::filter(dom_all, estimator == "Design-based")
+dom_bch <- dplyr::filter(dom_all, estimator == "BCH-corrected")
 
 lab_line <- function(k) paste0("S", k, ": ", segment_labels$Label[k])
-lab_lev  <- stringr::str_wrap(paste0("S", segment_labels$K, ": ",
-                                     segment_labels$Label), 22)
-lab_of   <- function(k) factor(lab_lev[k], levels = lab_lev)
+lab_lev <- str_wrap(paste0("S", segment_labels$K, ": ",
+                           segment_labels$Label), 22)
+lab_of <- function(k) factor(lab_lev[k], levels = lab_lev)
 
 theme_paper <- function() {
   theme_minimal(base_size = 9) +
@@ -64,35 +80,52 @@ theme_paper <- function() {
           strip.text = element_text(face = "bold"))
 }
 ```
+```
 
 # Introduction {#sec-intro}
 
-Latent class analysis identifies unobserved population subgroups from response patterns over categorical indicators [@lazarsfeld1968; @goodman1974]. When the indicators come from a complex probability sample, three methodological requirements arise jointly. First, the likelihood must be weighted so that the recovered classes and their prevalences describe the target population rather than the achieved sample [@patterson2002; @asparouhov2005]. Second, model selection statistics must sit on a scale consistent with the weighted objective, since base weights rarely sum to the sample size and the pseudo-log-likelihood is otherwise miscalibrated against the penalty term [@lumley2015]. Third, variance estimation must respect the stratification and clustering of the design; under a pseudo-likelihood the inverse information matrix is not a valid variance estimator, so design-based replication is the natural device [@wolter2007; @rust1996].
+Latent class analysis identifies unobserved population subgroups from response patterns over categorical indicators [@lazarsfeld1968; @goodman1974]. When the indicators come from a complex probability sample, fitting the model and reporting honest uncertainty about it are different problems, and the second is where the available tools run out.
 
-No R package meets these three requirements together with a path from measurement model to labelled analytic data product. The `poLCA` package [@linzer2011] fits unweighted maximum likelihood only. The `survey` package [@lumley2004] supplies design declaration and replication machinery but no mixture models. The closest existing software, the `baysc` package [@wu2024; @wu2026joss], fits the same weighted objective within a Bayesian pseudo-posterior with a sandwich-based variance adjustment; the pipeline described here is its frequentist counterpart, carrying replicate-based variance through model selection, measurement-model inference, bias-adjusted profiling on external variables, prediction for item-partial respondents, and a labelled data file for downstream analysts. Commercial options exist, notably Mplus with `TYPE = MIXTURE COMPLEX` and Latent GOLD, and Stata's `gsem` under `svy`; the contribution here is an open, auditable implementation in R in which every estimator corresponds line for line to documented source code, with the unweighted special case validated against an independent implementation.
+The first problem is solved. Weighting the likelihood so that the recovered segments and their prevalences describe the target population rather than the achieved sample is standard [@patterson2002; @vermunt2007; @asparouhov2005], and placing model selection statistics on a scale consistent with that weighted objective is understood [@lumley2015]. The second problem is not solved in any integrated way. Standard errors must respect the stratification and clustering of the design, and they must continue to do so after the measurement model, when segment membership is related to external variables through a bias-adjusted three-step correction whose own variance is easy to get wrong [@vermunt2010; @bakk2014].
+
+This article describes a pipeline organized around that second problem. Its central commitment is that **one replicate design generates every standard error in the analysis**. The same stratified delete-one-PSU jackknife (JKn) replicate weights that produce the interval on a conditional response probability produce the interval on a domain prevalence, the standard error of the BCH correction, and the standard error of a contrast between two demographic levels. Nothing is computed under an independence assumption at any stage, and no delta-method approximation is used that has not been checked against the replicates.
+
+A second contribution is diagnostic and, we think, underused. Design effects reported against a simple random sampling benchmark do two jobs at once. They tell the reader what the design costs, and they check the variance implementation itself. A covariate that is constant within a primary sampling unit has an intracluster correlation of one and therefore a design effect equal to the mean cluster size, exactly. If such a covariate lands there, the cluster identifier, the replicate weights, and the variance formula are jointly correct. We exploit that identity in @sec-results-design and recommend it as routine practice: it is a sharper validation of a design-based variance implementation than agreement with another point estimator, because agreement on point estimates says nothing about variance code.
+
+No R package meets these requirements together with a path from measurement model to labelled analytic data product. The `poLCA` package [@linzer2011] fits unweighted maximum likelihood only. The `survey` package [@lumley2004; @lumley2010] supplies design declaration and replication machinery but no mixture models. The closest existing software, the `baysc` package [@wu2024; @wu2026joss], fits a weighted objective within a Bayesian pseudo-posterior [@savitsky2016] with a post-hoc variance adjustment; @sec-baysc discusses the relationship in detail. Commercial options exist, notably Mplus with `TYPE = MIXTURE COMPLEX` and Latent GOLD, and Stata's `gsem` under `svy`; the contribution here is an open, auditable implementation in R in which every estimator corresponds line for line to documented source code.
 
 Throughout, we refer to latent classes as segments in all user-facing output, a terminological preference of applied audiences; the statistical object is unchanged.
 
 We illustrate the methodology with an analysis of institutional trust in Mexico using the 2023 AmericasBarometer [@lapop2023]. Institutional trust batteries are a natural LCA application: respondents rarely trust or distrust all institutions uniformly, and the substantive interest lies in the configuration of trust across institutions, which a unidimensional scale conceals. Five segments emerge, ranging from generalized distrust to broad confidence, with two intermediate profiles distinguished chiefly by their treatment of the president and the armed forces relative to representative and justice institutions.
 
+@sec-appendix documents the pipeline's operation, so that this article also serves as reference documentation for the implementation.
+
 # Data {#sec-data}
 
-The 2023 AmericasBarometer round in Mexico interviewed 1,622 voting-age adults under a stratified, clustered design with 4 strata and 130 primary sampling units, released with base weights [@lapop2023]. We analyze the thirteen-item institutional trust battery: trust in the justice system, the electoral tribunal, the armed forces, the legislature, the public ministry, the national police, the federal auditor, political parties, the president, the supreme court, the respondent's municipality, the media, and elections. Each item is answered on a seven-point scale anchored at 1, none at all (*nada*), and 7, a lot (*mucho*); intermediate points are unlabelled. Nonresponse codes are recoded to missing during preparation, and each item is recoded to consecutive integers over its substantive categories.
+The 2023 AmericasBarometer round in Mexico interviewed 1,622 voting-age adults under a stratified, clustered design with 4 strata and 130 primary sampling units, released with base weights [@lapop2023]. We analyze the thirteen-item institutional trust battery: trust in the justice system, the electoral tribunal, the armed forces, the legislature, the public ministry, the national police, the federal auditor, political parties, the president, the supreme court, the respondent's municipality, the media, and elections. Each item is answered on a seven-point scale anchored at 1, none at all (*nada*), and 7, a lot (*mucho*); intermediate points are unlabelled. Nonresponse codes are recoded to missing during preparation, and each item is recoded to consecutive integers over its substantive categories, on every row of the file so that the estimation frame and the prediction frame share one coding.
 
-Estimation uses complete cases on the thirteen items and the profiling covariates: 1,430 of 1,622 respondents (88.2 percent) enter the analysis sample. This is a deliberate design choice rather than an oversight; @sec-assignment describes how the fitted model then assigns segment membership to item-partial respondents in the preserved full file, subject to a minimum-information floor, so the complete-case restriction affects estimation but not the coverage of the delivered data product. Profiling covariates are age category, sex, education, urban or rural residence, employment status, satisfaction with democracy, and evaluation of the president's job performance.
+The released weights for this single-country file are effectively constant, so the sample is self-weighting. This has a consequence worth stating plainly at the outset: the weighted and unweighted fits nearly coincide, and the application therefore exercises the design correction to *inference* rather than the weighting correction to *point estimates*. That is the correct emphasis for this article, whose contribution is variance estimation, but a reader looking for evidence that weighting changes conclusions will not find it here and should not expect to.
+
+Estimation uses cases complete on the thirteen trust items. Profiling covariates may be missing without excluding a respondent from the measurement model: conditioning the measurement model on covariate response would introduce a selection on the very characteristics being profiled, since item nonresponse on attitudinal batteries is not random. @sec-assignment describes how the fitted model then assigns segment membership to item-partial respondents in the preserved full file, subject to a minimum-information floor, and @sec-domains describes why all domain estimation runs on that larger scored frame rather than on the estimation sample. Profiling covariates are age category, sex, education, urban or rural residence, and employment status. Satisfaction with democracy and evaluation of the president's job performance are treated separately in @sec-results-criterion as criterion variables rather than as demographics, for reasons given there.
 
 # Methods {#sec-methods}
 
 ## Model {#sec-model}
 
-Let $\mathbf{y}_i = (y_{i1}, \dots, y_{iJ})$ denote respondent $i$'s responses to $J$ nominal items, item $j$ having $C_j$ categories. With $K$ latent segments, prevalences $\pi_k$, and conditional response probabilities $\rho_{jck} = P(y_{ij} = c \mid k)$, the marginal probability of a response pattern is
+Let $\mathbf{y}_i = (y_{i1}, \dots, y_{iJ})$ denote respondent $i$'s responses to $J$ nominal items, item $j$ having $C_j$ categories. With $K$ latent segments, prevalences $\pi_k$, and conditional response probabilities $\rho_{jck} = P(y_{ij} = c \mid X_i = k)$ where $X_i$ denotes latent membership, the marginal probability of a response pattern is
 
 $$
 P(\mathbf{y}_i) \;=\; \sum_{k=1}^{K} \pi_k \prod_{j=1}^{J} \rho_{j\,y_{ij}\,k},
-\qquad \sum_{c=1}^{C_j} \rho_{jck} = 1 .
+\qquad \sum_{k=1}^{K}\pi_k = 1, \qquad \sum_{c=1}^{C_j} \rho_{jck} = 1 .
 $$ {#eq-lca}
 
-Conditional independence of the items given segment membership, local independence, is the load-bearing assumption; @sec-diagnostics probes where it strains and @sec-assignment exploits it for prediction under item nonresponse.
+Conditional independence of the items given segment membership, local independence, is the load-bearing assumption; @sec-diagnostics probes where it strains and @sec-assignment exploits it for prediction under item nonresponse. The model dimension is
+
+$$
+d_K = (K - 1) + K \sum_{j=1}^{J} (C_j - 1),
+$$ {#eq-df}
+
+one free parameter per prevalence beyond the last and $C_j - 1$ free conditional probabilities per item per segment. This quantity grows linearly in $K$ with slope $\sum_j (C_j-1)$, so batteries with many response categories become expensive quickly: thirteen seven-category items at $K = 5$ carry 394 free parameters.
 
 ## Design-weighted pseudo-maximum likelihood {#sec-pml}
 
@@ -103,7 +136,9 @@ $$
 \log\!\Big( \sum_{k=1}^{K} \pi_k \prod_{j=1}^{J} \rho_{j\,y_{ij}\,k} \Big),
 $$ {#eq-pll}
 
-the standard device for LCA under complex sampling [@patterson2002; @skinner1989]. The EM algorithm [@dempster1977] alternates an E-step computing posterior membership probabilities with the log-sum-exp device for numerical stability,
+the standard device for LCA under complex sampling [@patterson2002; @vermunt2007; @skinner1989]. This is a pseudo-likelihood rather than a likelihood: it is the sample-based estimate of the census log-likelihood that would be computed if the whole population were observed. Its maximizer is consistent for the census parameter under standard conditions, but it is not the maximizer of a probability model for the observed data, which is why the design must supply the variance.
+
+The EM algorithm [@dempster1977] alternates an E-step computing posterior membership probabilities,
 
 $$
 p_{ik} \;=\; \frac{\pi_k \prod_j \rho_{j\,y_{ij}\,k}}
@@ -115,39 +150,99 @@ and an M-step in which the weights enter every sufficient statistic,
 $$
 \hat\pi_k = \frac{\sum_i w_i\, p_{ik}}{\sum_i w_i}, \qquad
 \hat\rho_{jck} = \frac{\sum_i w_i\, p_{ik}\, \mathbf{1}(y_{ij} = c)}
-{\sum_i w_i\, p_{ik}} .
+{\sum_i w_i\, p_{ik}\, \mathbf{1}(y_{ij} \text{ observed})} .
 $$ {#eq-mstep}
 
-Iteration stops when $|\Delta \ell_w| < \varepsilon\,(|\ell_w| + 1)$. During enumeration $\varepsilon = 10^{-8}$ with at most 800 iterations per start; the chosen model is refit at terminal precision, $\varepsilon = 10^{-10}$ with at most 5,000 iterations, matching the stopping behavior of the reference implementation used for validation so that the comparison in @sec-validation contrasts optima rather than stopping rules. Because the pseudo-likelihood of a finite mixture can be multimodal with near-tied optima, each candidate model is fit from twenty random starts with deterministic seeding, and the reported solution is the best mode found; this claim discipline is stated rather than hidden. Point estimates are invariant to the scale of the weights.
+The restriction of the $\hat\rho$ denominator to respondents who answered item $j$ is what makes the conditional probabilities sum to one over $c$ when items are partially observed; with complete cases the restriction is vacuous and the denominator reduces to $\sum_i w_i p_{ik}$.
+
+The implementation accumulates $\log \rho_{j\,y_{ij}\,k}$ across items and applies the log-sum-exp identity before exponentiating. With $J$ items this is not optional: the raw product underflows to zero for a respondent with an improbable response pattern and @eq-estep becomes $0/0$. A missing item contributes zero to the log-scale accumulation, which is exactly equivalent to dropping it from the product in @eq-lca, and this equivalence, not an approximation, is what licenses @eq-partial below.
+
+Iteration stops when $|\Delta \ell_w| < \varepsilon\,(|\ell_w| + 1)$. During enumeration $\varepsilon = 10^{-8}$ with at most 800 iterations per start; the chosen model is refit at $\varepsilon = 10^{-10}$ with at most 5,000 iterations, matching the stopping behavior of the reference implementation used for validation so that the comparison in @sec-validation contrasts optima rather than stopping rules. Replicate refits (@sec-variance) use the same terminal tolerance, because the jackknife variance is a sum of squared deviations from the full-sample estimate and systematically under-converged replicates would enter as a bias in every one of those deviations.
+
+Because the pseudo-likelihood of a finite mixture can be multimodal with near-tied optima, each candidate model is fit from many random starts and the reported solution is the best mode found; this claim discipline is stated rather than hidden. Starting values are generated in the main session from a deterministic seed sequence and passed to parallel workers as data, so no worker touches the random number generator and results are identical under sequential and parallel execution. The implementation asserts this at runtime by refitting the chosen model sequentially and comparing log-likelihoods. Point estimates are invariant to the scale of the weights.
+
+Because the likelihood is invariant to permutation of segment labels, any two fits must be aligned before they can be compared coordinate by coordinate. We align a fit to a reference by minimizing total squared distance between their response profiles over permutations, solved exactly by the Hungarian algorithm [@kuhn1955; @hornik2005] rather than by heuristic matching. Alignment is applied to replicate refits before they enter the variance, to the unweighted benchmark before comparison, and to any comparison across $K$. The general label-switching problem in mixture models is harder than this [@stephens2000; @papastamoulis2014]; warm starting from a common solution means alignment here confirms a correspondence rather than discovering one.
 
 ## Model selection {#sec-selection}
 
-Information criteria compare the maximized log-likelihood against a sample-size penalty, and the two must sit on the same scale. Base weights rarely sum to $n$; because $\ell_w$ is linear in the weights, multiplying it by $n / \sum_i w_i$ is exactly equivalent to fitting with weights rescaled to sum to $n$, leaving point estimates untouched and calibrating only model selection [@lumley2015 develop the general design-based treatment; the sum-to-$n$ convention matches the default weight normalization in Mplus, making criteria comparable across software]. With $\ell^{*}_w = \ell_w \cdot n / \sum_i w_i$ and model dimension
+Information criteria compare the maximized log-likelihood against a sample-size penalty, and the two must sit on the same scale. Base weights rarely sum to $n$; because $\ell_w$ is linear in the weights, multiplying it by $n / \sum_i w_i$ is exactly equivalent to fitting with weights rescaled to sum to $n$, leaving point estimates untouched and calibrating only model selection. With $\ell^{*}_w = \ell_w \cdot n / \sum_i w_i$ we report
 
 $$
-d_K = (K - 1) + K \sum_{j=1}^{J} (C_j - 1),
-$$ {#eq-df}
+\mathrm{AIC} = -2\ell^{*}_w + 2 d_K, \qquad
+\mathrm{BIC} = -2\ell^{*}_w + d_K \log n .
+$$ {#eq-ic}
 
-we report $\mathrm{BIC} = -2\ell^{*}_w + d_K \log n$ and $\mathrm{AIC} = -2\ell^{*}_w + 2 d_K$, alongside the relative entropy
+Rescaling fixes the numerator and leaves the denominator. On a design with variable weights the information in $n$ observations is less than the information in $n$ independent observations, so $\log n$ overstates the evidentiary hurdle. We therefore report a second criterion using the Kish effective sample size [@kish1965],
 
 $$
-R^2_E \;=\; 1 - \frac{-\sum_{i,k} p_{ik} \log p_{ik}}{\,n \log K\,},
+n_{\mathrm{eff}} = \frac{\big(\sum_i w_i\big)^2}{\sum_i w_i^2},
+\qquad
+\mathrm{BIC}_{\mathrm{eff}} = -2\ell^{*}_w + d_K \log n_{\mathrm{eff}} ,
+$$ {#eq-biceff}
+
+alongside the first, so that a disagreement between them is visible rather than hidden by a choice of default. @lumley2015 develop the general design-based treatment of information criteria and should be consulted for the fuller account; @eq-biceff is a practical device that makes weight variation visible in the selection statistics, not a claim to have implemented their criterion. Note that $n_{\mathrm{eff}} = n$ exactly when weights are constant, so the two criteria coincide for a self-weighting file, and the correction responds to weight variation rather than to clustering. In the present application they are identical for that reason, and the gap between them should in general be read as a lower bound on the design's cost.
+
+We report alongside these the relative entropy of the posterior classification, on the weighted scale,
+
+$$
+R^2_E \;=\; 1 - \frac{-\sum_{i} w_i \sum_{k} p_{ik} \log p_{ik}}
+{\big(\sum_i w_i\big) \log K},
 $$ {#eq-entropy}
 
-which indexes classification sharpness [@ramaswamy1993]. The bootstrapped likelihood ratio test, often recommended for class enumeration under simple random sampling [@nylund2007], is deliberately omitted: its parametric bootstrap presumes independent observations, which fails under a design-weighted pseudo-likelihood on a clustered sample, matching the equivalent restriction imposed by Mplus under complex-design analysis. The number of segments is never selected automatically. The analyst chooses $K$ by iterating over these statistics and the diagnostics of @sec-diagnostics, and fixes it in configuration; @sec-enumeration reports that reasoning for the present application.
+which indexes classification sharpness [@ramaswamy1993]. The numerator is the weighted average posterior uncertainty and the denominator its maximum, attained when every posterior is uniform over the $K$ segments, so $R^2_E$ runs from zero at no classification information to one at perfect separation. Weighting is not cosmetic: an unweighted entropy would describe the achieved sample's classification sharpness while every other quantity describes the population, and $R^2_E$ is the value that justifies or fails to justify holding the measurement model fixed in @sec-bch. For a self-weighting file the two coincide.
+
+The bootstrapped likelihood ratio test, often recommended for class enumeration under simple random sampling [@nylund2007], is deliberately omitted: its parametric bootstrap draws new samples of independent observations from the fitted model, which is not the process that generated a stratified clustered sample, matching the equivalent restriction imposed by Mplus under complex-design analysis. Nothing is gained by reporting a p-value whose null distribution is known to be wrong.
+
+The number of segments is never selected automatically. The analyst chooses $K$ by iterating over these statistics and the diagnostics of @sec-diagnostics, and fixes it in configuration; @sec-enumeration reports that reasoning for the present application.
 
 ## Replicate variance estimation {#sec-variance}
 
-A pseudo-likelihood provides no usable information matrix, so all uncertainty statements come from stratified delete-one-PSU jackknife (JKn) replication [@wolter2007; @rust1996; @lumley2004]. With $n_h$ PSUs in stratum $h$, deleting PSU $j$ of stratum $h$ and reweighting its stratum-mates by $n_h/(n_h - 1)$ yields the replicate estimate $\hat\theta_{(hj)}$, and
+All uncertainty statements come from stratified delete-one-PSU jackknife replication [@wolter2007; @rust1996; @lumley2004]. With $n_h$ PSUs in stratum $h$, deleting PSU $j$ of stratum $h$ and reweighting its stratum-mates by $n_h/(n_h - 1)$ yields the replicate estimate $\hat\theta_{(hj)}$, and
 
 $$
 \widehat{V}(\hat\theta) \;=\; \sum_{h} \frac{n_h - 1}{n_h}
 \sum_{j=1}^{n_h} \big( \hat\theta_{(hj)} - \hat\theta \big)^2 .
 $$ {#eq-jkn}
 
-Each replicate refits the weighted EM on the replicate weights, warm-started from the full-sample solution, so the resulting variance is within-mode by construction: it carries design variance, not uncertainty about mode selection. Label switching across replicates is resolved by Hungarian assignment [@kuhn1955; @hornik2005] on the conditional response profiles, aligning every replicate to the full-sample fit before differencing.
+For a vector-valued estimator the same expression with the square replaced by an outer product gives the full covariance matrix,
 
-Confidence intervals for every probability, the prevalences $\pi_k$ and the conditional probabilities $\rho_{jck}$, are formed on the logit scale with the delta-method standard error $\mathrm{se}_{\mathrm{logit}} = \mathrm{se} / \{\hat p (1 - \hat p)\}$ and back-transformed, which keeps them inside $(0, 1)$ without truncation and improves finite-sample coverage away from one half. The critical value is $t_{0.975, \nu}$ with $\nu$ the design degrees of freedom, the number of PSUs minus the number of strata, here $130 - 4 = 126$, rather than the normal 1.96. Cells estimated within $10^{-3}$ of the boundary have no meaningful logit-scale standard error and instead receive Wald intervals truncated to $[0, 1]$, flagged as such in the delivered tables. The same interval construction serves the domain estimates of @sec-bch, so a single method runs through the entire pipeline.
+$$
+\widehat{\mathbf{V}}(\hat{\boldsymbol\theta}) \;=\; \sum_{h} \frac{n_h - 1}{n_h}
+\sum_{j=1}^{n_h} \big( \hat{\boldsymbol\theta}_{(hj)} - \hat{\boldsymbol\theta} \big)
+\big( \hat{\boldsymbol\theta}_{(hj)} - \hat{\boldsymbol\theta} \big)^{\top},
+$$ {#eq-jknmat}
+
+whose off-diagonal entries are what make the contrasts of @sec-contrasts possible without a further derivation.
+
+It is worth being precise about why replication rather than linearization, since a pseudo-likelihood does admit a sandwich variance [@binder1983] and that is what Mplus and Stata compute. We choose replication for three reasons specific to this problem. First, the parameter vector is large, 394 free parameters in the present application, and many sit near the boundary; the linearized sandwich requires inverting an information matrix of that dimension, and the numerical difficulties of doing so in sparse high-dimensional latent class settings are documented [@patterson2002; @wu2024]. Second, replication propagates to new statistics without rederivation: once the replicate weights exist, the classification error matrix of @sec-bch and the contrasts of @sec-contrasts inherit design-based variance by recomputation, where linearization would require a fresh delta-method derivation at each stage. Third, replication makes the design specification auditable, as @sec-deff explains.
+
+Each replicate refits the weighted EM on the replicate weights, warm-started from the full-sample solution and aligned to it, so the resulting variance is within-mode by construction: it carries design variance, not uncertainty about mode selection.
+
+A stratum containing a single PSU cannot receive the $n_h/(n_h-1)$ scaling. The `survey.lonely.psu` option governs linearization variance and does not change how replicate weights are constructed, so a singleton stratum would contribute no variance and the resulting standard errors would be anticonservative in exactly the strata where the data are thinnest. The implementation therefore treats singleton strata as a hard stop, and performs the check on the analysis frame rather than the source file, because case exclusions can create singletons that the released data do not have.
+
+Confidence intervals for every probability, the prevalences $\pi_k$ and the conditional probabilities $\rho_{jck}$, are formed on the logit scale with the delta-method standard error
+
+$$
+\mathrm{se}_{\mathrm{logit}}(\hat p) = \frac{\mathrm{se}(\hat p)}{\hat p (1 - \hat p)},
+$$ {#eq-logitse}
+
+which follows from $\mathrm{d}\,\mathrm{logit}(p)/\mathrm{d}p = 1/\{p(1-p)\}$, and back-transformed, which keeps intervals inside $(0,1)$ without truncation and improves coverage for probabilities near the boundary. The critical value is $t_{0.975, \nu}$ with $\nu$ the design degrees of freedom, the number of PSUs minus the number of strata, here $130 - 4 = 126$, rather than the normal 1.96. Cells estimated within $10^{-3}$ of the boundary have no meaningful logit-scale standard error and instead receive Wald intervals truncated to $[0, 1]$, flagged as such in the delivered tables. The same construction serves the domain estimates of @sec-domains, so one interval method runs through the entire pipeline.
+
+## Design effects as a specification check {#sec-deff}
+
+For any estimate the design effect is the ratio of the design-based variance to the variance a simple random sample of the same size would give, $\mathrm{deff} = \widehat V_{\mathrm{design}} / \widehat V_{\mathrm{SRS}}$, and the effective sample size is $n/\mathrm{deff}$. Under equal cluster sizes $m$ and intracluster correlation $\rho$, the classical approximation is
+
+$$
+\mathrm{deff} \;\approx\; 1 + (m - 1)\rho .
+$$ {#eq-deff}
+
+We report design effects for every profiling variable against both the full design and a clustering-only design that drops the strata, and read three patterns from them.
+
+First, and this is the specification check, **a variable that is constant within a cluster has $\rho = 1$ and therefore $\mathrm{deff} = m$ exactly**. Any covariate measured at the cluster level rather than the respondent level, such as urbanicity in an area sample, must land at the mean cluster size. If it does, the cluster identifier, the replicate weights, and the variance formula are jointly correct. This is a stronger check on variance code than agreement with an independent point estimator, which validates estimation and says nothing about variance.
+
+Second, a design effect below one means variance smaller than random sampling would produce, which requires within-cluster composition to be controlled rather than sampled. That is the signature of a quota imposed at the final selection stage: if interviewers fill a fixed number of respondents in a category per sampling point, between-cluster variance for that category is suppressed and the intracluster correlation in @eq-deff goes negative. Precision on such variables is a fieldwork artifact rather than sampling information.
+
+Third, if the full-design and clustering-only design effects agree, stratification is contributing nothing and clustering accounts for the entire departure from simple random sampling.
 
 ## Model-fit diagnostics {#sec-diagnostics}
 
@@ -158,26 +253,40 @@ D_j \;=\; \frac{2}{K(K-1)} \sum_{k < l} \frac{1}{2} \sum_{c=1}^{C_j}
 \big| \rho_{jck} - \rho_{jcl} \big| .
 $$ {#eq-discrim}
 
-$D_j = 0$ means every segment answers item $j$ identically, a removal candidate for a sensitivity refit; values near 1 indicate sharp separation.
+The inner expression is total variation distance between two discrete distributions, bounded in $[0,1]$ and equal to the largest difference in probability the two assign to any event; the leading factor is the reciprocal of the number of pairs, $K(K-1)/2$, so $D_j$ is a mean of quantities each in $[0,1]$ and is itself in $[0,1]$. $D_j = 0$ means every segment answers item $j$ identically, a removal candidate for a sensitivity refit; values near one indicate sharp separation.
 
-Discrimination is an effect size; a companion screen asks whether each item earns its class-dependent parameters by BIC. For item $j$, the fitted model is compared on the same respondents against a restricted model in which item $j$ is made class-independent, its response distribution shared across segments. Under local independence the restricted model factorizes into an LCA on the remaining items times item $j$'s weighted marginal, so its pseudo-log-likelihood is available without a constrained refit as $\ell_{-j} + \ell_j^{\mathrm{marg}}$, its dimension is $d_K^{(-j)} + (C_j - 1)$, and its BIC on the sum-to-$n$ scale is directly comparable to the full model's. We report $\Delta\mathrm{BIC}_j = \mathrm{BIC}_{\mathrm{restricted}} - \mathrm{BIC}_{\mathrm{full}}$; a negative value means BIC prefers dropping item $j$'s class dependence and flags the item.
+Discrimination is an effect size; a companion screen asks whether each item earns its class-dependent parameters by BIC. For item $j$, the fitted model is compared on the same respondents against a restricted model in which item $j$ is made class-independent. Under local independence the restricted model factorizes into an LCA on the remaining items times item $j$'s weighted marginal, so its pseudo-log-likelihood is available without a constrained refit as $\ell_{-j} + \ell_j^{\mathrm{marg}}$, its dimension is $d_K^{(-j)} + (C_j - 1)$, and its BIC is directly comparable to the full model's. We report $\Delta\mathrm{BIC}_j = \mathrm{BIC}_{\mathrm{restricted}} - \mathrm{BIC}_{\mathrm{full}}$; a negative value means BIC prefers dropping item $j$'s class dependence. This is a ranking under a pseudo-likelihood and not a Bayes factor, so the conventional interpretive thresholds for BIC differences do not apply and we do not quote them.
 
-Local independence is probed pairwise with a bivariate residual (BVR). For items $a, b$, let $\widehat{P}_{ab}(c,d)$ be the design-weighted observed proportion of the joint response $(c,d)$ and $\Pi_{ab} = \boldsymbol\rho_a \operatorname{diag}(\boldsymbol\pi)\, \boldsymbol\rho_b^{\top}$ the model-implied joint distribution. The statistic
+Local independence is probed pairwise. For items $a, b$, let $\widehat{P}_{ab}(c,d)$ be the design-weighted observed proportion of the joint response $(c,d)$ and let
 
 $$
-\mathrm{BVR}_{ab} \;=\; \frac{1}{(C_a - 1)(C_b - 1)}
-\; n \sum_{c,d} \frac{\big( \widehat{P}_{ab}(c,d) - \Pi_{ab}(c,d) \big)^2}{\Pi_{ab}(c,d)}
+\Pi_{ab} = \boldsymbol\rho_a \operatorname{diag}(\boldsymbol\pi)\, \boldsymbol\rho_b^{\top}
+$$ {#eq-implied}
+
+be the model-implied joint distribution, where $\boldsymbol\rho_a$ is the $C_a \times K$ matrix of conditional probabilities for item $a$. @eq-implied is the model's own statement about the pair: condition on segment, multiply the two conditional distributions because the model asserts independence given segment, and average over segments weighted by prevalence. We report the total variation distance between observed and implied,
+
+$$
+\mathrm{BVR}_{ab} \;=\; \tfrac{1}{2} \sum_{c,d}
+\big| \widehat{P}_{ab}(c,d) - \Pi_{ab}(c,d) \big| .
 $$ {#eq-bvr}
 
-is a Pearson-type residual per degree of freedom. In unweighted maximum likelihood settings its null distribution is already not chi-square and bootstrap calibration is advised [@oberski2013]; under weighting and pseudo-likelihood no reference distribution is valid, so we report BVR strictly as a descriptive ranking of the item pairs the model explains least well, with large persistent values arguing for item removal, merging, or $K+1$.
+This departs from the Pearson-type statistic conventionally reported, and deliberately. @oberski2013 showed that the Pearson statistic's null distribution is already not chi-square for unweighted binary data, recommending bootstrap calibration; under design weighting and a pseudo-likelihood on a clustered sample no reference distribution is valid at all. A statistic with no null distribution is an effect size, and an effect size should sit on an interpretable scale. @eq-bvr is bounded in $[0,1]$, is exactly zero under perfect local independence, reads as the largest probability discrepancy over any event in the two-way table, and shares its scale with @eq-discrim. It also removes a numerical failure of the Pearson form, which divides by the model-implied cell probability and so can be dominated by a single near-empty corner of a large table. Large and persistent values argue for item removal, merging, or $K+1$.
 
 ## Validation against an independent implementation {#sec-validation}
 
-At unit weights, @eq-pll reduces to the ordinary log-likelihood, so the weighted EM and `poLCA` [@linzer2011] maximize the same function and must agree up to optimizer tolerance and mode selection. The pipeline enforces this as a runtime check. The unit-weight EM solution is obtained from the same multi-start protocol plus one additional candidate warm-started at the `poLCA` solution itself; since both maximize the identical function, whichever basin attains the higher log-likelihood is retained. The retained solution is aligned to the `poLCA` solution by Hungarian matching on response profiles, and maximum absolute gaps in prevalences and conditional probabilities are computed and frozen to disk with a single pass or fail verdict at a 0.005 threshold on both gaps, printed identically in every downstream document. Where a gap appears, comparison of the two log-likelihoods separates flat-ridge drift under the stopping rule, an inferior `poLCA` mode, and an inferior EM mode calling for more starts. The same reasoning positions the pipeline against Mplus (`TYPE = MIXTURE COMPLEX`) and Stata (`gsem` under `svy`): identical objective and weight convention imply matching point estimates and criteria up to mode selection, with linearization rather than replication standard errors, both design-consistent.
+At unit weights, @eq-pll reduces to the ordinary log-likelihood, so the weighted EM and `poLCA` [@linzer2011] maximize the same function and must agree up to optimizer tolerance and mode selection. The pipeline enforces this as a runtime check. The unit-weight EM solution is obtained from the same multi-start protocol plus one additional candidate warm-started at the `poLCA` solution itself; since both maximize the identical function, whichever basin attains the higher log-likelihood is retained. The retained solution is aligned to `poLCA` by Hungarian matching, and maximum absolute gaps in prevalences and conditional probabilities are frozen to disk with a single pass or fail verdict at a 0.005 threshold on both gaps, printed identically in every downstream document. Where a gap appears, comparison of the two log-likelihoods separates flat-ridge drift under the stopping rule, an inferior `poLCA` mode, and an inferior EM mode calling for more starts.
+
+This check validates estimation. It says nothing about the variance implementation, which is why @sec-deff exists.
+
+## Relationship to `baysc` {#sec-baysc}
+
+The `baysc` package [@wu2024; @wu2026joss] implements weighted overfitted latent class analysis in a Bayesian pseudo-posterior [@savitsky2016] with a post-hoc variance adjustment. It differs from the present pipeline in three respects that matter for choosing between them. It selects the number of classes through an overfitted mixture with a sparsity-inducing prior, where we require the analyst to fix $K$. It obtains uncertainty from an adjusted posterior rather than from replicate weights. And being Bayesian, it propagates classification uncertainty through the posterior draws automatically, which makes a BCH-style correction unnecessary within that framework rather than merely optional.
+
+The two are complements rather than competitors, and the natural comparison is not which is correct but whether a frequentist replicate-variance implementation and a Bayesian variance-adjusted one agree on the same data. We note one practical consideration bearing on availability: `baysc` is distributed through GitHub and requires a C++ and Fortran toolchain to build, which places it outside what can be installed in some restricted analytic environments, including public-sector settings limited to CRAN. Where that constraint binds, a frequentist implementation with base survey dependencies remains the available option.
 
 ## Segment assignment under partial response {#sec-assignment}
 
-Membership is assigned from the posterior evaluated at the fitted parameters. Local independence makes assignment honest for item-partial respondents: a missing item drops out of the within-segment product, so for respondent $i$ with answered item set $A_i$,
+Membership is assigned from the posterior evaluated at the fitted parameters. Local independence makes assignment exact rather than approximate for item-partial respondents: a missing item drops out of the within-segment product, so for respondent $i$ with answered item set $A_i$,
 
 $$
 p_{ik}^{\mathrm{obs}} \;=\;
@@ -185,53 +294,92 @@ p_{ik}^{\mathrm{obs}} \;=\;
 {\sum_l \pi_l \prod_{j \in A_i} \rho_{j\,y_{ij}\,l}},
 $$ {#eq-partial}
 
-and the assigned segment is $\arg\max_k p_{ik}^{\mathrm{obs}}$. An information floor $m^{*}$, configured at seven of the thirteen items here, is enforced: respondents answering fewer than $m^{*}$ items receive no assignment rather than a weakly informed one. The model is fit on complete cases only; assignment extends to the preserved full frame, and the exported labelled data record which respondents were assigned.
+and the assigned segment is $\arg\max_k p_{ik}^{\mathrm{obs}}$. This is the exact posterior given what respondent $i$ answered, under the model and under ignorability of the missingness pattern given segment. An information floor $m^{*}$, configured at seven of the thirteen items here, is enforced: respondents answering fewer than $m^{*}$ items receive no assignment rather than a weakly informed one. We report mean maximum posterior by number of items answered so that the floor can be set from evidence rather than convention.
 
-## Segment composition on external variables: the BCH correction {#sec-bch}
+## Domain estimation {#sec-domains}
 
-Cross-classifying modal assignments against external variables understates segment differences because assignment error, even at high entropy, attenuates composition toward the marginal [@bolck2004]. We therefore estimate segment prevalence within demographic domains by the BCH three-step correction [@bolck2004; @vermunt2010], adapted to the design-weighted setting. Step one is the fitted measurement model. Step two computes the modal assignment $W_i = \arg\max_k p_{ik}$ and the design-weighted classification-error matrix $\mathbf{D}$ with entries
+Scoring precedes domain estimation, and all domain estimates run on the scored frame rather than the estimation sample. This follows the logic of three-step latent class analysis, in which the assignment step covers every respondent it validly can, and it matters substantively: item nonresponse on an attitude battery correlates with education, age, and other characteristics of interest, so restricting domain estimation to complete responders introduces a selection into the composition being estimated. The replicate design is rebuilt on the scored frame and the singleton stratum check is repeated there.
+
+The primary domain estimator is the design-weighted proportion of domain $d$ assigned to segment $k$,
+
+$$
+\hat p_{dk} \;=\; \frac{\sum_{i \in d} w_i \, \mathbf{1}(\hat X_i = k)}
+{\sum_{i \in d} w_i},
+$$ {#eq-domdesign}
+
+with variance from the JKn replicates. Rows sum to one across segments by construction.
+
+### The BCH correction {#sec-bch}
+
+Cross-classifying modal assignments against external variables understates segment differences, because assignment error attenuates composition toward the marginal [@bolck2004]. Writing $W_i = \arg\max_k p_{ik}$ for the modal assignment, treated as an error-prone measurement of true membership $X_i$, define the design-weighted classification error matrix
 
 $$
 D_{ks} \;=\; \widehat{P}(W = s \mid X = k) \;=\;
 \frac{\sum_i w_i\, p_{ik}\, \mathbf{1}(W_i = s)}{\sum_i w_i\, p_{ik}},
 $$ {#eq-bchD}
 
-the weighted posterior mass of true segment $k$ landing in assigned segment $s$; rows of $\mathbf{D}$ sum to one. Step three replaces each respondent's hard assignment with the correction vector $\mathbf{u}_i = \mathbf{e}_{W_i}^{\top} \mathbf{D}^{-1}$, row $W_i$ of $\mathbf{D}^{-1}$. Weighted by $w_i$, the $\mathbf{u}_i$ are unbiased for true-segment membership, so the BCH-corrected prevalence of segment $k$ within domain $d$ is the design-based domain mean
+the weighted posterior mass of true segment $k$ landing in assigned segment $s$; rows of $\mathbf{D}$ sum to one. The correction replaces each respondent's hard assignment with $\mathbf{u}_i = \mathbf{e}_{W_i}^{\top} \mathbf{D}^{-1}$, row $W_i$ of $\mathbf{D}^{-1}$, and the corrected prevalence of segment $k$ within domain $d$ is
 
 $$
-\hat p_{dk} \;=\; \frac{\sum_{i \in d} w_i\, u_{ik}}{\sum_{i \in d} w_i}.
+\hat p^{\mathrm{BCH}}_{dk} \;=\; \frac{\sum_{i \in d} w_i\, u_{ik}}{\sum_{i \in d} w_i}.
 $$ {#eq-bchdom}
 
-Two properties of the correction deserve note. Entries of $\mathbf{u}_i$ can be negative, so individual cell estimates can fall slightly outside $[0, 1]$; this is a documented property of the method, not an error. And each $\mathbf{u}_i$ sums to one because the rows of $\mathbf{D}$ do, so within every domain the estimated prevalences still sum to one across segments.
+The correction works because, for a respondent whose true membership is $m$,
 
-Variance is estimated with the same JKn replicates: the posterior matrix and modal assignments are held fixed at the full-sample measurement model, while $\mathbf{D}$ and the correction weights are rebuilt inside every replicate from the replicate weights, so the intervals carry the design variance of the classification table and the cross-tabulation jointly. Holding step one fixed is the standard treatment; the resulting understatement of variance is minor when classification is sharp [@bakk2014; @bakk2013], and the present application, with relative entropy 0.907, is squarely in that favorable regime. Intervals follow @sec-variance, logit-scale with the design $t$ critical value; cells outside $(0, 1)$, where the logit transform is undefined, fall back to truncated Wald intervals and are footnoted in the delivered tables.
+$$
+\mathbb{E}\big[u_{ik} \mid X_i = m\big]
+= \sum_{s} P(W = s \mid X = m)\,\big(\mathbf{D}^{-1}\big)_{sk}
+= \big(\mathbf{D}\mathbf{D}^{-1}\big)_{mk} = \mathbf{1}(m = k),
+$$ {#eq-bchunbiased}
+
+so $u_{ik}$ is unbiased for the indicator of true membership and its weighted mean within a domain estimates $P(X = k \mid d)$ rather than $P(W = k \mid d)$. Two consequences follow immediately from @eq-bchunbiased. Entries of $\mathbf{u}_i$ can be negative, so individual cell estimates can fall slightly outside $[0,1]$; this is a documented property of the method, not an error. And each $\mathbf{u}_i$ sums to one, because $\mathbf{D}\mathbf{1} = \mathbf{1}$ implies $\mathbf{D}^{-1}\mathbf{1} = \mathbf{1}$ and every row of $\mathbf{D}^{-1}$ therefore sums to one, so within every domain the corrected prevalences still sum to one across segments.
+
+Variance is estimated with the same JKn replicates: the posterior matrix and modal assignments are held fixed at the full-sample measurement model, while $\mathbf{D}$ and the correction weights are rebuilt inside every replicate from the replicate weights, so the intervals carry the design variance of the classification table and the cross-tabulation jointly. @vermunt2010 is explicit that BCH point estimates paired with uncorrected variances yield p-values that are far too small; recomputing inside the replicates is the direct remedy. Holding step one fixed is the standard treatment; the resulting understatement of variance is minor when classification is sharp [@bakk2014; @bakk2013].
+
+### Contrasts between domain levels {#sec-contrasts}
+
+Overlapping intervals are not a test. Because @eq-jknmat yields the full covariance, differences between domain levels carry their own standard errors,
+
+$$
+\widehat{\mathrm{Var}}\big(\hat p_{dk} - \hat p_{d'k}\big)
+= \widehat V_{dd} + \widehat V_{d'd'} - 2\widehat V_{dd'} ,
+$$ {#eq-contrast}
+
+with the covariance term taken from the replicates rather than assumed zero. We compare every level of a demographic against that variable's reference level, within segment, on the design $t$, with Holm adjustment [@holm1979] applied within each demographic variable.
+
+### Which estimator to report {#sec-whichestimator}
+
+Two of the three choices here are not choices. Segment prevalence within a demographic group is a descriptive population quantity, so the point estimate is weighted; and on a stratified clustered sample the independence standard error is wrong in an unknown direction, so the interval is design-based. The real decision is modal versus BCH, and it has a rule: compute the shift between the two estimators and compare it to the standard error. When the shift is a small fraction of the standard error the correction is inside noise and the uncorrected estimates should be reported with the correction noted as a sensitivity check.
+
+The direction of the bias determines when that rule may be overridden. Attenuation always pulls toward the marginal, so it always understates group differences. If the claim is that groups differ, modal assignment is conservative and a surviving difference is real. If the claim is that groups do not differ, modal assignment is not safe, because attenuation manufactures null results. The case for retaining the correction is therefore that it protects null findings, not positive ones. One counterintuitive consequence: the case for BCH weakens as sample size falls, since standard errors grow while the classification bias does not.
 
 ## LLM-assisted, analyst-controlled labeling {#sec-labeling}
 
-Segment naming is a bottleneck in applied LCA reporting, and recent evidence suggests large language models perform annotation-adjacent tasks reliably when tightly instructed [@gilardi2023; @ziems2024]. The pipeline drafts segment names with a language model under a fixed instrument: a persona and rule set instructing interpretation strictly from the displayed conditional response probabilities and item wording, one isolated call per segment (joint prompts empirically confused near-neighbor segments), an optional survey-context paragraph fenced to referent resolution only, and a collision-gated harmonization pass that may edit labels, never descriptions. Labels follow one rule: a label file on disk is used when present and validated against $K$; otherwise the model drafts once and the result is frozen to that file, which the analyst edits to take over naming. The freeze file, not a sampling seed, is the reproducibility mechanism.
+Segment naming is a bottleneck in applied LCA reporting, and recent evidence suggests large language models perform annotation-adjacent tasks reliably when tightly instructed [@gilardi2023; @ziems2024]. The pipeline drafts segment names with a language model under a fixed instrument: a persona and rule set instructing interpretation strictly from the displayed conditional response probabilities and item wording, one isolated call per segment (joint prompts empirically confused near-neighbor segments), an optional survey-context paragraph fenced to referent resolution only, and a collision-gated harmonization pass that may edit labels, never descriptions. Labels follow one rule: a label file on disk is used when present and validated against $K$; otherwise the model drafts once and the result is frozen to that file, which the analyst edits to take over naming. The freeze file, not a sampling seed, is the reproducibility mechanism, because a seed would be reproducible only for a fixed model, endpoint, and package version.
 
-The instrument is treated as a measurement device. A certification harness plants a known-meaning model, including near-neighbor segments, a deliberately diffuse segment, nonresponse-labelled items, and a fictional survey context, and checks output format, grounding in the displayed probabilities, hedging on diffuse profiles, persona integrity, context-leak fencing, harmonizer properties, and adoption of the segment terminology; any edit to the instrument obliges recertification. Labels are drafts, verified by the analyst against the conditional response profiles before use, and the delivered tables carry the label file's contents, not live model output.
+The instrument is treated as a measurement device. A certification harness plants a known-meaning model, including near-neighbor segments, a deliberately diffuse segment, nonresponse-labelled items, and a fictional survey context, and checks output format, grounding in the displayed probabilities, hedging on diffuse profiles, persona integrity, context-leak fencing, harmonizer properties, and adoption of the segment terminology; any edit to the instrument obliges recertification.
+
+Labels never re-enter estimation. They are display strings attached after every number is computed, so a wrong label is a presentation error and not a statistical one. Labels are drafts, verified by the analyst against the conditional response profiles before use, and the delivered tables carry the label file's contents, not live model output.
 
 # Results {#sec-results}
 
 ## Enumeration and the choice of K {#sec-enumeration}
 
-@tbl-enum reports the weighted fit statistics for $K = 2$ through $12$, each fit from twenty seeded random starts; all candidates converged. @fig-enum plots weighted BIC and relative entropy.
+@tbl-enum reports the weighted fit statistics, each candidate fit from seeded random starts; all converged. @fig-enum plots weighted BIC and relative entropy.
 
 ```{r}
 #| label: tbl-enum
-#| tbl-cap: "Weighted fit statistics by number of segments. The log-likelihood is on the sum-to-n scale; entropy is the relative entropy of the posterior classification."
+#| tbl-cap: "Weighted fit statistics by number of segments. The log-likelihood is on the sum-to-n scale; entropy is the weighted relative entropy of the posterior classification. BIC and BIC on the effective sample size coincide here because the file is self-weighting."
 enum |>
-  mutate(across(c(logLik, AIC, BIC), ~ round(.x, 1)),
+  mutate(across(any_of(c("logLik", "AIC", "BIC", "BIC_eff")), \(x) round(x, 1)),
          entropy = round(entropy, 3)) |>
-  dplyr::select(K, logLik, df, AIC, BIC, entropy) |>
-  kable(align = "r",
-        col.names = c("K", "Log-likelihood", "df", "AIC", "BIC", "Entropy"))
+  dplyr::select(any_of(c("K", "logLik", "df", "AIC", "BIC", "BIC_eff", "entropy"))) |>
+  kable(align = "r")
 ```
 
 ```{r}
 #| label: fig-enum
-#| fig-cap: "Enumeration diagnostics across K: weighted BIC and relative entropy. BIC is essentially flat between K = 5 and K = 6; entropy peaks at K = 4 and declines thereafter."
+#| fig-cap: "Enumeration diagnostics across K: weighted BIC and relative entropy."
 #| fig-width: 6.5
 #| fig-height: 2.8
 enum |>
@@ -248,18 +396,18 @@ enum |>
   theme_paper()
 ```
 
-Weighted BIC drops steeply through $K = 5$ (60,957.9), reaches its minimum at $K = 6$ (60,940.1), and rises monotonically thereafter. The difference between the two, 17.8, is small against the preceding drops of 226.2 ($4 \to 5$) and 882.9 ($3 \to 4$): the criterion is effectively flat over the $\{5, 6\}$ region. AIC continues to decline through the whole range, its usual overextraction under large $n$ [@nylund2007]. Relative entropy peaks at $K = 4$ (0.921) and remains high at $K = 5$ (0.907); no larger $K$ exceeds 0.91. Within the flat BIC region we fixed $K = 5$ on parsimony, classification sharpness, and interpretability: the five-segment solution yields substantively distinct, cleanly separated profiles (@sec-measurement), whereas the marginal BIC gain at $K = 6$ purchases a further split at the cost of entropy. Consistent with the flatness of the criterion, the unweighted benchmark's own BIC minimizes at $K = 6$ as well; enumeration under weighting and without it point to the same region. We emphasize that $K$ is an analyst decision recorded in configuration, not an automated selection, and the full enumeration evidence is reported so readers can weigh the neighboring solution.
+Weighted BIC drops steeply through $K = 5$ (60,957.9), reaches its minimum at $K = 6$ (60,940.1), and rises monotonically thereafter. The difference between the two, 17.8, is small against the preceding drops of 226.2 ($4 \to 5$) and 882.9 ($3 \to 4$): the criterion is effectively flat over the $\{5, 6\}$ region. AIC continues to decline through the whole range, its usual overextraction at large $n$ [@nylund2007]. Relative entropy peaks at $K = 4$ (0.921) and remains high at $K = 5$ (0.907). Within the flat BIC region we fixed $K = 5$ on parsimony, classification sharpness, and interpretability: the five-segment solution yields substantively distinct, cleanly separated profiles (@sec-measurement), whereas the marginal BIC gain at $K = 6$ purchases a further split at the cost of entropy. Consistent with the flatness of the criterion, the unweighted benchmark's own BIC minimizes at $K = 6$ as well; enumeration under weighting and without it point to the same region. We emphasize that $K$ is an analyst decision recorded in configuration, not an automated selection, and the full enumeration evidence is reported so readers can weigh the neighboring solution.
 
 ## The measurement model {#sec-measurement}
 
-The chosen model converged with weighted log-likelihood $-29{,}047.7$ on the sum-to-$n$ scale, relative entropy 0.907, and mean maximum posterior probability 0.939: respondents are, on average, assigned to their modal segment with 94 percent confidence. @tbl-prev reports the design-weighted segment prevalences with JKn intervals alongside the unweighted benchmark, and @fig-profiles displays the full measurement model, the estimated $\rho_{jck}$ for every item, category, and segment.
+The chosen model converged with weighted log-likelihood $-29{,}047.7$ on the sum-to-$n$ scale, relative entropy 0.907, and mean maximum posterior probability 0.939: respondents are, on average, assigned to their modal segment with 94 percent confidence. @tbl-prev reports the design-weighted segment prevalences with JKn intervals alongside the unweighted benchmark, and @fig-profiles displays the full measurement model.
 
 ```{r}
 #| label: tbl-prev
 #| tbl-cap: "Design-weighted segment prevalences with 95 percent JKn intervals (logit scale, t critical value with 126 design degrees of freedom), the unweighted poLCA benchmark, and the weighting gap."
 pi_ci <- ci_tbl |>
   dplyr::filter(kind == "pi") |>
-  transmute(K = class, est = estimate, lo, hi)
+  transmute(K = segment, est = estimate, lo, hi)
 pi_ci |>
   mutate(Segment = lab_line(K),
          `Weighted prevalence [95% CI]` =
@@ -277,7 +425,7 @@ pi_ci |>
 #| fig-height: 7
 ci_tbl |>
   dplyr::filter(kind == "rho") |>
-  mutate(Segment = lab_of(class),
+  mutate(Segment = lab_of(segment),
          item = factor(item, levels = items),
          est = estimate) |>
   ggplot(aes(factor(category), item, fill = est)) +
@@ -293,7 +441,7 @@ ci_tbl |>
 
 The five profiles order naturally on overall trust with two configurational departures. Segment S5, Broad Institutional Trust (weighted prevalence 0.208), concentrates mass on categories 5 and 6 across every institution. Segment S4, Very High National Trust (0.111), is its extreme counterpart, with probability 0.82 of answering *mucho* on trust in the president and 0.70 or above on the public ministry, armed forces, supreme court, and electoral tribunal. Segment S2, Generalized Institutional Distrust (0.107), mirrors it at the other pole, with probability 0.85 of answering *nada* on political parties and 0.76 on the national police; only the president and armed forces draw any appreciable mass off the floor. The two largest segments are configurational rather than uniform. Segment S1, Moderate Institutional Trust (0.331), holds the middle categories on the justice and audit institutions while shifting upward on the president and armed forces. Segment S3, Presidential and Military Trust (0.242), sharpens that asymmetry: substantial trust in the president (probability 0.21 at *mucho*, mass concentrated at 5 to 7) and the armed forces, against firm distrust of political parties (0.41 at *nada*) and the police. The configuration, not the level, separates S1 from S3, and it is precisely this configurational structure that a summed trust scale would average away.
 
-The weighted and unweighted prevalences differ by at most 0.005 (@tbl-prev): the released weights for this single-country file are nearly constant, so weighting shifts point estimates little here. The design still matters for inference: the JKn intervals reflect the clustering, and the interval for S1, for example, spans 0.293 to 0.372, wider than an SRS binomial interval at $n = 1{,}430$ would suggest.
+The weighted and unweighted prevalences differ by at most 0.005 (@tbl-prev): the released weights for this file are nearly constant, so weighting shifts point estimates little here. The design still matters for inference. The interval for S1 spans 0.293 to 0.372, a half-width of 0.0395 against the 0.0244 a simple random sample of the same size would give, implying a design effect of about 2.6 for that prevalence.
 
 ## Diagnostics {#sec-results-diagnostics}
 
@@ -302,7 +450,7 @@ The weighted and unweighted prevalences differ by at most 0.005 (@tbl-prev): the
 #| fig-cap: "Item discrimination: the mean over segment pairs of the total variation distance between conditional response distributions."
 #| fig-width: 6.5
 #| fig-height: 3
-class_pairs <- utils::combn(K_star, 2, simplify = FALSE)
+class_pairs <- combn(K_star, 2, simplify = FALSE)
 discrim <- tibble(
   item = items,
   discrimination = map_dbl(fit_w$rho, function(rho_j)
@@ -319,82 +467,88 @@ discrim |>
   theme_paper()
 ```
 
-Every item earns its place. Discrimination (@fig-discrim) ranges from 0.452 (president) to 0.754 (justice system); no item approaches the region where removal would be considered. The BIC screen of @sec-diagnostics agrees: $\Delta\mathrm{BIC}_j$ is positive for all thirteen items, from $+320.0$ (president) to $+1{,}419.3$ (justice system), so BIC prefers retaining every item's class dependence, by margins that are decisive throughout. That the president and armed forces items discriminate least is itself informative: they are the institutions on which otherwise different segments agree.
+Every item earns its place. Discrimination (@fig-discrim) ranges from 0.452 (president) to 0.754 (justice system); no item approaches the region where removal would be considered. The BIC screen of @sec-diagnostics agrees: $\Delta\mathrm{BIC}_j$ is positive for all thirteen items, from $+320.0$ (president) to $+1{,}419.3$ (justice system), so BIC prefers retaining every item's class dependence by margins that are decisive throughout. That the president and armed forces items discriminate least is itself informative: they are the institutions on which otherwise different segments agree.
 
 ```{r}
 #| label: tbl-bvr
-#| tbl-cap: "Largest bivariate residuals. BVR is a descriptive ranking under the weighted pseudo-likelihood; no chi-square reference distribution applies."
+#| tbl-cap: "Largest bivariate residuals, as total variation distance between the design-weighted observed two-way table and the model-implied table. Bounded in [0, 1] and zero under exact local independence; a descriptive ranking, since no reference distribution applies under the weighted pseudo-likelihood."
 bvr_tbl |>
   arrange(desc(bvr)) |>
   slice_head(n = 5) |>
-  mutate(bvr = round(bvr, 2)) |>
-  kable(align = "llrr",
-        col.names = c("Item A", "Item B", "Pair df", "BVR"))
+  mutate(bvr = round(bvr, 3)) |>
+  kable(align = "llr", col.names = c("Item A", "Item B", "BVR"))
 ```
 
-The bivariate residuals (@tbl-bvr) identify two item pairs standing above the rest: public ministry with auditor (5.75) and armed forces with legislature (5.54), against a table otherwise at or below 3.21. These are institutionally adjacent pairs, two audit-and-prosecution bodies and two national-state bodies, whose residual association the five segments do not fully absorb. Because no reference distribution is valid here, we read these as a ranked caution rather than a rejection, one consistent with BIC's mild preference for the neighboring six-segment solution, and we flag the two pairs as the natural first check in any sensitivity refit.
+The bivariate residuals (@tbl-bvr) rank the item pairs whose residual association the five segments absorb least well. The leading pairs are institutionally adjacent, two audit-and-prosecution bodies and two national-state bodies, which is what a local dependence violation from shared content looks like. Because no reference distribution is valid here we read these as a ranked caution rather than a rejection, one consistent with BIC's mild preference for the neighboring six-segment solution, and we flag the leading pairs as the natural first check in any sensitivity refit.
 
-## Validation and assignment coverage {#sec-results-validation}
+## Validation and the design specification {#sec-results-design}
 
-```{r}
-#| include: false
-v <- validation
-```
+At unit weights the pipeline's EM and `poLCA` agree exactly: the maximum absolute prevalence gap is `r sprintf("%.5f", validation$max_pi_gap)` and the maximum conditional-probability gap is `r sprintf("%.5f", validation$max_rho_gap)`. The implementations maximize the same function and find the same optimum, which certifies the estimation machinery before any weighted result is interpreted.
 
-At unit weights the pipeline's EM and `poLCA` agree exactly: the maximum absolute prevalence gap is `r sprintf("%.5f", v$max_pi_gap)`, the maximum conditional-probability gap is `r sprintf("%.5f", v$max_rho_gap)`, and the two log-likelihoods are identical to reported precision (`r sprintf("%.4f", v$ll_ours)`). The implementations maximize the same function and find the same optimum, which certifies the weighted estimator's machinery before any weighted result is interpreted.
+The variance machinery is certified separately, by @eq-deff. The design comprises 130 PSUs with a mean cluster size of 12.4. Urbanicity is constant within a sampling unit in this area sample, so its intracluster correlation is one and its design effect must equal the mean cluster size. The observed design effect for urbanicity is 12.6 against a predicted ceiling of 12.4, agreement to two significant figures, which confirms that the cluster identifier, the replicate weight construction, and @eq-jkn are jointly correct. No comparison of point estimates could establish this.
 
-Prediction under @eq-partial assigned a segment to 1,618 of 1,622 respondents: all 1,430 complete cases plus 188 item-partial respondents answering at least the seven-item floor. Four respondents fell below the floor and were left unassigned rather than guessed. The delivered data product is a labelled SPSS file carrying the numeric segment with value labels, the label text, and the assignment diagnostics, together with CSV exports of the full measurement model with intervals and the demographic composition estimates.
+The remaining design effects are informative in their own right. Education ranges from 1.12 to 2.37 and employment from 0.96 to 1.11, the ordinary range for respondent-level covariates under clustering. Sex, by contrast, returns 0.22 on both levels of a near-even split, and age category returns 0.21 for the youngest group rising monotonically to 1.34 for the oldest. A design effect of 0.22 on a 49/51 split cannot arise from sampling variation and is the signature described in @sec-deff: composition controlled within sampling points rather than sampled, consistent with sex and age quotas at the final selection stage. The standard errors on those two variables are therefore fieldwork artifacts rather than sampling information, and we do not read precision into them. Dropping the strata leaves every design effect essentially unchanged, so clustering accounts for the entire departure from simple random sampling and the four strata contribute nothing.
+
+## Assignment coverage {#sec-results-assignment}
+
+Prediction under @eq-partial assigns a segment to nearly the entire file: complete cases plus item-partial respondents meeting the seven-item floor, with the small remainder left unassigned rather than guessed. The delivered data product is a labelled SPSS file carrying the numeric segment with value labels, the label text, the posterior probabilities, the BCH correction weights, and the assignment diagnostics, together with CSV exports of the full measurement model with intervals, the domain composition estimates under both estimators, and the contrasts. The posteriors and correction weights are exported deliberately: a downstream analyst cross-tabulating the modal assignment alone reintroduces exactly the attenuation @sec-bch removes, and the variable label on the segment column says so.
 
 ## Demographic composition {#sec-results-demographics}
 
-BCH-corrected composition was estimated for seven covariates; we highlight the two with the sharpest structure, presidential job approval and satisfaction with democracy, and summarize the remainder. Full tables for all covariates accompany the replication materials.
-
 ```{r}
-#| label: tbl-prez
-#| tbl-cap: "BCH-corrected segment prevalence within presidential job approval, with 95 percent JKn intervals on the logit scale. Rows sum to one across segments. One cell (Bad approval, S4) has a slightly negative BCH point estimate, a documented property of the correction; its interval is truncated Wald."
-prez_lv <- c("Very bad", "Bad", "Neither good nor bad", "Good", "Very good")
-dom |>
-  dplyr::filter(demographic == "prez_rating") |>
-  mutate(level = factor(level, levels = prez_lv),
-         Segment = paste0("S", segment),
+#| label: tbl-demo
+#| tbl-cap: "Design-based segment prevalence within levels of the demographic covariates, with 95 percent JKn intervals. Rows sum to one across segments."
+dom_design |>
+  mutate(Segment = paste0("S", segment),
          cell = sprintf("%.2f [%.2f, %.2f]", prevalence, lo, hi)) |>
-  arrange(level) |>
-  dplyr::select(Level = level, Segment, cell) |>
+  dplyr::select(Variable = demographic, Level = level, Segment, cell) |>
   pivot_wider(names_from = Segment, values_from = cell) |>
-  kable(align = "lrrrrr")
+  kable(align = "ll")
 ```
 
-```{r}
-#| label: fig-prez
-#| fig-cap: "BCH-corrected segment composition by presidential job approval (95 percent JKn intervals)."
-#| fig-width: 6.5
-#| fig-height: 3.6
-dom |>
-  dplyr::filter(demographic == "prez_rating") |>
-  mutate(level = factor(level, levels = prez_lv),
-         Segment = lab_of(segment)) |>
-  ggplot(aes(prevalence, level, color = Segment)) +
-  geom_pointrange(aes(xmin = lo, xmax = hi), size = 0.3, linewidth = 0.4,
-                  position = position_dodge(width = 0.6)) +
-  scale_color_viridis_d(begin = 0.1, end = 0.8) +
-  labs(x = "Prevalence of segment membership", y = NULL, color = NULL) +
-  theme_paper() +
-  guides(color = guide_legend(nrow = 2))
-```
+The demographic covariates show modest structure. Presidential and Military Trust is more prevalent in urban areas than rural and declines with age, while Broad Institutional Trust moves in the opposite direction with age. Respondents with no formal education are estimated predominantly in Very High National Trust, though this cell rests on few observations and its interval is correspondingly wide. Differences by sex and employment status are small, with overlapping intervals throughout; we note that the sex comparison in particular carries the quota-induced precision discussed in @sec-results-design and should not be read as a sharp null.
 
-Composition is strongly ordered in presidential approval (@tbl-prez, @fig-prez). Among respondents rating the president's performance very bad, Generalized Institutional Distrust reaches 0.52 [0.35, 0.68]; among those rating it very good, that segment falls to 0.07 while Very High National Trust rises to 0.19 [0.16, 0.24]. The correction's behavior at sparse cells is visible in the Bad approval row, where the S4 estimate is a numerically negative zero with a truncated interval: no respondents rating the president badly belong, after correction, to the segment defined by near-uniform *mucho* responses that include the president item, exactly as coherence requires. Satisfaction with democracy behaves symmetrically: Generalized Distrust is 0.34 [0.25, 0.45] among the very dissatisfied against 0.06 among the very satisfied, while Very High National Trust is 0.34 [0.25, 0.44] among the very satisfied against 0.05 among the very dissatisfied.
+BCH-corrected estimates are reported alongside in the replication materials. Following @sec-whichestimator, we report the uncorrected design-based estimates as primary: the shift induced by the correction is a small fraction of the standard errors throughout, which is what @eq-bchunbiased predicts when classification is as sharp as relative entropy 0.907 implies. The correction is retained and reported because it protects the null comparisons above, not because it moves the positive ones.
 
-The remaining covariates show more modest structure. Presidential and Military Trust is more prevalent in urban areas (0.26 [0.23, 0.29]) than rural (0.18 [0.14, 0.22]) and declines with age, from 0.25 among respondents 18 to 29 to 0.17 among those 60 and over, while Broad Institutional Trust moves in the opposite direction with age. Respondents with no formal education are estimated predominantly in Very High National Trust (0.41 [0.22, 0.64]), though this cell rests on few observations and its interval is correspondingly wide. Differences by sex and employment status are small, with overlapping intervals throughout.
+## Criterion variables {#sec-results-criterion}
+
+Presidential job approval and satisfaction with democracy are treated separately from the demographic covariates above, and deliberately so. They are attitudes rather than characteristics, and both are plausibly related to institutional trust by construction, so entering them as profiling variables would partly explain the measurement model with itself. Their proper role is as criterion variables: they test whether the segments behave as a trust typology should, which is a validity question rather than a compositional one.
+
+They do. Composition is strongly ordered in presidential approval. Among respondents rating the president's performance very bad, Generalized Institutional Distrust reaches 0.52 [0.35, 0.68]; among those rating it very good, that segment falls to 0.07 while Very High National Trust rises to 0.19 [0.16, 0.24]. Satisfaction with democracy behaves symmetrically: Generalized Distrust is 0.34 [0.25, 0.45] among the very dissatisfied against 0.06 among the very satisfied, while Very High National Trust is 0.34 [0.25, 0.44] among the very satisfied against 0.05 among the very dissatisfied. Segments derived only from institutional trust items order monotonically on two attitudes never shown to the model, which is the behavior a valid typology should exhibit.
+
+The correction's behavior at sparse cells is visible in the Bad approval row of the corrected table, where one estimate is a numerically negative zero with a truncated interval: no respondents rating the president badly belong, after correction, to the segment defined by near-uniform *mucho* responses that include the president item, exactly as coherence requires and exactly as @eq-bchunbiased permits.
 
 # Discussion {#sec-discussion}
 
-The pipeline demonstrated here closes a specific gap: design-weighted latent class estimation with fully integrated, design-based replicate inference, in open R code, validated against an independent implementation, and carried through to bias-adjusted profiling and a labelled data product. Each component is individually established, pseudo-maximum likelihood for LCA under complex sampling [@patterson2002], weight-normalized information criteria [@lumley2015], JKn replication [@wolter2007], and the BCH correction [@bolck2004; @vermunt2010]; the contribution is their disciplined integration, with the seams between components, alignment of replicate fits, a single frozen validation verdict, one interval construction throughout, treated as first-class design decisions rather than afterthoughts.
+The pipeline demonstrated here closes a specific gap: design-based replicate inference for latent class analysis, carried without interruption from the measurement model through bias-adjusted profiling to a labelled data product, in open R code. Each component is individually established, pseudo-maximum likelihood for LCA under complex sampling [@patterson2002; @vermunt2007], weight-normalized information criteria [@lumley2015], JKn replication [@wolter2007], and the BCH correction [@bolck2004; @vermunt2010]; the contribution is their disciplined integration, with the seams between components treated as first-class design decisions rather than afterthoughts.
 
-The application illustrates why the machinery matters substantively. Institutional trust in Mexico is not unidimensional: two of the five segments, together a third of the population, are defined by the configuration of trust, elevated for the president and armed forces against distrust of parties and police, rather than by its level, and segment composition moves sharply with presidential approval. A summed trust scale would compress exactly this structure. The near-constancy of the released weights in this file makes the weighting correction small for point estimates while leaving the design correction to inference fully operative; in surveys with more variable weights the same pipeline applies unchanged with larger weighting gaps.
+We would single out the design effect check of @sec-deff as the most transferable element. Validation of statistical software overwhelmingly targets point estimates, because a second implementation is usually available to compare against. Variance code is harder to validate that way, since two implementations may use different variance methods and disagree legitimately. The cluster-constant covariate identity provides an exact, assumption-free target: the design effect must equal the mean cluster size, and any deviation localizes the error. It costs one extra `svydesign` call and it caught nothing here only because the specification was already correct.
 
-Several limitations bound the claims. The pseudo-likelihood can be multimodal with near-tied optima; the reported solution is the best mode under many seeded starts, and JKn replication expresses within-mode design variance only. The BCH step conditions on the fitted measurement model; with relative entropy 0.907 the resulting understatement of variance is minor [@bakk2014], but it is an understatement. Estimation uses complete cases, with model-based assignment rather than imputation extending results to item-partial respondents above the information floor. The choice of $K$ is an argued analyst decision within a flat region of the criterion, and we report the full enumeration evidence precisely so that readers can weigh the neighboring six-segment solution. Finally, language-model-drafted labels are a documented convenience with a certified instrument and full analyst override, not a measurement claim; all substantive interpretation rests on the estimated conditional response probabilities.
+The application illustrates why the machinery matters substantively. Institutional trust in Mexico is not unidimensional: two of the five segments, together a third of the population, are defined by the configuration of trust, elevated for the president and armed forces against distrust of parties and police, rather than by its level, and segment composition moves sharply with presidential approval. A summed trust scale would compress exactly this structure. The near-constancy of the released weights in this file makes the weighting correction small for point estimates while leaving the design correction to inference fully operative, and the design effects of @sec-results-design show that correction to be substantial: an analyst treating this sample as independent would understate the standard error on a cluster-level covariate by a factor of 3.5.
+
+Several limitations bound the claims. The pseudo-likelihood can be multimodal with near-tied optima; the reported solution is the best mode under many seeded starts, and JKn replication expresses within-mode design variance only. The BCH step conditions on the fitted measurement model; with relative entropy 0.907 the resulting understatement of variance is minor [@bakk2014], but it is an understatement. Estimation uses cases complete on the trust items, with model-based assignment rather than imputation extending results to item-partial respondents above the information floor; respondents scored from fewer items carry more classification error, and the correction applies a single pooled error matrix across that heterogeneous frame. The effective-sample-size criterion of @eq-biceff responds to weight variation and not to clustering, so on a self-weighting file it coincides with ordinary BIC and neither reflects the design's cost. The replicate count equals the number of PSUs, so the replicate covariance has rank at most that number; individual variances and pairwise covariances are consistent, which is all the reported quantities require, but a joint Wald test across more dimensions is unavailable. The choice of $K$ is an argued analyst decision within a flat region of the criterion, and we report the full enumeration evidence precisely so that readers can weigh the neighboring six-segment solution. Finally, language-model-drafted labels are a documented convenience with a certified instrument and full analyst override, not a measurement claim; all substantive interpretation rests on the estimated conditional response probabilities.
 
 Replication materials, including all source code, the rendered analysis documents, and the frozen output objects from which every table and figure in this article is generated, are available in the project repository.
+
+# Appendix: Operating the pipeline {#sec-appendix}
+
+This appendix documents the implementation so that the article also serves as reference documentation.
+
+## Layout
+
+Four files, run in order. `survey_lca_source.R` is the engine and is never edited per dataset: weighted EM, Hungarian alignment, parallel replicate variance, the BCH correction, segment scoring, the diagnostics, table and plotting helpers, and the labeling instrument. `survey_data_config.R` is the only file edited per dataset. `survey_lca_modeling.qmd` presents the data, enumerates over $K$, and once $K$ is fixed produces the chosen model, the diagnostics, and the JKn intervals, saving one `.rds`. `survey_lca_segments.qmd` reads that file and produces labels, design effects, domain estimates, contrasts, scoring, and the handoff.
+
+## Porting to a new survey
+
+Six things change, all in the configuration file. The file path and the item list, given as a named vector mapping analysis names to source variable names. The nonresponse codes, which require reading the source file with `user_na = TRUE` since the default converts declared user-missing values to `NA` on read and the codes then never arrive. The design variables, renamed internally to fixed names so nothing downstream varies by dataset; identifying the correct stratification variable is the highest-consequence decision in a port, because an error there invalidates every standard error and nothing else will reveal it. The demographic recodes, written as one `case_match` per variable with every observed source label named explicitly and an `UNMATCHED` default, since a regular expression that matches an unintended label misclassifies silently and one that matches nothing deletes silently. The profiling variable list. And the configuration block: $K$ range, number of starts, seed, information floor, complete-case switch, output directory, and language model endpoint.
+
+## What is checked automatically
+
+The following stop the render rather than producing a wrong number: any demographic source label unmatched by its `case_match`, reported by variable; any configured column absent from the data; any stratum containing a single PSU in the analysis frame, reported by stratum; a mismatch between the number of estimated domain quantities and their metadata; a replicate variance routine disagreeing with `survey::svymean` on a reference statistic; a sequential refit disagreeing with the parallel fit; and a label file whose row count does not match $K$.
+
+## What must be checked by the analyst
+
+The recode audit table, once per dataset. The design effect table, confirming that a cluster-constant covariate lands at the mean cluster size and noting which variables fall below one. The weight coefficient of variation and unequal weighting effect, which determine whether weighting is doing anything in this file. The enumeration table and profiles, to choose $K$. Assignment quality by number of items answered, to set the information floor. The drafted labels against their profile panels. And the shift between the uncorrected and corrected domain estimates relative to their standard errors, to decide which to report.
 
 # References {.unnumbered}
 

@@ -1,0 +1,1274 @@
+% Options for packages loaded elsewhere
+\PassOptionsToPackage{unicode}{hyperref}
+\PassOptionsToPackage{hyphens}{url}
+%
+\documentclass[
+  ignorenonframetext,
+  aspectratio=169,
+]{beamer}
+\usepackage{pgfpages}
+\setbeamertemplate{caption}[numbered]
+\setbeamertemplate{caption label separator}{: }
+\setbeamercolor{caption name}{fg=normal text.fg}
+\beamertemplatenavigationsymbolsempty
+% Prevent slide breaks in the middle of a paragraph
+\widowpenalties 1 10000
+\raggedbottom
+\setbeamertemplate{part page}{
+  \centering
+  \begin{beamercolorbox}[sep=16pt,center]{part title}
+    \usebeamerfont{part title}\insertpart\par
+  \end{beamercolorbox}
+}
+\setbeamertemplate{section page}{
+  \centering
+  \begin{beamercolorbox}[sep=12pt,center]{part title}
+    \usebeamerfont{section title}\insertsection\par
+  \end{beamercolorbox}
+}
+\setbeamertemplate{subsection page}{
+  \centering
+  \begin{beamercolorbox}[sep=8pt,center]{part title}
+    \usebeamerfont{subsection title}\insertsubsection\par
+  \end{beamercolorbox}
+}
+\AtBeginPart{
+  \frame{\partpage}
+}
+\AtBeginSection{
+  \ifbibliography
+  \else
+    \frame{\sectionpage}
+  \fi
+}
+\AtBeginSubsection{
+  \frame{\subsectionpage}
+}
+
+\usepackage{amsmath,amssymb}
+\usepackage{iftex}
+\ifPDFTeX
+  \usepackage[T1]{fontenc}
+  \usepackage[utf8]{inputenc}
+  \usepackage{textcomp} % provide euro and other symbols
+\else % if luatex or xetex
+  \usepackage{unicode-math}
+  \defaultfontfeatures{Scale=MatchLowercase}
+  \defaultfontfeatures[\rmfamily]{Ligatures=TeX,Scale=1}
+\fi
+\usepackage{lmodern}
+\usetheme[]{default}
+\ifPDFTeX\else  
+    % xetex/luatex font selection
+\fi
+% Use upquote if available, for straight quotes in verbatim environments
+\IfFileExists{upquote.sty}{\usepackage{upquote}}{}
+\IfFileExists{microtype.sty}{% use microtype if available
+  \usepackage[]{microtype}
+  \UseMicrotypeSet[protrusion]{basicmath} % disable protrusion for tt fonts
+}{}
+\makeatletter
+\@ifundefined{KOMAClassName}{% if non-KOMA class
+  \IfFileExists{parskip.sty}{%
+    \usepackage{parskip}
+  }{% else
+    \setlength{\parindent}{0pt}
+    \setlength{\parskip}{6pt plus 2pt minus 1pt}}
+}{% if KOMA class
+  \KOMAoptions{parskip=half}}
+\makeatother
+\usepackage{xcolor}
+\newif\ifbibliography
+\setlength{\emergencystretch}{3em} % prevent overfull lines
+\setcounter{secnumdepth}{-\maxdimen} % remove section numbering
+
+
+\providecommand{\tightlist}{%
+  \setlength{\itemsep}{0pt}\setlength{\parskip}{0pt}}\usepackage{longtable,booktabs,array}
+\usepackage{calc} % for calculating minipage widths
+\usepackage{caption}
+% Make caption package work with longtable
+\makeatletter
+\def\fnum@table{\tablename~\thetable}
+\makeatother
+\usepackage{graphicx}
+\makeatletter
+\def\maxwidth{\ifdim\Gin@nat@width>\linewidth\linewidth\else\Gin@nat@width\fi}
+\def\maxheight{\ifdim\Gin@nat@height>\textheight\textheight\else\Gin@nat@height\fi}
+\makeatother
+% Scale images if necessary, so that they will not overflow the page
+% margins by default, and it is still possible to overwrite the defaults
+% using explicit options in \includegraphics[width, height, ...]{}
+\setkeys{Gin}{width=\maxwidth,height=\maxheight,keepaspectratio}
+% Set default figure placement to htbp
+\makeatletter
+\def\fps@figure{htbp}
+\makeatother
+
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta,positioning}
+\usepackage{booktabs}
+
+% ======================================================================
+%  EDIT BLOCK 2 of 2: the classification banner.
+%  Change the marking text and the bar color on these two lines only.
+%  Common choices: UNCLASSIFIED (006400 green), CUI (522398 purple),
+%  UNCLASSIFIED//FOUO (006400). Confirm against your marking guide.
+% ======================================================================
+\newcommand{\classification}{UNCLASSIFIED}
+\definecolor{classbg}{HTML}{006400}
+% ======================================================================
+
+\definecolor{vpurple}{HTML}{440154}
+\definecolor{vteal}{HTML}{21918C}
+\definecolor{vgreen}{HTML}{5EC962}
+
+\setbeamercolor{classbanner}{bg=classbg,fg=white}
+\setbeamercolor{frametitle}{fg=vpurple,bg=white}
+\setbeamercolor{title}{fg=vpurple}
+\setbeamercolor{structure}{fg=vteal}
+\setbeamertemplate{navigation symbols}{}
+
+% classification banner on the very top of every slide
+\setbeamertemplate{headline}{%
+  \begin{beamercolorbox}[wd=\paperwidth,ht=2.0ex,dp=0.7ex,center]{classbanner}%
+    \bfseries\small\classification%
+  \end{beamercolorbox}%
+}
+% matching bottom banner with slide number. If your marking guide wants
+% a top banner only, delete this \setbeamertemplate{footline} block.
+\setbeamertemplate{footline}{%
+  \begin{beamercolorbox}[wd=\paperwidth,ht=2.0ex,dp=0.7ex]{classbanner}%
+    \hspace*{2ex}\bfseries\small\insertframenumber\hfill\classification\hfill\hspace*{2ex}%
+  \end{beamercolorbox}%
+}
+
+\newcommand{\kicker}[1]{\par\noindent{\footnotesize\color{vteal}\textbf{\MakeUppercase{#1}}}\par\vspace{0.4em}}
+
+% Uncomment to project speaker notes on a second screen:
+% \setbeameroption{show notes on second screen=right}
+\makeatletter
+\@ifpackageloaded{caption}{}{\usepackage{caption}}
+\AtBeginDocument{%
+\ifdefined\contentsname
+  \renewcommand*\contentsname{Table of contents}
+\else
+  \newcommand\contentsname{Table of contents}
+\fi
+\ifdefined\listfigurename
+  \renewcommand*\listfigurename{List of Figures}
+\else
+  \newcommand\listfigurename{List of Figures}
+\fi
+\ifdefined\listtablename
+  \renewcommand*\listtablename{List of Tables}
+\else
+  \newcommand\listtablename{List of Tables}
+\fi
+\ifdefined\figurename
+  \renewcommand*\figurename{Figure}
+\else
+  \newcommand\figurename{Figure}
+\fi
+\ifdefined\tablename
+  \renewcommand*\tablename{Table}
+\else
+  \newcommand\tablename{Table}
+\fi
+}
+\@ifpackageloaded{float}{}{\usepackage{float}}
+\floatstyle{ruled}
+\@ifundefined{c@chapter}{\newfloat{codelisting}{h}{lop}}{\newfloat{codelisting}{h}{lop}[chapter]}
+\floatname{codelisting}{Listing}
+\newcommand*\listoflistings{\listof{codelisting}{List of Listings}}
+\makeatother
+\makeatletter
+\makeatother
+\makeatletter
+\@ifpackageloaded{caption}{}{\usepackage{caption}}
+\@ifpackageloaded{subcaption}{}{\usepackage{subcaption}}
+\makeatother
+
+\ifLuaTeX
+  \usepackage{selnolig}  % disable illegal ligatures
+\fi
+\usepackage{bookmark}
+
+\IfFileExists{xurl.sty}{\usepackage{xurl}}{} % add URL line breaks if available
+\urlstyle{same} % disable monospaced font for URLs
+\hypersetup{
+  pdftitle={Segmenting Public Opinion Without Breaking the Survey Design},
+  pdfauthor={Kevin Linares},
+  hidelinks,
+  pdfcreator={LaTeX via pandoc}}
+
+
+\title{Segmenting Public Opinion Without Breaking the Survey Design}
+\subtitle{Design-weighted latent class analysis with replicate variance
+estimation}
+\author{Kevin Linares}
+\date{22 July 2026}
+\institute{Public Opinion Research}
+
+\begin{document}
+\frame{\titlepage}
+
+
+\begin{frame}[shrink]{Roadmap}
+\phantomsection\label{roadmap}
+\kicker{the plan}
+
+\vspace{0.4em}
+
+\begin{columns}[T]
+\begin{column}{0.52\textwidth}
+\begin{enumerate}\itemsep2pt
+  \item What JPSM trained me to look for
+  \item Where this work sits in Total Survey Error
+  \item The problem: trust is a pattern, not a score
+  \item Why this method, and why not k-means
+  \item The method, in four moves
+  \item What we found
+  \item Naming segments: an anchor and adjust approach
+  \item What I would bring to our work
+\end{enumerate}
+\end{column}
+\begin{column}{0.44\textwidth}
+\small
+\textbf{The claim in one line}
+
+\vspace{0.4em}
+
+Segmentation of survey data is usually done as if the sample were a simple random sample. It is not, and fixing that changes both the estimates and what we are entitled to say about them.
+\end{column}
+\end{columns}
+
+\note{Set expectations: a methods talk with a substantive payoff, not a software demo. The one-liner on the right is the thesis; everything else supports it.}
+\end{frame}
+
+\begin{frame}[shrink]{What I bring back from JPSM}
+\phantomsection\label{what-i-bring-back-from-jpsm}
+\kicker{where i trained}
+
+\small
+
+\textbf{Joint Program in Survey Methodology} (Maryland, Michigan SRC,
+Westat). MS in Survey and Data Science, MA in Psychology.
+
+\vspace{0.5em}
+
+\begin{columns}[T]
+\begin{column}{0.48\textwidth}
+\textbf{Coursework that shows up here}
+\begin{itemize}\itemsep2pt
+  \item Design-based sampling and estimation
+  \item Latent variable measurement models
+  \item Replication variance methods
+  \item Responsible LLM integration
+\end{itemize}
+\end{column}
+\begin{column}{0.48\textwidth}
+\textbf{The two portable habits}
+\begin{itemize}\itemsep2pt
+  \item Name where error can enter, then decide where to spend effort
+  \item Everything in code, rendered from source, so a result can be audited a year later
+\end{itemize}
+\end{column}
+\end{columns}
+
+\vspace{0.5em}
+
+\begin{center}
+\colorbox{vteal!15}{\parbox{0.93\textwidth}{\centering
+The degree is organised around one framework, \textbf{Total Survey Error}. It is the spine of the program and the lens I apply before choosing any method.}}
+\end{center}
+
+\note{Forty seconds. Credibility, not biography. The second habit is what makes the results slide defensible later.}
+\end{frame}
+
+\begin{frame}[shrink]{Total Survey Error: the framework the program is
+built on}
+\phantomsection\label{total-survey-error-the-framework-the-program-is-built-on}
+\kicker{groves and colleagues}
+
+\begin{center}
+\resizebox{!}{5.6cm}{%
+\begin{tikzpicture}[
+  b/.style={draw=gray!55, rounded corners=1.5pt, minimum width=27mm, minimum height=6mm, align=center, font=\scriptsize},
+  h/.style={b, draw=vteal, fill=vteal!25, font=\scriptsize\bfseries},
+  hd/.style={font=\small\bfseries, text=vpurple},
+  e/.style={font=\scriptsize\itshape, text=vteal},
+  a/.style={-{Latex[length=1.6mm]}, gray!70}]
+\node[hd] at (0,0.95)   {MEASUREMENT (the what)};
+\node[hd] at (6.4,0.95) {REPRESENTATION (the who)};
+\node[b] (c1) at (0,0)     {Construct};
+\node[b] (c2) at (0,-1.35) {Measurement};
+\node[b] (c3) at (0,-2.7)  {Response};
+\node[b] (c4) at (0,-4.05) {Edited Response};
+\draw[a] (c1)--(c2) node[e,midway,right,xshift=2mm]{validity};
+\draw[a] (c2)--(c3) node[e,midway,right,xshift=2mm]{measurement error};
+\draw[a] (c3)--(c4) node[e,midway,right,xshift=2mm]{processing error};
+\node[b] (r1) at (6.4,0)     {Target Population};
+\node[b] (r2) at (6.4,-1.35) {Sampling Frame};
+\node[b] (r3) at (6.4,-2.7)  {Sample};
+\node[b] (r4) at (6.4,-4.05) {Respondents};
+\node[b] (r5) at (6.4,-5.4)  {Post-survey Adjustments};
+\draw[a] (r1)--(r2) node[e,midway,right,xshift=2mm]{coverage error};
+\draw[a] (r2)--(r3) node[e,midway,right,xshift=2mm]{sampling error};
+\draw[a] (r3)--(r4) node[e,midway,right,xshift=2mm]{nonresponse error};
+\draw[a] (r4)--(r5) node[e,midway,right,xshift=2mm]{adjustment error};
+\node[h] (s) at (3.2,-6.7) {Survey Statistic};
+\draw[a] (c4) -- (s); \draw[a] (r5) -- (s);
+\end{tikzpicture}}
+\end{center}
+
+\note{Walk left to right down each arm. The labels beside the arrows are the named error sources. Both arms converge on the survey statistic: accuracy is what survives to the final number. As analysts we usually receive the data at the far bottom, after every one of these steps has already happened.}
+\end{frame}
+
+\begin{frame}[shrink]{Accuracy is the inverse of mean squared error}
+\phantomsection\label{accuracy-is-the-inverse-of-mean-squared-error}
+\kicker{the core of the framework}
+
+\small
+
+\[\text{MSE} \;=\; \text{Bias}^2 \;+\; \text{Variance}\]
+
+\footnotesize
+\vspace{0.2em}
+
+Expanded (Biemer and Lyberg), with each component drawn from one arm or
+the other:
+
+\vspace{0.4em}
+
+\(\text{Bias}^2 = \big(\underbrace{\text{specification}}_{\text{meas}} + \underbrace{\text{coverage}}_{\text{rep}} + \underbrace{\text{nonresponse}}_{\text{rep}} + \underbrace{\text{measurement}}_{\text{meas}} + \underbrace{\text{processing}}_{\text{meas}}\big)^2\)
+
+\vspace{0.5em}
+
+\(\text{Variance} = \underbrace{\text{sampling}}_{\text{rep}} + \underbrace{\text{measurement}}_{\text{meas}} + \underbrace{\text{processing}}_{\text{meas}}\)
+
+\vspace{0.6em}
+
+\begin{center}
+\colorbox{vteal!15}{\parbox{0.9\textwidth}{\centering\footnotesize
+Bias and variance do not map onto the two arms. Sampling is representation-side variance, interviewer effects are measurement-side variance. Both arms feed both terms.}}
+\end{center}
+
+\vspace{0.3em}
+\footnotesize
+
+MSE is never zero. Even a census carries measurement and processing
+error. The practical question is never how to eliminate error, it is
+which component is largest and most tractable under a budget.
+
+\note{The common mistake this corrects: people assume measurement error is bias and sampling error is variance. Both arms contribute to both. That is why chasing a single number like the response rate is a poor strategy.}
+\end{frame}
+
+\begin{frame}[shrink]{Most segmentation work uses only half the map}
+\phantomsection\label{most-segmentation-work-uses-only-half-the-map}
+\kicker{where this project sits}
+
+\footnotesize
+
+\begin{columns}[T]
+\begin{column}{0.49\textwidth}
+\textbf{\color{vpurple}Measurement arm}
+
+\vspace{0.3em}
+\begin{itemize}\itemsep3pt
+  \item \textbf{Validity.} Is institutional trust one thing? A summed scale assumes yes. The model tests it.
+  \item \textbf{Measurement error.} Each item is a fallible indicator with its own response probabilities.
+  \item \textbf{Processing error.} Assigning a respondent to a segment is itself an error source. We correct it rather than ignore it.
+\end{itemize}
+\end{column}
+\begin{column}{0.49\textwidth}
+\textbf{\color{vpurple}Representation arm}
+
+\vspace{0.3em}
+\begin{itemize}\itemsep3pt
+  \item \textbf{Sampling error.} Variance comes from the strata and clusters actually used, not a textbook formula.
+  \item \textbf{Adjustment error.} Base weights enter the estimation itself, not a post hoc reweighting of results.
+  \item \textbf{Nonresponse.} Item-partial respondents are scored from what they did answer, above an evidence floor.
+\end{itemize}
+\end{column}
+\end{columns}
+
+\vspace{0.6em}
+
+\begin{center}
+\colorbox{vteal!15}{\parbox{0.93\textwidth}{\centering
+Typical practice segments on the measurement arm and reports sample shares. \\
+Connecting both arms is what turns a segment share into a \textbf{population estimate with defensible uncertainty}.}}
+\end{center}
+
+\note{The slide the audience should remember. Ask them: when you last clustered survey data, did the cluster sizes come with intervals that used the design? The answer is almost always no.}
+\end{frame}
+
+\begin{frame}[shrink]{This is an established method in our field}
+\phantomsection\label{this-is-an-established-method-in-our-field}
+\kicker{lca in public opinion research}
+
+\footnotesize
+
+\begin{itemize}\itemsep4pt
+  \item \textbf{Survey measurement error.} Breen (2000, \textit{BJPS}) used LCA to show why surveys underestimate support for extreme parties.
+  \item \textbf{Cross-national attitudes.} Blaydes and Linzer (2008, \textit{World Politics}) characterized respondents across eighteen countries on gender norms, political Islam, and religiosity.
+  \item \textbf{Latin America.} Alvarez, Levin and N\'u\~nez (2017, \textit{Journal of Politics}) identified four faces of political participation in Argentina.
+  \item \textbf{Participation repertoires.} Oser, Hooghe and Marien (2013, \textit{PRQ}) tested whether online participation is distinct from offline.
+  \item \textbf{National identity.} Bonikowski and DiMaggio (2016, \textit{ASR}) recovered varieties of American popular nationalism.
+  \item \textbf{Complex survey designs.} Patterson, Dayton and Graubard (2002, \textit{JASA}) fit LCA to NHANES dietary data under the sample design.
+\end{itemize}
+
+\vspace{0.5em}
+
+\begin{center}
+\colorbox{vteal!15}{\parbox{0.92\textwidth}{\centering
+The method is not exotic. What is still uncommon is carrying the \textbf{sample design} all the way through it.}}
+\end{center}
+
+\note{This slide preempts the "is this a real method" question. Name Breen first: it is the one that frames LCA as a survey error tool rather than a clustering tool.}
+\end{frame}
+
+\begin{frame}[shrink]{And specifically for institutional trust}
+\phantomsection\label{and-specifically-for-institutional-trust}
+\kicker{prior typologies}
+
+\small
+
+Trust batteries have been segmented before, in several countries and
+data sources:
+
+\vspace{0.5em}
+
+\begin{itemize}\itemsep4pt
+  \item An Australian national survey recovered four trust classes, from the largely distrusting through the unsure to the broadly trusting.
+  \item Work on Italian regional data used a latent class measure of trust in others and trust in institutions to map a divide more complex than the usual north and south split.
+  \item German civic institution data yielded profiles that separate confidence in courts, police, and media from confidence in political institutions.
+\end{itemize}
+
+\vspace{0.6em}
+
+Two findings recur, and both appear in our results: \textbf{trust is not
+one dimension}, and a substantial group trusts some institutions while
+rejecting others.
+
+\vspace{0.4em}
+
+\begin{center}
+\small What these studies generally do not report is a design-based interval on any of those group sizes.
+\end{center}
+
+\note{Optional depth. The value is showing that our five-segment structure is consistent with prior work rather than an artifact. The closing line is the contribution, stated without overclaiming.}
+\end{frame}
+
+\begin{frame}[shrink]{The problem: trust is a pattern, not a score}
+\phantomsection\label{the-problem-trust-is-a-pattern-not-a-score}
+\kicker{motivation}
+
+\small
+
+The standard move with a trust battery is to sum or average it into a
+scale.
+
+\vspace{0.4em}
+
+That assumes everyone who scores a 4 got there the same way. In
+AmericasBarometer 2023, Mexico they did not:
+
+\vspace{0.5em}
+
+\begin{columns}[T]
+\begin{column}{0.47\textwidth}
+\colorbox{vteal!12}{\parbox{0.95\textwidth}{\small
+\textbf{Two respondents, same average}
+
+\vspace{0.3em}
+One trusts the courts and the auditor, distrusts the president.
+
+\vspace{0.3em}
+One trusts the president and the military, distrusts parties and police.}}
+\end{column}
+\begin{column}{0.47\textwidth}
+\small
+A scale calls them identical.
+
+\vspace{0.5em}
+They are not the same people, they do not respond to the same messages, and they will not move the same way.
+
+\vspace{0.5em}
+\textbf{Latent class analysis recovers the configuration instead of averaging it away.}
+\end{column}
+\end{columns}
+
+\note{The hook for this audience. Everyone has summed a battery. Do not attack the practice, show what it hides.}
+\end{frame}
+
+\begin{frame}[shrink]{Why not k-means?}
+\phantomsection\label{why-not-k-means}
+\kicker{algorithm versus model}
+
+\footnotesize
+
+\begin{longtable}[]{@{}
+  >{\raggedright\arraybackslash}p{(\columnwidth - 4\tabcolsep) * \real{0.3333}}
+  >{\raggedright\arraybackslash}p{(\columnwidth - 4\tabcolsep) * \real{0.3333}}
+  >{\raggedright\arraybackslash}p{(\columnwidth - 4\tabcolsep) * \real{0.3333}}@{}}
+\toprule\noalign{}
+\begin{minipage}[b]{\linewidth}\raggedright
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+k-means
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+Latent class analysis
+\end{minipage} \\
+\midrule\noalign{}
+\endhead
+What it is & An algorithm that partitions this sample & A statistical
+model of the population \\
+Requires & A distance you choose, usually Euclidean & A likelihood the
+data imply \\
+Number of groups & Elbow or silhouette, both heuristics & AIC, BIC,
+entropy: comparable fit \\
+Assignment & Hard. Everyone gets exactly one label & A posterior
+probability per person \\
+Survey weights & No principled route & Enter the likelihood directly \\
+What you can report & Shares in this file & Population shares with
+intervals \\
+\bottomrule\noalign{}
+\end{longtable}
+
+\vspace{0.5em}
+
+\begin{columns}[T]
+\begin{column}{0.62\textwidth}
+\scriptsize
+\textbf{Three specific failures on these data}
+\begin{itemize}\itemsep1pt
+  \item Euclidean distance assumes the gap from 1 to 2 equals the gap from 6 to 7. Nothing in a trust item justifies that.
+  \item Hard assignment cannot measure its own error, so the classification correction on slide 17 is impossible in principle.
+  \item A cluster share describes the respondents in the file, not the country.
+\end{itemize}
+\end{column}
+\begin{column}{0.35\textwidth}
+\vspace{0.6em}
+\colorbox{vteal!15}{\parbox{0.95\textwidth}{\scriptsize
+k-means is a fine exploratory tool. The objection is to reporting a cluster share as a population estimate.}}
+\end{column}
+\end{columns}
+
+\note{Do not read the table. Land two things: distance on ordinal answers is arbitrary, and k-means cannot quantify its own assignment error so the resulting bias is invisible. Close with the fairness line so the people who run k-means weekly stay with you.}
+\end{frame}
+
+\begin{frame}[shrink]{What the model estimates}
+\phantomsection\label{what-the-model-estimates}
+\kicker{method, part one}
+
+\small
+
+Each respondent belongs to one unobserved segment. Within a segment,
+items are answered independently:
+
+\[
+P(\mathbf{y}_i) \;=\; \sum_{k=1}^{K} \underbrace{\pi_k}_{\text{segment share}} \prod_{j=1}^{J} \underbrace{\rho_{j\,y_{ij}\,k}}_{\substack{\text{P(answer} \mid \text{segment)}}}
+\]
+
+\vspace{0.4em}
+
+\begin{columns}[T]
+\begin{column}{0.48\textwidth}
+\textbf{What we get out}
+\begin{itemize}\itemsep2pt
+  \item How large each segment is in the population
+  \item The full response profile that defines it
+  \item Each respondent's probability of belonging
+\end{itemize}
+\end{column}
+\begin{column}{0.48\textwidth}
+\textbf{What it costs}
+\begin{itemize}\itemsep2pt
+  \item The number of segments is a judgment, not an output
+  \item Local independence is an assumption we have to check
+\end{itemize}
+\end{column}
+\end{columns}
+
+\note{Do not read the equation. Point at the two braces: a share and a response profile. Everything else is about estimating those two honestly under a complex design.}
+\end{frame}
+
+\begin{frame}[shrink]{The assumption, and how we check it}
+\phantomsection\label{the-assumption-and-how-we-check-it}
+\kicker{local independence}
+
+\small
+
+The model says: once you know a respondent's segment, their answers to
+any two items are unrelated. All the correlation between items is
+explained by segment membership.
+
+\vspace{0.5em}
+
+If two items stay correlated inside a segment, the model is missing
+something. We rank every pair by that residual association:
+
+\phantomsection\label{tbl-bvr}
+\begin{longtable}[]{@{}llr@{}}
+\toprule\noalign{}
+Item A & Item B & Residual association \\
+\midrule\noalign{}
+\endhead
+public\_ministry & auditor & 5.7 \\
+armed\_forces & legislature & 5.5 \\
+justice\_system & supreme\_court & 3.2 \\
+police & political\_parties & 2.8 \\
+\bottomrule\noalign{}
+\end{longtable}
+
+\footnotesize
+
+The top pairs are institutionally adjacent, two audit and prosecution
+bodies, and two national bodies. We report this as a ranked caution, not
+a test: under a weighted likelihood there is no valid reference
+distribution, so an absolute cutoff borrowed from simple random sampling
+would be misleading.
+
+\note{Optional but strong with a methods-literate audience. The honest note is that we decline to compute a p-value we would not be able to defend.}
+\end{frame}
+
+\begin{frame}[fragile,shrink]{Why this needed building}
+\phantomsection\label{why-this-needed-building}
+\kicker{the tooling gap}
+
+\footnotesize
+
+\begin{longtable}[]{@{}lccc@{}}
+\toprule\noalign{}
+Tool & Weighted likelihood & Design-based variance & Open \\
+\midrule\noalign{}
+\endhead
+\texttt{poLCA} (R) & no & no & yes \\
+\texttt{survey} (R) & n/a, no mixture models & yes & yes \\
+Mplus, Latent GOLD & yes & linearization & no \\
+\texttt{baysc} (R) & yes, Bayesian & sandwich adjustment & yes \\
+\textbf{This pipeline} & \textbf{yes} & \textbf{replicate (JKn)} &
+\textbf{yes} \\
+\bottomrule\noalign{}
+\end{longtable}
+
+\vspace{0.7em}
+
+\small
+
+No open frequentist implementation carried a weighted likelihood,
+design-consistent variance, classification-error correction, and a
+labelled analyst data product end to end. So the estimation core, the
+variance machinery, and the profiling correction are custom, and every
+one of them is validated against a reference implementation.
+
+\note{Be fair to the alternatives. Mplus and Latent GOLD do this well and cost money; baysc is an excellent Bayesian counterpart. The gap is specific, not a claim that nobody solved segmentation.}
+\end{frame}
+
+\begin{frame}[shrink]{The method, in four moves}
+\phantomsection\label{the-method-in-four-moves}
+\kicker{method, part two}
+
+\footnotesize
+
+\begin{columns}[T]
+\begin{column}{0.48\textwidth}
+\textbf{1. Weight the likelihood}
+
+Every respondent contributes in proportion to the population they represent.
+$$\ell_w = \sum_i w_i \log P(\mathbf{y}_i)$$
+
+\vspace{0.5em}
+\textbf{2. Calibrate the criteria}
+
+Base weights do not sum to the sample size, so fit statistics are rescaled before being compared to a sample-size penalty.
+\end{column}
+\begin{column}{0.48\textwidth}
+\textbf{3. Replicate the variance}
+
+A weighted likelihood gives no usable information matrix. So the whole model is refit on 130 jackknife replicates built from the real strata and clusters.
+
+\vspace{0.5em}
+\textbf{4. Correct the classification}
+
+Assigning people to segments is imperfect. The BCH three-step correction removes the resulting bias before any demographic comparison.
+\end{column}
+\end{columns}
+
+\vspace{0.5em}
+\begin{center}
+\small Design: 4 strata, 130 PSUs, 126 degrees of freedom for every interval in this deck.
+\end{center}
+
+\note{Move three is the expensive one: refitting 130 times. Move four is the one most analysts have never heard of, and it is where the biggest silent bias lives.}
+\end{frame}
+
+\begin{frame}[shrink]{Move 3: where the uncertainty comes from}
+\phantomsection\label{move-3-where-the-uncertainty-comes-from}
+\kicker{replicate variance}
+
+\small
+
+For an ordinary model, standard errors come from the curvature of the
+likelihood. A \textbf{weighted} likelihood is not a real likelihood, so
+that shortcut is not available and using it anyway understates
+uncertainty.
+
+\vspace{0.5em}
+
+Instead we rebuild the estimate many times:
+
+\begin{enumerate}\itemsep2pt
+  \item Drop one primary sampling unit, reweight its stratum-mates to compensate
+  \item Refit the entire model on those weights
+  \item Repeat for all 130 sampling units
+  \item The spread across those refits is the design-based variance
+\end{enumerate}
+
+\vspace{0.5em}
+
+\footnotesize
+
+Two practical details. Each replicate refit is warm-started from the
+full-sample solution, so the variance measures design uncertainty rather
+than optimizer wandering. And because segment 1 in one replicate need
+not be segment 1 in another, replicates are matched back to the
+full-sample solution before anything is compared.
+
+\note{The label-switching point is worth making: a naive implementation silently differences segment 1 against segment 3 and reports enormous standard errors. This is the kind of bug that does not announce itself.}
+\end{frame}
+
+\begin{frame}[shrink]{Move 4: correcting the classification}
+\phantomsection\label{move-4-correcting-the-classification}
+\kicker{the bch three step}
+
+\footnotesize
+
+Respondents are assigned to their most likely segment, but that
+assignment is imperfect. First we measure exactly how imperfect, using
+weighted posteriors. Rows are true segments, columns are assigned
+segments:
+
+\[
+\mathbf{D} = \begin{bmatrix} 0.94 & 0.04 & 0.02 \\ 0.05 & 0.91 & 0.04 \\ 0.03 & 0.06 & 0.91 \end{bmatrix}
+\qquad D_{ks} = P(\text{assigned } s \mid \text{truly } k)
+\]
+
+\vspace{0.4em}
+
+Row one reads: of everyone truly in segment 1, ninety four percent get
+labelled segment 1 and six percent leak elsewhere. A perfect classifier
+would be the identity matrix.
+
+\vspace{0.4em}
+
+Then we invert it. Each respondent's hard label is replaced by the
+corresponding row of \(\mathbf{D}^{-1}\), which un-mixes the leakage.
+Cross-tabs built on those corrected values are unbiased for true segment
+composition.
+
+\vspace{0.4em}
+
+\begin{center}
+\colorbox{vteal!15}{\parbox{0.9\textwidth}{\centering
+Without this step, every demographic difference is compressed toward the average, and the compression is invisible.}}
+\end{center}
+
+\note{If asked about the negative values: inverting a near-identity matrix produces small negative entries, which is the correction removing contamination. Each respondent's corrected row still sums to one, so shares still add to 100 percent.}
+\end{frame}
+
+\begin{frame}[shrink]{Choosing the number of segments}
+\phantomsection\label{choosing-the-number-of-segments}
+\kicker{results, part one}
+
+\begin{figure}
+
+\centering{
+
+\includegraphics[width=0.98\textwidth,height=\textheight]{lca_briefing_files/figure-beamer/fig-enum-1.pdf}
+
+}
+
+\caption{\label{fig-enum}}
+
+\end{figure}%
+
+\footnotesize
+
+The criterion is nearly flat between five and six segments. We took
+five, on parsimony, sharper classification, and interpretability.
+\textbf{The software never picks this.} The choice is recorded in
+configuration and the full evidence is reported so a reader can weigh
+the alternative.
+
+\note{A credibility slide. Say plainly that an automated choice here is the first thing a reviewer attacks, and that the flat region is reported rather than hidden.}
+\end{frame}
+
+\begin{frame}[shrink]{Five segments, and two of them are
+configurational}
+\phantomsection\label{five-segments-and-two-of-them-are-configurational}
+\kicker{results, part two}
+
+\begin{figure}
+
+\centering{
+
+\includegraphics[width=0.98\textwidth,height=\textheight]{lca_briefing_files/figure-beamer/fig-profiles-1.pdf}
+
+}
+
+\caption{\label{fig-profiles}}
+
+\end{figure}%
+
+\footnotesize
+
+Levels separate three of the segments. The other two cross: same overall
+trust, opposite shape.
+
+\note{Trace one crossover with your finger: the two middle segments swap order between political parties and the president. That crossing is the entire argument against a scale.}
+\end{frame}
+
+\begin{frame}[shrink]{Population size of each segment}
+\phantomsection\label{population-size-of-each-segment}
+\kicker{results, part three}
+
+\begin{figure}
+
+\centering{
+
+\includegraphics[width=0.98\textwidth,height=\textheight]{lca_briefing_files/figure-beamer/fig-prev-1.pdf}
+
+}
+
+\caption{\label{fig-prev}}
+
+\end{figure}%
+
+\footnotesize
+
+Filled points are design-weighted estimates with jackknife intervals.
+Open diamonds are what an unweighted analysis would have reported. In
+this file the weights are nearly constant, so the two agree closely, and
+that is worth saying out loud. \textbf{The intervals are the
+deliverable}: without them, a three point difference between two
+segments looks like a finding.
+
+\note{Honesty pays. The weighting correction is small in this dataset; do not oversell it. The variance correction always matters and is the part people skip.}
+\end{frame}
+
+\begin{frame}[shrink]{Who belongs to which segment}
+\phantomsection\label{who-belongs-to-which-segment}
+\kicker{results, part four}
+
+\begin{figure}
+
+\centering{
+
+\includegraphics[width=0.98\textwidth,height=\textheight]{lca_briefing_files/figure-beamer/fig-demo-1.pdf}
+
+}
+
+\caption{\label{fig-demo}}
+
+\end{figure}%
+
+\footnotesize
+
+Presidential job approval, corrected for classification error.
+Composition is strongly ordered, and the intervals tell you which
+contrasts are real.
+
+\note{Name one clean contrast and one that is not significant. Analysts trust a speaker who names the null results. These are BCH corrected: uncorrected cross-tabs would compress every difference toward the middle.}
+\end{frame}
+
+\begin{frame}[shrink]{Why you can believe the numbers}
+\phantomsection\label{why-you-can-believe-the-numbers}
+\kicker{trust checks}
+
+\small
+
+\textbf{Validation.} Run at equal weights, this estimator and an
+independent published implementation must maximize the same function.
+They agree to 0.00000 on every segment share and 0.00000 on every
+response probability.
+
+\vspace{0.2em}
+
+\begin{itemize}\itemsep3pt
+  \item \textbf{One verdict, one place.} The validation result is written to disk by the estimation script and read by every downstream document, so no two outputs can disagree.
+  \item \textbf{Frozen decisions.} The number of segments and the segment names live in files under version control, not in someone's memory.
+  \item \textbf{Rendered from source.} Every figure in this deck was generated from the stored model objects at compile time. Nothing was pasted.
+\end{itemize}
+
+\vspace{0.4em}
+\begin{center}
+\colorbox{vteal!15}{\parbox{0.9\textwidth}{\centering
+1618 of 1622 respondents received a segment, including 188 who skipped items but answered enough to be scored.}}
+\end{center}
+
+\note{This separates a research prototype from something the shop can depend on. If someone asks about reproducibility, this is the answer.}
+\end{frame}
+
+\begin{frame}[shrink]{Naming the segments is the real bottleneck}
+\phantomsection\label{naming-the-segments-is-the-real-bottleneck}
+\kicker{from measurement to language}
+
+\small
+
+The model returns 5 segments as 455 conditional response probabilities.
+Someone still has to read that grid and say what each segment \emph{is}.
+
+\vspace{0.5em}
+
+\begin{columns}[T]
+\begin{column}{0.48\textwidth}
+\textbf{Done by hand, this is}
+\begin{itemize}\itemsep2pt
+  \item Slow, and it is the step that delays every deliverable
+  \item Inconsistent across analysts and across waves
+  \item Undocumented: the reasoning lives in someone's head
+\end{itemize}
+\end{column}
+\begin{column}{0.48\textwidth}
+\textbf{But it cannot simply be automated}
+\begin{itemize}\itemsep2pt
+  \item A name is an interpretive claim about a population
+  \item A fluent wrong label is worse than no label, because it propagates into every downstream table
+\end{itemize}
+\end{column}
+\end{columns}
+
+\vspace{0.7em}
+
+\begin{center}
+\colorbox{vteal!15}{\parbox{0.93\textwidth}{\centering
+So the model drafts and the analyst decides. The design question is how to constrain the draft so that verifying it is faster than writing it.}}
+\end{center}
+
+\note{Frame this as a measurement problem, not a productivity hack. The payoff sentence is the last one: the goal is not to save the analyst from thinking, it is to make the draft cheap to check.}
+\end{frame}
+
+\begin{frame}[shrink]{Anchor and adjust: the same pattern as my
+capstone}
+\phantomsection\label{anchor-and-adjust-the-same-pattern-as-my-capstone}
+\kicker{architecture}
+
+\small
+
+In my JPSM capstone (Latent-to-Language) the pattern was: fit a
+measurement model, translate its \textbf{conclusions} into natural
+language, then ask the model to adjust from that anchor rather than
+reason from scratch. The same architecture applies here.
+
+\vspace{0.6em}
+
+\begin{center}
+\resizebox{\textwidth}{!}{%
+\begin{tikzpicture}[
+  every node/.style={font=\scriptsize},
+  g/.style={draw=gray!50, fill=gray!8, rounded corners=2pt, minimum width=23mm, minimum height=10mm, align=center},
+  b/.style={draw=vteal, fill=vteal!15, rounded corners=2pt, minimum width=23mm, minimum height=10mm, align=center},
+  a/.style={-{Latex[length=1.8mm]}, gray!65, thick}
+]
+\node[g] (m) at (0,0)    {Fitted LCA\\measurement model};
+\node[b] (t) at (3.1,0)  {Translate\\to language};
+\node[b] (l) at (6.2,0)  {LLM: anchor\\and adjust};
+\node[g] (d) at (9.3,0)  {Draft label\\and description};
+\node[g] (f) at (12.4,0) {Analyst verifies,\\then freezes};
+\draw[a] (m)--(t); \draw[a] (t)--(l); \draw[a] (l)--(d); \draw[a] (d)--(f);
+\end{tikzpicture}}
+\end{center}
+
+\vspace{0.5em}
+
+\footnotesize
+
+\textbf{Translation, not raw parameters.} The model never sees a
+probability matrix. It sees each item's actual question wording and each
+probability against the answer text the respondent saw:
+
+\vspace{0.2em}
+
+\texttt{\scriptsize police "Confianza en la polic\'ia nacional"}
+\textbackslash{}
+\texttt{\scriptsize P(Nada)=0.08, P(2)=0.17, P(3)=0.29, P(4)=0.26, P(5)=0.14, P(6)=0.04, P(Mucho)=0.02}
+
+\note{This is the slide that connects the work to the capstone and shows a method, not a prompt hack. The principle worth stating aloud: feeding raw parameters does not help a language model, but the model's conclusions written as language do.}
+\end{frame}
+
+\begin{frame}[shrink]{The instrument, verbatim}
+\phantomsection\label{the-instrument-verbatim}
+\kicker{persona and rules}
+
+\scriptsize
+
+\colorbox{vpurple!8}{\parbox{0.96\textwidth}{
+\textbf{SYSTEM PROMPT (the persona)}
+
+\vspace{0.3em}
+You are a senior survey methodologist who reads latent class analysis (LCA) measurement models. In this work each latent class is called a SEGMENT; that is a word-choice preference and the statistical object is unchanged. Each segment is described only by its item-response probabilities: for every survey item, the probability that a member of that segment gives each answer. A segment leans toward the answers with high probability. You interpret a segment strictly from these probabilities and the item wording, never from outside assumptions.}}
+
+\vspace{0.5em}
+
+\colorbox{vteal!12}{\parbox{0.96\textwidth}{
+\textbf{RULES} (sent with every call)
+
+\vspace{0.3em}
+1. Use only the response probabilities and item wording shown. The survey context only clarifies what the items refer to; attribute nothing to the segment that the probabilities do not show.
+
+2. Anchor every statement to the high-probability answers of this segment.
+
+3. If the profile is diffuse (no clear high-probability answers), say so.
+
+4. Return only valid JSON: no prose before or after, no markdown fences.}}
+
+\vspace{0.5em}
+
+\footnotesize
+
+Rule 2 is the anchor. Rule 3 is calibrated hedging: the model is
+required to admit when a segment has no clear shape rather than invent
+one. Rule 1 fences the survey context to resolving what an institution
+\emph{is}, so no outside knowledge can enter the interpretation.
+
+\note{Read rule 1 aloud. It is the one that prevents the model from importing what it thinks it knows about Mexican politics into a segment description. Rule 3 is the one reviewers like: the instrument has a defined way to say I do not know.}
+\end{frame}
+
+\begin{frame}[shrink]{What keeps it honest}
+\phantomsection\label{what-keeps-it-honest}
+\kicker{guardrails}
+
+\footnotesize
+
+\begin{columns}[T]
+\begin{column}{0.48\textwidth}
+\textbf{Reproducible by construction}
+\begin{itemize}\itemsep2pt
+  \item Decoding is deterministic: temperature zero, fixed seed
+  \item One isolated call per segment. Joint prompts empirically confused near-neighbour segments
+  \item Output is JSON, validated on arrival, never free prose
+  \item Labels are frozen to a CSV under version control. That file, not a seed, is the reproducibility mechanism
+\end{itemize}
+\end{column}
+\begin{column}{0.48\textwidth}
+\textbf{Audited, not trusted}
+\begin{itemize}\itemsep2pt
+  \item A second bounded call harmonizes labels only when two collide, so most runs make no extra call at all
+  \item The original draft is retained alongside any edit, so every change is visible in the frozen file
+  \item The whole instrument is certified against planted test cases: near-neighbour segments, a deliberately diffuse segment, and a fictional survey context to test for context leakage
+  \item Any edit to the prompt obliges a re-certification run
+\end{itemize}
+\end{column}
+\end{columns}
+
+\vspace{0.6em}
+
+\begin{center}
+\colorbox{vteal!15}{\parbox{0.92\textwidth}{\centering
+The prompt is treated as a measurement instrument: versioned, tested, and re-validated when changed.}}
+\end{center}
+
+\note{The certification harness is the part that distinguishes this from prompt engineering. We plant a segment whose meaning we already know and check the instrument recovers it, including checking that it hedges on the diffuse one and ignores the fictional context.}
+\end{frame}
+
+\begin{frame}[shrink]{Where the line sits}
+\phantomsection\label{where-the-line-sits}
+\kicker{a deliberate boundary}
+
+\small
+
+\begin{columns}[T]
+\begin{column}{0.47\textwidth}
+\colorbox{vgreen!18}{\parbox{0.95\textwidth}{\small
+\textbf{The model drafts}
+\begin{itemize}\itemsep1pt
+  \item A label and description per segment
+  \item From the estimated probabilities only
+  \item Into a file the analyst edits and owns
+\end{itemize}}}
+\end{column}
+\begin{column}{0.47\textwidth}
+\colorbox{vpurple!12}{\parbox{0.95\textwidth}{\small
+\textbf{The model never decides}
+\begin{itemize}\itemsep1pt
+  \item How many segments there are
+  \item Which items to keep or drop
+  \item What the results mean
+  \item Anything that appears as a finding
+\end{itemize}}}
+\end{column}
+\end{columns}
+
+\vspace{0.8em}
+
+\begin{center}
+\colorbox{vteal!15}{\parbox{0.93\textwidth}{\centering
+The rule I would apply to any AI use in our shop: \\
+\textbf{a model may draft configuration, never a decision and never a claim about results.}}}
+\end{center}
+
+\vspace{0.4em}
+
+\footnotesize
+\begin{center}
+Every substantive statement in this briefing rests on the estimated probabilities and their intervals, not on anything a language model wrote.
+\end{center}
+
+\note{This is the slide to slow down on. It generalizes past this project into a usable policy, which is what the room can take away and apply to their own work.}
+\end{frame}
+
+\begin{frame}[shrink]{What I would bring to our work}
+\phantomsection\label{what-i-would-bring-to-our-work}
+\kicker{next steps}
+
+\small
+
+\begin{columns}[T]
+\begin{column}{0.48\textwidth}
+\textbf{Ready now}
+\begin{itemize}\itemsep3pt
+  \item Segmentation of any categorical battery with population estimates and design-based intervals
+  \item Design-based inference review on analyses we already publish
+  \item Reproducible pipelines that render from source
+\end{itemize}
+\end{column}
+\begin{column}{0.48\textwidth}
+\textbf{Where I would like to go next}
+\begin{itemize}\itemsep3pt
+  \item Package the workflow so a new study is a configuration file, not a copied folder
+  \item Extend the profiling correction to trends across waves
+  \item Evaluate language model assistance where it is auditable
+\end{itemize}
+\end{column}
+\end{columns}
+
+\vspace{0.8em}
+
+\begin{center}
+\colorbox{vteal!15}{\parbox{0.92\textwidth}{\centering
+\textbf{The offer:} bring me a battery of categorical items and its design variables, \\ and I will tell you how many groups are really in there, how big they are in the population, and how sure we are.}}
+\end{center}
+
+\note{Close on the offer, not the method. Leave time for questions; this is where the room decides whether to send you work.}
+\end{frame}
+
+\begin{frame}[shrink]{Questions}
+\phantomsection\label{questions}
+\vspace{1.2em}
+
+\begin{center}
+\Large\color{vpurple}\textbf{Thank you}
+\end{center}
+
+\vspace{0.8em}
+
+\small
+\begin{center}
+Methods write-up, code, and the full set of diagnostics available on request.
+
+\vspace{0.5em}
+Backup slides follow: full response profiles, item screening, references.
+\end{center}
+
+\note{Timing target: reach this slide at minute twelve of fifteen, or minute twenty five of thirty for the long version.}
+\end{frame}
+
+\begin{frame}[shrink]{Backup: full response profiles}
+\phantomsection\label{backup-full-response-profiles}
+\begin{figure}
+
+\centering{
+
+\includegraphics[width=1\textwidth,height=\textheight]{lca_briefing_files/figure-beamer/fig-heat-1.pdf}
+
+}
+
+\caption{\label{fig-heat}}
+
+\end{figure}%
+
+\note{Only if asked. This is the complete measurement model behind the summary plot.}
+\end{frame}
+
+\begin{frame}[shrink]{Backup: which items carry the segmentation}
+\phantomsection\label{backup-which-items-carry-the-segmentation}
+\begin{figure}
+
+\centering{
+
+\includegraphics[width=0.96\textwidth,height=\textheight]{lca_briefing_files/figure-beamer/fig-disc-1.pdf}
+
+}
+
+\caption{\label{fig-disc}}
+
+\end{figure}%
+
+\footnotesize
+
+Every item earns its place. The two lowest, the president and the armed
+forces, are the institutions on which otherwise different segments
+agree, which is itself the finding.
+
+\note{If item names do not print, the rho list is unnamed in this build; the modeling document has the labelled figure.}
+\end{frame}
+
+\begin{frame}[shrink]{Backup: references}
+\phantomsection\label{backup-references}
+\kicker{sources cited}
+
+\scriptsize
+
+\textbf{Method}
+
+Goodman, L. (1974). Exploratory latent structure analysis.
+\emph{Biometrika} 61(2).
+
+Patterson, B., Dayton, C. M., and Graubard, B. (2002). Latent class
+analysis of complex sample survey data. \emph{JASA} 97(459), 721 to 728.
+
+Bolck, A., Croon, M., and Hagenaars, J. (2004). Estimating latent
+structure models with categorical variables. \emph{Political Analysis}
+12(1), 3 to 27.
+
+Vermunt, J. (2010). Latent class modeling with covariates: two improved
+three-step approaches. \emph{Political Analysis} 18(4), 450 to 469.
+
+Bakk, Z., Oberski, D., and Vermunt, J. (2014). Relating latent class
+assignments to external variables. \emph{Political Analysis} 22(4), 520
+to 540.
+
+Lumley, T., and Scott, A. (2015). AIC and BIC for modeling with complex
+survey data. \emph{JSSAM} 3(1), 1 to 18.
+
+Linzer, D., and Lewis, J. (2011). poLCA: an R package for polytomous
+variable latent class analysis. \emph{JSS} 42(10).
+
+\textbf{Applications in public opinion}
+
+Breen, R. (2000). Why is support for extreme parties underestimated by
+surveys? \emph{BJPS} 30(2), 375 to 382.
+
+Blaydes, L., and Linzer, D. (2008). The political economy of women's
+support for fundamentalist Islam. \emph{World Politics} 60(4), 576 to
+609.
+
+Oser, J., Hooghe, M., and Marien, S. (2013). Is online participation
+distinct from offline participation? \emph{PRQ} 66(1), 91 to 101.
+
+Bonikowski, B., and DiMaggio, P. (2016). Varieties of American popular
+nationalism. \emph{ASR} 81(5).
+
+Alvarez, R. M., Levin, I., and N\textquotesingle u\textasciitilde nez,
+L. (2017). The four faces of political participation in Argentina.
+\emph{Journal of Politics} 79(4), 1386 to 1402.
+
+\note{Leave up during questions if the room is academic.}
+\end{frame}
+
+
+
+
+\end{document}

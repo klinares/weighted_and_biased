@@ -1,145 +1,555 @@
 ---
-title: "Design-Weighted Latent Class Analysis with Replicate Variance Estimation and Analyst-Controlled Labeling"
-subtitle: "Methodology for the weighted_and_biased pipeline"
+title: "Design-Based Variance Estimation for Latent Class Analysis of Complex Survey Data"
+subtitle: "Methodology and operating documentation for the weighted_and_biased pipeline"
 author: "Kevin Linares"
 date: today
 format:
   pdf:
-    toc: false
+    toc: true
     number-sections: true
     geometry: margin=1in
+    colorlinks: true
 execute:
   echo: false
 ---
 
 # Abstract {.unnumbered}
 
-We describe a pipeline for latent class analysis (LCA) of categorical survey items collected under a stratified, clustered, weighted design. Parameters are estimated by design-weighted pseudo-maximum likelihood via an EM algorithm; model selection statistics are placed on the correct scale by weight normalization; all uncertainty is quantified by stratified delete-one jackknife (JKn) replication; respondents are assigned to classes, called segments throughout, from the posterior over their answered items subject to a minimum-information floor; and segment prevalence within demographic domains is estimated by design-based domain estimation on posterior probabilities. Class naming is delegated to a large language model operating under a certified, frozen prompt instrument with full analyst override. Every estimator below corresponds line for line to the implementation, and the unweighted special case is validated against an independent maximum likelihood implementation.
+Latent class analysis (LCA) applied to data from a stratified, clustered sample raises a variance problem before it raises an estimation problem. Point estimates from a design-weighted pseudo-likelihood are straightforward and available in several packages; standard errors that respect stratification and clustering, carried through from the measurement model to domain estimates and covariate contrasts, are not. This document describes a pipeline built around that gap. Uncertainty at every stage comes from a stratified delete-one-primary-sampling-unit jackknife (JKn), computed on the same replicate weights throughout: the measurement model parameters, the segment prevalences within demographic domains, the bias-adjusted three-step correction, and the contrasts between domain levels. Parameters are estimated by design-weighted pseudo-maximum likelihood via EM; the number of classes, called segments throughout, is always the analyst's decision; respondents are scored from the posterior over their answered items subject to an information floor, and domain estimation runs on that larger scored frame rather than on the estimation sample. Every equation below corresponds to a specific line of the implementation, and the unweighted special case is validated at runtime against an independent maximum likelihood implementation. The pipeline is configured through a single file and is intended to be portable to any survey with released design identifiers.
 
 # Introduction
 
-Latent class analysis identifies unobserved population subgroups from patterns in categorical indicators (Linzer and Lewis 2011). Applied to complex survey data, three requirements arise that standard software does not jointly meet in R: the likelihood must be weighted so that estimates describe the population rather than the achieved sample (Patterson, Dayton, and Graubard 2002); model selection statistics must account for the weighting (Lumley and Scott 2015); and variance estimation must respect stratification and clustering, for which no usable information matrix exists under a pseudo-likelihood. The closest existing software, the `baysc` package (Wu et al. 2024; JOSS 2026, 11(119), doi:10.21105/joss.08382), fits the same weighted objective in a Bayesian pseudo-posterior with a sandwich-based variance adjustment; the present pipeline is its frequentist counterpart, carrying replicate-based variance through to domain estimation, prediction, and a labelled data product for downstream analysts.
+The motivating problem is not that latent class models are hard to fit on survey data. It is that fitting them correctly and then reporting honest uncertainty are different tasks, and the second one is where available software runs out.
 
-# The model
+Consider what a complete analysis requires. The measurement model must be estimated so that its parameters describe the population rather than the achieved sample, which means weighting the likelihood. Model selection statistics must be placed on a scale where the log-likelihood and the sample-size penalty are commensurable, which weighting disturbs. Standard errors must account for stratification and clustering. Segment membership must be related to covariates, which introduces a classification-error bias that has its own correction, and that correction has its own variance. And the resulting assignment must be delivered to downstream analysts in a form that does not invite them to reintroduce the bias the correction removed.
 
-Let $\mathbf{y}_i = (y_{i1}, \dots, y_{iJ})$ denote respondent $i$'s responses to $J$ nominal items, item $j$ having $C_j$ categories. With $K$ latent segments, prevalences $\pi_k$, and conditional response probabilities $\rho_{jck} = P(y_{ij} = c \mid k)$,
+The first of these is solved. The rest are solved individually in the literature and jointly nowhere in R.
+
+This pipeline addresses that. Its organizing commitment is that **one replicate design generates every standard error in the analysis**. The same JKn replicate weights that produce the interval on a conditional response probability produce the interval on a domain prevalence, the standard error of a contrast between two demographic levels, and the variance of the bias-adjusted three-step estimator. Nothing is computed under an independence assumption at any stage, and nothing is left to a delta-method approximation that has not been checked against the replicates.
+
+A secondary commitment is diagnostic. The pipeline reports design effects for every profiling variable against a simple random sample benchmark, because those numbers do two jobs at once: they tell the reader what the design costs, and they check the design specification itself. A variable that is constant within a sampling unit must have a design effect equal to the mean cluster size. If it does, the cluster identifier is right and the replicate machinery is computing what it should. That is a stronger validation of a variance implementation than any amount of prose.
+
+## What this document is
+
+Two things at once, by design. Sections 2 through 11 are a methods paper: every estimator stated, derived where the derivation is short and load-bearing, and cited where it is not. Section 12 is operating documentation: how to point the pipeline at a new survey, what must be edited, what is checked automatically, and what fails loudly rather than silently. The two audiences overlap more than they differ, and separating them into two documents would guarantee that one goes stale.
+
+# Background
+
+## Latent class analysis
+
+The latent class model treats a set of categorical indicators as conditionally independent given membership in one of a small number of unobserved classes (Lazarsfeld and Henry 1968; Goodman 1974). Identification, estimation by EM (Dempster, Laird, and Rubin 1977), and the interpretation of class-conditional response probabilities are standard, and the model is implemented for independent samples in several R packages, of which `poLCA` (Linzer and Lewis 2011) is the most widely used.
+
+Two features of the model matter for everything below. First, the likelihood is a finite mixture and is therefore invariant to permutation of the class labels, so any two fits must be aligned before they can be compared. Second, the conditional independence assumption, called local independence, is load-bearing: it is what makes the model parsimonious, what makes scoring partially observed respondents legitimate, and what fails first when the model is misspecified.
+
+## Latent class analysis under complex sampling
+
+Patterson, Dayton, and Graubard (2002) established the design-weighted approach: maximize a pseudo-likelihood in which each respondent's log-likelihood contribution is multiplied by that respondent's sampling weight. The paper appeared with published commentary, including Vermunt's, and the resulting exchange framed the two strategies that persist today, namely weighting inside the likelihood versus post-hoc adjustment of unweighted estimates.
+
+Vermunt and Magidson (2007) developed the maximum-likelihood treatment of sampling weights in latent class analysis in detail, including the effect of weight scaling on standard errors, and this is the reference that most directly describes what the estimation step of this pipeline does. Asparouhov (2005) treats sampling weights in latent variable models more generally and is the reference behind the corresponding Mplus implementation. Wedel, ter Hofstede, and Steenkamp (1998) developed a related weighted mixture approach in the marketing segmentation literature. Rao and Thomas (1988) is the older and broader treatment of categorical data analysis under complex sampling, and remains the right starting point for why naive chi-square statistics fail on clustered data.
+
+The Bayesian branch is more recent and more active. Savitsky and Toth (2016) established the pseudo-posterior approach that plugs sampling weights into a Bayesian likelihood, and Wu, Williams, Savitsky, and Stephenson (2024) developed weighted overfitted latent class analysis on that foundation, with a post-hoc variance adjustment that repairs the well-known understatement of uncertainty in weighted pseudo-posteriors. Their `baysc` package implements it. Section 11.3 discusses the relationship between that work and this pipeline.
+
+## Variance estimation for complex surveys
+
+Two families are available. Linearization, following Binder (1983), expands the estimating equations around the truth and computes a sandwich variance; it is the approach used by Mplus and Stata under survey estimation and is design-consistent. Replication, in which the estimator is recomputed on systematically perturbed sets of weights and the variance read off the spread of those recomputations, is described comprehensively in Wolter (2007), reviewed in Rust and Rao (1996), and implemented in R by the `survey` package (Lumley 2004, 2010).
+
+It is not correct to say that a pseudo-likelihood admits no information matrix. It does, and Binder-type sandwich variance for pseudo-maximum-likelihood estimators is standard. Replication is a choice here, not a necessity, and it is made for three reasons specific to this problem. First, the parameter vector is large: with $J$ items of $C$ categories and $K$ segments, the model carries $(K-1) + K\sum_j(C_j-1)$ free parameters, which reaches several hundred in routine applications, and the linearized sandwich requires inverting an information matrix of that dimension when many parameters sit near the boundary. Patterson, Dayton, and Graubard's own difficulties with matrix inversion in high-dimensional sparse settings, noted by Wu et al. (2024), are the documented version of this problem. Second, replication propagates without rederivation: once the replicate weights exist, any statistic computed from the data, including the classification error matrix of Section 9.2 and the contrasts of Section 9.3, inherits a design-based variance by recomputation. A linearization approach would require a fresh delta-method derivation at each stage. Third, replication makes the design specification auditable, because a misspecified cluster identifier shows up immediately in the design effects.
+
+The specific replication scheme used here is the stratified delete-one-PSU jackknife, denoted JKn in the `survey` package.
+
+## Relating class membership to external variables
+
+Assigning each respondent to their most likely class and then cross-tabulating that assignment against covariates is the intuitive procedure and it is biased. Bolck, Croon, and Hagenaars (2004) showed that this three-step approach systematically underestimates the association between covariates and class membership, and proposed a correction, now universally called BCH, that reweights the assignments by the inverse of the classification error matrix. Vermunt (2010) extended the correction to continuous covariates, showed that it amounts to maximizing a weighted log-likelihood for clustered data, and, importantly for this pipeline, showed that it can be combined with complex-sampling variance estimation to obtain correct tests. Vermunt's paper also documents the consequence of not doing so: BCH point estimates paired with uncorrected variances produce p-values that are far too small. Bakk, Tekle, and Vermunt (2013) extended the family further and compared the available bias-adjusted approaches.
+
+The direction of the bias is what makes this tractable in practice. Attenuation from modal assignment always pulls estimates toward the marginal distribution, so it always understates differences between groups. A difference that survives modal assignment is therefore real, while a null under modal assignment may be a genuine difference that classification error erased. This asymmetry, developed in Section 9.4, is the basis for the pipeline's recommendation about which estimator to report.
+
+## Model selection
+
+The number of classes is not identified by the data in any automatic sense. Nylund, Asparouhov, and Muthen (2007) is the standard simulation study of the available criteria for independent samples, and found the bootstrap likelihood ratio test to perform best, with BIC the best of the information criteria. Neither result transfers cleanly to a design-weighted pseudo-likelihood on a clustered sample, for reasons given in Section 7. Lumley and Scott (2015) develop information criteria for complex survey data and are the reference for why a naive BIC misbehaves under weighting. Celeux and Soromenho (1996) introduced the entropy criterion used here as a classification-sharpness index rather than a selection rule.
+
+## Local dependence
+
+Bivariate residuals are the standard diagnostic for the local independence assumption. Oberski, van Kollenburg, and Vermunt (2013) evaluated three methods for detecting local dependence in binary latent class models and found that the naive chi-square reference distribution is already wrong in the unweighted independent-sample case, recommending bootstrap calibration. Under a design-weighted pseudo-likelihood on a clustered sample there is no valid reference distribution at all, which motivates the change of statistic described in Section 8.2.
+
+# Notation and the measurement model
+
+Let $\mathbf{y}_i = (y_{i1}, \ldots, y_{iJ})$ be respondent $i$'s answers to $J$ categorical items, item $j$ having $C_j$ categories. With $K$ segments, prevalences $\pi_k$, and conditional response probabilities $\rho_{jck} = P(y_{ij} = c \mid X_i = k)$ where $X_i$ denotes latent membership,
 
 $$
-P(\mathbf{y}_i) \;=\; \sum_{k=1}^{K} \pi_k \prod_{j=1}^{J} \rho_{j\,y_{ij}\,k},
-\qquad \sum_{c=1}^{C_j} \rho_{jck} = 1 .
+P(\mathbf{y}_i) = \sum_{k=1}^{K} \pi_k \prod_{j=1}^{J} \rho_{j\,y_{ij}\,k},
+\qquad \sum_{k=1}^{K}\pi_k = 1, \qquad \sum_{c=1}^{C_j} \rho_{jck} = 1 .
 $$
 
-Conditional independence of items given segment membership (local independence) is the load-bearing assumption; Sections 6 and 8 respectively test where it strains and exploit it for prediction.
+The product over $j$ is local independence: conditional on segment, items are independent. The model dimension is
 
-# Design-weighted pseudo-maximum likelihood
-
-Under a complex design with base weights $w_i$, estimation maximizes the pseudo-log-likelihood
-
-$$
-\ell_w(\boldsymbol\theta) \;=\; \sum_{i=1}^{n} w_i \,
-\log\!\Big( \sum_{k=1}^{K} \pi_k \prod_{j=1}^{J} \rho_{j\,y_{ij}\,k} \Big),
-$$
-
-the standard device for LCA under complex sampling (Patterson, Dayton, and Graubard 2002). The EM algorithm (Dempster, Laird, and Rubin 1977) alternates:
-
-E-step: posterior membership probabilities, computed with the log-sum-exp device for numerical stability,
-$$
-p_{ik} \;=\; \frac{\pi_k \prod_j \rho_{j\,y_{ij}\,k}}
-{\sum_{l} \pi_l \prod_j \rho_{j\,y_{ij}\,l}} .
-$$
-
-M-step: weights enter every sufficient statistic,
-$$
-\hat\pi_k = \frac{\sum_i w_i\, p_{ik}}{\sum_i w_i}, \qquad
-\hat\rho_{jck} = \frac{\sum_i w_i\, p_{ik}\, \mathbf{1}(y_{ij} = c)}
-{\sum_i w_i\, p_{ik}} .
-$$
-
-Iteration stops when $|\Delta \ell_w| < \varepsilon\,(|\ell_w| + 1)$ with $\varepsilon = 10^{-8}$, capped at 800 iterations. Because the pseudo-likelihood for finite mixtures can be multimodal with near-tied optima, each candidate model is fit from many random starts with deterministic seeding, and the reported solution is the best mode found; this claim discipline is stated rather than hidden. Point estimates are invariant to the scale of the weights.
-
-# Model selection
-
-Information criteria compare the maximized log-likelihood against a sample-size penalty, and the two must sit on the same scale. Base weights rarely sum to $n$; because $\ell_w$ is linear in the weights, multiplying it by $n / \sum_i w_i$ is exactly equivalent to fitting with weights rescaled to sum to $n$, leaving point estimates untouched and calibrating only model selection (Lumley and Scott 2015 develop the general design-based treatment; the sum-to-$n$ convention matches Mplus's default normalization, making criteria comparable across software). With $\ell^{*}_w = \ell_w \cdot n / \sum_i w_i$ and model dimension
 $$
 d_K = (K - 1) + K \sum_{j=1}^{J} (C_j - 1),
 $$
-the pipeline reports $\mathrm{BIC} = -2\ell^{*}_w + d_K \log n$ and $\mathrm{AIC} = -2\ell^{*}_w + 2 d_K$, alongside relative entropy
-$$
-R^2_E \;=\; 1 - \frac{-\sum_{i,k} p_{ik} \log p_{ik}}{\,n \log K\,},
-$$
-which indexes classification sharpness. The bootstrapped likelihood ratio test is deliberately omitted: its parametric bootstrap presumes independent observations, which fails under a design-weighted pseudo-likelihood on a clustered sample, matching the equivalent restriction in Mplus under complex-design analysis. The number of segments is never selected automatically; the analyst chooses $K$ by iterating over these statistics and the diagnostics of Section 6, and fixes it in configuration.
 
-# Variance estimation
+one free parameter per prevalence beyond the last, and $C_j - 1$ free conditional probabilities per item per segment. This quantity appears in the information criteria of Section 7 and is worth computing before an analysis begins: it grows linearly in $K$ with slope $\sum_j (C_j - 1)$, so an item battery with many response categories becomes expensive very quickly. Thirteen seven-category items at $K=5$ carry 394 free parameters; ten four-category items at $K=5$ carry 154.
 
-A pseudo-likelihood provides no usable information matrix, so all uncertainty statements come from stratified delete-one-PSU jackknife (JKn) replication (Wolter 2007; Lumley 2004). With $n_h$ PSUs in stratum $h$, deleting PSU $j$ of stratum $h$ and reweighting its stratum-mates by $n_h/(n_h - 1)$ yields replicate estimate $\hat\theta_{(hj)}$, and
+Design quantities are as follows. Respondent $i$ carries base weight $w_i$, belongs to primary sampling unit (PSU, or cluster) $u_i$, which is nested in stratum $h_i$. Stratum $h$ contains $n_h$ PSUs. The achieved sample size is $n$ and the Kish effective sample size is
+
 $$
-\widehat{V}(\hat\theta) \;=\; \sum_{h} \frac{n_h - 1}{n_h}
-\sum_{j=1}^{n_h} \big( \hat\theta_{(hj)} - \hat\theta \big)^2 .
+n_{\mathrm{eff}} = \frac{\left(\sum_i w_i\right)^2}{\sum_i w_i^2},
 $$
-Replicate refits are warm-started from the full-sample solution, so the resulting variance is within-mode by construction; it carries design variance, not uncertainty about mode selection. Intervals for $\pi_k$ and $\rho_{jck}$ are Wald on the probability scale, truncated to $[0,1]$; the domain estimates of Section 9 instead use logit-scale intervals, which behave better near boundaries where domain prevalences often sit.
 
-# Model-fit diagnostics
+which equals $n$ when all weights are equal and falls as weight variation increases (Kish 1965).
 
-Item discrimination summarizes how much item $j$ separates the segments as the mean, over segment pairs, of the total variation distance between their response distributions:
+# Design-based variance estimation
+
+This section is the pipeline's reason for existing, so it comes before estimation rather than after it.
+
+## The stratified jackknife
+
+The JKn scheme forms one replicate for each PSU in the sample. To form the replicate that deletes PSU $j$ of stratum $h$, respondents in that PSU receive weight zero, respondents in the other PSUs of stratum $h$ have their weights multiplied by $n_h / (n_h - 1)$, and respondents outside stratum $h$ are unchanged. Writing $\hat\theta_{(hj)}$ for the estimator recomputed on those weights and $\hat\theta$ for the full-sample estimator, the variance estimator is
+
 $$
-D_j \;=\; \frac{2}{K(K-1)} \sum_{k < l} \frac{1}{2} \sum_{c=1}^{C_j}
-\big| \rho_{jck} - \rho_{jcl} \big| .
+\widehat{V}(\hat\theta) = \sum_{h} \frac{n_h - 1}{n_h}
+\sum_{j=1}^{n_h} \left( \hat\theta_{(hj)} - \hat\theta \right)^{2} .
 $$
-$D_j = 0$ means every segment answers item $j$ identically (a removal candidate for a sensitivity refit); values near 1 indicate sharp separation.
 
-Local independence is probed pairwise with a bivariate residual (BVR). For items $a, b$, let $\widehat{P}_{ab}(c,d)$ be the design-weighted observed proportion of the joint response $(c,d)$ and $\Pi_{ab} = \boldsymbol\rho_a \operatorname{diag}(\boldsymbol\pi)\, \boldsymbol\rho_b^{\top}$ the model-implied joint distribution. The statistic
+The factor $(n_h - 1)/n_h$ compensates for the fact that deleting one of $n_h$ PSUs perturbs the estimate less than resampling would, and it is the scheme's only tuning-free ingredient. For a vector-valued $\hat\theta$ the same expression with the square replaced by an outer product gives the full covariance matrix,
+
 $$
-\mathrm{BVR}_{ab} \;=\; \frac{1}{(C_a - 1)(C_b - 1)}
-\; n \sum_{c,d} \frac{\big( \widehat{P}_{ab}(c,d) - \Pi_{ab}(c,d) \big)^2}{\Pi_{ab}(c,d)}
+\widehat{\mathbf{V}}(\hat{\boldsymbol\theta}) = \sum_{h} \frac{n_h - 1}{n_h}
+\sum_{j=1}^{n_h} \left( \hat{\boldsymbol\theta}_{(hj)} - \hat{\boldsymbol\theta} \right)
+\left( \hat{\boldsymbol\theta}_{(hj)} - \hat{\boldsymbol\theta} \right)^{\top},
 $$
-is a Pearson-type residual per degree of freedom. In unweighted maximum likelihood settings its null distribution is already not chi-square and bootstrap calibration is advised (Oberski, van Kollenburg, and Vermunt 2013); under weighting and pseudo-likelihood no reference distribution is valid, so the pipeline reports BVR strictly as a descriptive ranking of the item pairs the model explains least well, with large persistent values arguing for item removal, merging, or $K+1$.
 
-# Validation against an independent implementation
+and the off-diagonal entries are what make the contrasts of Section 9.3 possible.
 
-At unit weights, $\ell_w$ reduces to the ordinary log-likelihood, so the weighted EM and `poLCA` (Linzer and Lewis 2011) maximize the same function and must agree up to optimizer tolerance and mode selection. The pipeline enforces this as a runtime check: the unit-weight EM solution is aligned to the `poLCA` solution by Hungarian matching on response profiles, maximum absolute gaps in prevalences and conditional probabilities are printed with a verdict, and, where the verdict flags a gap, comparison of the two log-likelihoods separates flat-ridge drift under the stopping rule (equal log-likelihoods), an inferior `poLCA` mode (ours higher), and an inferior EM mode calling for more starts (theirs higher). The same reasoning positions the pipeline against Mplus (TYPE = MIXTURE COMPLEX) and Stata (`gsem` under `svy`): identical objective and weight convention imply matching point estimates and criteria up to mode selection, with linearization rather than replication standard errors, both design-consistent.
+The degrees of freedom available for a $t$ reference are the number of PSUs minus the number of strata. Every interval in the pipeline uses $t_{0.975,\,\mathrm{df}}$ with that value rather than a normal quantile.
 
-# Segment assignment
+## Implementation
 
-Membership is assigned from the posterior evaluated at the fitted parameters. Local independence makes assignment for item-partial respondents honest: a missing item drops out of the within-segment product, so for respondent $i$ with answered set $A_i$,
+Replicate weights are constructed by `survey::as.svrepdesign(type = "JKn")` from a design declared with the stratum, PSU, and weight variables and `nest = TRUE`. The pipeline then computes the variance directly rather than through `withReplicates`, because the statistic of interest requires a full EM refit per replicate and the loop is the dominant cost:
+
 $$
-p_{ik}^{\mathrm{obs}} \;=\;
+\widehat{\mathbf{V}} = s \sum_{r} a_r
+\left( \hat{\boldsymbol\theta}_{(r)} - \hat{\boldsymbol\theta} \right)
+\left( \hat{\boldsymbol\theta}_{(r)} - \hat{\boldsymbol\theta} \right)^{\top},
+$$
+
+where $a_r$ are the replicate scale factors and $s$ the overall scale supplied by the design object; for JKn, $a_r = (n_{h(r)} - 1)/n_{h(r)}$ and $s = 1$, recovering the expression above exactly. Replicates are evaluated in parallel. The implementation is verified against `survey::svymean` on a cheap statistic before it is trusted on the expensive one.
+
+Replicate refits of the measurement model are warm-started from the full-sample solution and aligned to it by the procedure of Section 6.4. The resulting variance is therefore within-mode: it expresses design variance around the reported solution and not uncertainty about which mode the likelihood surface should have selected.
+
+## Singleton strata
+
+A stratum containing one PSU cannot receive the $n_h/(n_h-1)$ scaling. The `survey.lonely.psu` option governs linearization variance and does not change how replicate weights are constructed, so a singleton stratum contributes no variance and the resulting standard errors are anticonservative in exactly the strata where the data are thinnest. The pipeline therefore treats singleton strata as a hard stop, printing the offending strata and requiring the analyst to collapse them in configuration and document the collapse. Note that the check runs on the analysis frame, not the source file, because case exclusions can create singletons that did not exist in the released data.
+
+## Design effects as a specification check
+
+For any estimate the design effect is
+
+$$
+\mathrm{deff} = \frac{\widehat{V}_{\mathrm{design}}}{\widehat{V}_{\mathrm{SRS}}},
+$$
+
+the ratio of the design-based variance to the variance a simple random sample of the same size would give. Effective sample size is $n / \mathrm{deff}$. Under equal cluster sizes $m$ and intracluster correlation $\rho$, the classical approximation is $\mathrm{deff} \approx 1 + (m-1)\rho$ (Kish 1965).
+
+The pipeline reports design effects for every profiling variable, against both the full design and a clustering-only design that drops the strata. Three readings follow, and they are diagnostic rather than descriptive.
+
+**A variable constant within a cluster has $\rho = 1$ and therefore $\mathrm{deff} = m$ exactly.** Any covariate measured at the cluster level rather than the respondent level, such as urbanicity or region in an area sample, must land at the mean cluster size. If it does, the cluster identifier is correctly specified and the replicate machinery is computing the right thing; this is the single most informative check available on a variance implementation. If it does not, the design declaration is wrong. If a respondent-level variable lands there, that variable is effectively a cluster attribute and its apparent precision is much weaker than its sample size suggests.
+
+**A design effect below 1 means variance smaller than random sampling would produce**, which requires within-cluster composition to be controlled rather than sampled. That is the signature of a quota imposed at the final selection stage: if interviewers must fill a fixed number of respondents in a category per sampling point, between-cluster variance for that category is suppressed and the intracluster correlation goes negative. Precision on such variables is a fieldwork artifact rather than information, and those variables should not be used to demonstrate design-based variance estimation.
+
+**If the full-design and clustering-only design effects agree**, stratification is contributing nothing and clustering accounts for the entire departure from simple random sampling. Coarse strata relative to the number of clusters produce this.
+
+# Design-weighted pseudo-maximum likelihood
+
+## The pseudo-likelihood
+
+Estimation maximizes
+
+$$
+\ell_w(\boldsymbol\theta) = \sum_{i=1}^{n} w_i \,
+\log\!\left( \sum_{k=1}^{K} \pi_k \prod_{j=1}^{J} \rho_{j\,y_{ij}\,k} \right),
+$$
+
+the standard device for latent class analysis under complex sampling (Patterson, Dayton, and Graubard 2002; Vermunt and Magidson 2007). This is a pseudo-likelihood rather than a likelihood: it is the sample-based estimate of the census log-likelihood that would be computed if the whole population were observed. Its maximizer is consistent for the census parameter under standard conditions, and it is not the maximizer of any probability model for the observed data, which is why variance must come from the design rather than from the curvature of $\ell_w$ alone.
+
+Point estimates are invariant to the scale of $w$: multiplying every weight by a constant multiplies $\ell_w$ by that constant and leaves the argmax unchanged. Model selection statistics are not invariant, which Section 7 addresses.
+
+## EM
+
+The EM algorithm (Dempster, Laird, and Rubin 1977) alternates two steps.
+
+**E-step.** Posterior membership probabilities at the current parameters,
+
+$$
+p_{ik} = \frac{\pi_k \prod_{j} \rho_{j\,y_{ij}\,k}}
+{\sum_{l=1}^{K} \pi_l \prod_{j} \rho_{j\,y_{ij}\,l}} .
+$$
+
+The implementation accumulates $\log \rho_{j\,y_{ij}\,k}$ across items and applies the log-sum-exp identity, $\log\sum_k \exp(z_k) = z_{\max} + \log\sum_k \exp(z_k - z_{\max})$, before exponentiating. With $J$ items this matters: the raw product underflows to zero for a respondent with an improbable response pattern, and the posterior becomes $0/0$.
+
+A missing item contributes a zero to the log-scale accumulation, which is exactly equivalent to dropping that item from the product. This is the mechanism that makes Section 8 legitimate and is not an approximation.
+
+**M-step.** Weights enter every sufficient statistic:
+
+$$
+\hat\pi_k = \frac{\sum_i w_i\, p_{ik}}{\sum_i w_i}, \qquad
+\hat\rho_{jck} = \frac{\sum_i w_i\, p_{ik}\, \mathbf{1}(y_{ij} = c)}
+{\sum_i w_i\, p_{ik}\,\mathbf{1}(y_{ij} \text{ observed})} .
+$$
+
+The denominator of $\hat\rho$ is the weighted posterior mass in segment $k$ among respondents who answered item $j$, so an item's conditional distribution is estimated from the respondents who answered it. The numerator is floored at a small positive constant before normalization, which prevents a zero cell from making the next E-step undefined and costs nothing at the reported precision.
+
+The weighted log-likelihood is evaluated as $\ell_w = \sum_i w_i \cdot \mathrm{lse}_i$ where $\mathrm{lse}_i$ is the log-sum-exp from the E-step, which is available at no extra cost.
+
+Iteration stops when $|\Delta \ell_w| < \varepsilon(|\ell_w| + 1)$. The pipeline uses $\varepsilon = 10^{-8}$ during enumeration and $10^{-10}$ for the chosen model and for every replicate refit. Matching the replicate tolerance to the point-estimate tolerance is deliberate: the jackknife variance is a sum of squared deviations $\hat\theta_{(r)} - \hat\theta$, so systematically under-converged replicates enter as a bias in every one of those deviations.
+
+## Multimodality and starting values
+
+The pseudo-likelihood for a finite mixture can be multimodal with near-tied optima. Each candidate model is fit from many starting values and the solution with the highest $\ell_w$ is reported; the claim is the best mode found, not the global optimum, and the number of starts should scale with $d_K$.
+
+Starting values are generated in the main session from a deterministic seed sequence and passed to the workers as data. No worker touches the random number generator. This is not a stylistic choice: it is what makes results identical under sequential and parallel execution plans, and under any number of workers. The pipeline asserts this property at runtime by refitting the chosen model sequentially and comparing log-likelihoods.
+
+## Label alignment
+
+Because the likelihood is invariant to permutation of segment labels, two fits of the same model may agree completely and still not be comparable coordinate by coordinate. The pipeline aligns any fit to a reference by minimizing the total squared distance between their response profiles over permutations,
+
+$$
+\hat\sigma = \arg\min_{\sigma \in \mathfrak{S}_K}
+\sum_{k=1}^{K} \left\| \boldsymbol\rho_{\cdot\cdot\sigma(k)}^{\mathrm{fit}} - \boldsymbol\rho_{\cdot\cdot k}^{\mathrm{ref}} \right\|^{2},
+$$
+
+solved exactly by the Hungarian algorithm (Kuhn 1955) rather than by heuristic matching. Alignment is applied to replicate refits before they enter the variance, to the unweighted benchmark before it is compared, and to any comparison across $K$. The label-switching problem in mixture models has a substantial literature of its own (Stephens 2000; Papastamoulis 2014); the situation here is simpler, because warm starting from a common solution means alignment is confirming a correspondence rather than discovering one.
+
+# Model selection
+
+## Placing the criteria on a common scale
+
+An information criterion compares a maximized log-likelihood against a penalty in units of $\log(\text{sample size})$, and the two must sit on the same scale. Base weights rarely sum to $n$. Because $\ell_w$ is linear in the weights, multiplying it by $n / \sum_i w_i$ is exactly equivalent to refitting with weights rescaled to sum to $n$: point estimates are untouched and only the criteria change. Writing $\ell^{*}_w = \ell_w \cdot n / \sum_i w_i$, the pipeline reports
+
+$$
+\mathrm{AIC} = -2\ell^{*}_w + 2 d_K, \qquad
+\mathrm{BIC} = -2\ell^{*}_w + d_K \log n .
+$$
+
+Without this rescaling, weights summing to substantially more than $n$ inflate the log-likelihood relative to the fixed penalty and BIC leans toward too many segments.
+
+## The effective sample size penalty
+
+Rescaling fixes the numerator and leaves the denominator. On a clustered sample the information in $n$ observations is not the information in $n$ independent observations, so $\log n$ overstates the evidentiary hurdle a new parameter must clear. The pipeline therefore reports a second criterion alongside the first,
+
+$$
+\mathrm{BIC}_{\mathrm{eff}} = -2\ell^{*}_w + d_K \log n_{\mathrm{eff}},
+$$
+
+using the Kish effective sample size. Lumley and Scott (2015) develop the general design-based treatment of information criteria and should be consulted for the fuller account; the substitution here is a practical device that makes the design's cost visible in the selection statistics rather than a claim to have implemented their criterion. The two are reported side by side precisely so that a disagreement between them is visible to the analyst rather than hidden by a choice of default. Where they disagree, $\mathrm{BIC}_{\mathrm{eff}}$ is the more appropriate reading on a clustered sample.
+
+Note that with a self-weighting sample the two criteria coincide, since $n_{\mathrm{eff}} = n$ when weights are equal. The effective sample size correction responds to weight variation, not to clustering; a fuller treatment would use a generalized design effect, and the gap between the two criteria here should be read as a lower bound on the design's cost.
+
+## Entropy
+
+Relative entropy indexes how sharply the model classifies. On the weighted scale,
+
+$$
+R^2_E = 1 - \frac{-\sum_{i} w_i \sum_{k} p_{ik} \log p_{ik}}
+{\left(\sum_i w_i\right) \log K} .
+$$
+
+The numerator is the weighted average posterior uncertainty and the denominator is its maximum, attained when every respondent's posterior is uniform over the $K$ segments, so $R^2_E$ runs from 0 at no classification information to 1 at perfect separation. Weighting is not cosmetic here: an unweighted entropy describes the achieved sample's classification sharpness while every other quantity in the analysis describes the population, and it is the value that justifies or fails to justify the treatment of the fitted model as fixed in Section 9.
+
+Following Celeux and Soromenho (1996) and standard practice, entropy is reported as a description of classification quality and is never used to select $K$.
+
+## What is deliberately not reported
+
+The bootstrap likelihood ratio test performs well for independent samples (Nylund, Asparouhov, and Muthen 2007) and is omitted here. Its parametric bootstrap draws new samples of independent observations from the fitted model, which is not the sampling process that generated a stratified clustered sample, so the resulting reference distribution does not apply. Mplus disables the test under complex-design analysis for the same reason. Nothing is gained by reporting a p-value whose null distribution is known to be wrong.
+
+## The analyst decides
+
+The number of segments is never selected automatically. The pipeline renders an enumeration table and stops, and the analyst sets $K$ in configuration and re-renders. Selection is a judgment across the criteria, the entropy, the substantive interpretability of the profiles, and the diagnostics of Section 8, and no scalar summarizes it. This is a design decision rather than a limitation: an automatic rule would produce a number without producing the understanding that makes the number defensible.
+
+# Fit diagnostics
+
+## Item discrimination
+
+How much does item $j$ separate the segments? The pipeline reports the mean, over segment pairs, of the total variation distance between their response distributions on that item:
+
+$$
+D_j = \frac{2}{K(K-1)} \sum_{k < l}
+\frac{1}{2} \sum_{c=1}^{C_j} \left| \rho_{jck} - \rho_{jcl} \right| .
+$$
+
+The inner expression is total variation distance between two discrete distributions, bounded in $[0,1]$, equal to the largest difference in probability the two distributions assign to any event. The leading factor is the reciprocal of the number of pairs, $K(K-1)/2$, so $D_j$ is a mean of quantities each bounded in $[0,1]$ and is itself bounded in $[0,1]$. A value of zero means every segment answers item $j$ identically, making it a removal candidate; values near one mean the item alone nearly determines segment membership.
+
+## Bivariate residuals
+
+Local independence is probed pairwise. For items $a$ and $b$, let $\widehat{P}_{ab}(c,d)$ be the design-weighted observed proportion giving response $c$ to item $a$ and $d$ to item $b$, and let
+
+$$
+\Pi_{ab} = \boldsymbol\rho_a \operatorname{diag}(\boldsymbol\pi)\, \boldsymbol\rho_b^{\top}
+$$
+
+be the model-implied joint distribution, where $\boldsymbol\rho_a$ is the $C_a \times K$ matrix of conditional probabilities for item $a$. The expression is the model's own statement about the pair: condition on segment, multiply the two conditional distributions because the model asserts they are independent given segment, and average over segments weighted by prevalence.
+
+The pipeline reports the total variation distance between observed and implied:
+
+$$
+\mathrm{BVR}_{ab} = \frac{1}{2} \sum_{c,d}
+\left| \widehat{P}_{ab}(c,d) - \Pi_{ab}(c,d) \right| .
+$$
+
+This departs from the Pearson-type statistic conventionally reported, and the reason is that the conventional statistic cannot be interpreted here. Oberski, van Kollenburg, and Vermunt (2013) showed that its null distribution is already not chi-square for unweighted binary data; under design weighting and a pseudo-likelihood on a clustered sample, no reference distribution is valid at all. A statistic with no null distribution is an effect size, and if it is going to be an effect size it should be on an interpretable scale. Total variation distance is bounded in $[0,1]$, is exactly zero under perfect local independence, reads as the largest probability discrepancy over any event in the two-way table, and shares its scale with $D_j$ above. It also removes a numerical failure: the Pearson form divides by the model-implied cell probability, which for a sparse corner of a large two-way table can be arbitrarily small, so a single near-empty cell can dominate the statistic.
+
+Large and persistent bivariate residuals argue for removing an item, merging two items that measure the same thing, or fitting $K+1$ segments.
+
+## Indicator screening
+
+A complementary question is whether each item earns the $K(C_j - 1)$ parameters it costs. For item $j$, compare the fitted model against one in which item $j$ is segment-independent. Under local independence that restricted model factorizes into a latent class model on the remaining items multiplied by item $j$'s marginal distribution, so the restricted maximized log-likelihood is available by refitting on $J-1$ items and adding the weighted marginal log-likelihood of item $j$, and the two models' criteria are directly comparable. The pipeline reports
+
+$$
+\Delta\mathrm{BIC}_j = \mathrm{BIC}(\text{item } j \text{ segment-independent}) - \mathrm{BIC}(\text{full model}),
+$$
+
+on the effective sample size scale, with negative values flagging items whose segment-dependence BIC does not support. This is a ranking under a pseudo-likelihood and not a Bayes factor, so the conventional interpretive thresholds for BIC differences do not apply and are not quoted.
+
+# Segment assignment and scoring
+
+## Scoring partially observed respondents
+
+Local independence makes assignment for item-partial respondents exact rather than approximate. A missing item drops out of the within-segment product, so for respondent $i$ with answered set $A_i$,
+
+$$
+p_{ik}^{\mathrm{obs}} =
 \frac{\pi_k \prod_{j \in A_i} \rho_{j\,y_{ij}\,k}}
-{\sum_l \pi_l \prod_{j \in A_i} \rho_{j\,y_{ij}\,l}},
+{\sum_{l} \pi_l \prod_{j \in A_i} \rho_{j\,y_{ij}\,l}},
 $$
-and the assigned segment is $\arg\max_k p_{ik}^{\mathrm{obs}}$. An information floor $m^{*}$ (configured; default half the items) is enforced: respondents with $|A_i| < m^{*}$ receive no assignment rather than a weakly informed one. The model itself is fit on complete cases only; assignment extends to the preserved full frame, and the exported labelled data record which respondents were assigned.
 
-# Domain profiling on demographics
+and the assigned segment is $\arg\max_k p_{ik}^{\mathrm{obs}}$. This is the exact posterior given what respondent $i$ actually answered, under the model and under the assumption that the pattern of missingness is ignorable given segment.
 
-Segment prevalence within demographic domain $d$ is estimated from soft posteriors,
+An information floor $m^{*}$ is enforced: a respondent answering fewer than $m^{*}$ items receives no assignment rather than a weakly informed one. The pipeline reports mean maximum posterior by number of items answered so that the floor can be set from evidence rather than convention.
+
+## Why scoring precedes domain estimation
+
+The measurement model is estimated on item-complete cases. Scoring then covers every respondent above the floor, which is a larger set, and **all domain estimation runs on that larger scored frame**. This ordering follows the logic of three-step latent class analysis, in which the assignment step covers every respondent it validly can, and it matters substantively rather than cosmetically.
+
+Item nonresponse is rarely random. On an attitude battery it typically correlates with education, age, and other characteristics that are themselves of interest, so restricting domain estimation to complete responders introduces a selection into exactly the composition being estimated. Including them reduces that bias and narrows the intervals. The cost is that respondents scored from fewer items carry flatter posteriors and therefore more classification error than those scored from all items, so the classification error matrix of Section 9.2 is a pooled average over a heterogeneous frame. That is a real approximation, and it is why the assignment quality table by number of items answered is reported rather than buried.
+
+The replicate design is rebuilt on the scored frame, and the singleton stratum check of Section 5.3 runs again there.
+
+# Domain estimation
+
+## Design-based domain estimates
+
+The primary quantity is segment prevalence within demographic domains. Writing $d$ for a level of a demographic variable,
+
 $$
-\hat p_{dk} \;=\; \frac{\sum_{i \in d} w_i\, p_{ik}}{\sum_{i \in d} w_i},
+\hat p_{dk} = \frac{\sum_{i \in d} w_i \,\mathbf{1}(\hat X_i = k)}{\sum_{i \in d} w_i},
 $$
-a design-based domain mean of the posterior probability, with variance from the same JKn replicates. Intervals are formed on the logit scale with the delta-method standard error $\mathrm{se}_{\mathrm{logit}} = \mathrm{se} / \{\hat p (1 - \hat p)\}$ and back-transformed, keeping them inside $[0,1]$. This is a deliberate domain-estimation design, not a bias-adjusted three-step regression; users of R3STEP or BCH should expect agreement in direction and ordering, not magnitude, as the estimands differ. The estimator treats the fitted measurement model as fixed; replicate intervals carry design variance, not parameter uncertainty in $\boldsymbol\pi, \boldsymbol\rho$.
+
+the design-weighted proportion of domain $d$ assigned to segment $k$, with variance from the JKn replicates. In implementation this is `svyby` over the demographic with `svymean` of the segment factor inside each level, so the estimate and its variance come from the same replicate design used everywhere else. Rows sum to one across segments by construction.
+
+This estimator uses hard modal assignment and is therefore attenuated in the sense of Bolck, Croon, and Hagenaars (2004).
+
+## The BCH correction
+
+Let $W_i = \arg\max_k p_{ik}$ denote the modal assignment, treated as an error-prone measurement of true membership $X_i$. Define the design-weighted classification error matrix
+
+$$
+D_{ks} = \widehat{P}(W = s \mid X = k)
+= \frac{\sum_i w_i \, p_{ik}\, \mathbf{1}(W_i = s)}{\sum_i w_i \, p_{ik}} ,
+$$
+
+a $K \times K$ matrix whose rows sum to one. The BCH correction replaces each respondent's hard assignment with row $W_i$ of $D^{-1}$,
+
+$$
+\mathbf{u}_i = \mathbf{e}_{W_i}^{\top} D^{-1},
+$$
+
+and the corrected domain estimate is
+
+$$
+\hat p^{\mathrm{BCH}}_{dk} = \frac{\sum_{i \in d} w_i \, u_{ik}}{\sum_{i \in d} w_i} .
+$$
+
+**Why this works.** For a respondent whose true membership is $m$, the expected value of $\mathbf{u}_i$ is
+
+$$
+\mathbb{E}\left[\mathbf{u}_i \mid X_i = m\right]
+= \sum_{s} P(W = s \mid X = m) \left(D^{-1}\right)_{sk}
+= \left(D D^{-1}\right)_{mk} = \mathbf{1}(m = k),
+$$
+
+so the corrected quantity is unbiased for the indicator of true membership, and its weighted mean within a domain estimates $P(X = k \mid d)$ rather than $P(W = k \mid d)$. Two consequences follow immediately. Entries of $\mathbf{u}_i$ can be negative, which is a property of the correction and not an error. And the corrected prevalences still sum to one across segments, because $D\mathbf{1} = \mathbf{1}$ implies $D^{-1}\mathbf{1} = \mathbf{1}$, so every row of $D^{-1}$ sums to one.
+
+The variance is obtained by recomputing the entire quantity inside each replicate: the posteriors and modal assignments are held at their full-sample values, but $D$ and hence $\mathbf{u}$ are rebuilt from each replicate's weights, so the resulting intervals carry the design variance of the classification table and of the cross-tabulation jointly. Vermunt (2010) is explicit that BCH point estimates paired with uncorrected variances produce p-values that are far too small; recomputing inside the replicates is the direct way to avoid that.
+
+The estimator conditions on the fitted measurement model. Step-one parameter uncertainty in $\boldsymbol\pi$ and $\boldsymbol\rho$ is not propagated, which is the standard treatment and is defensible when entropy is high.
+
+## Contrasts between domain levels
+
+Overlapping intervals are not a test. Because the replicate scheme yields the full covariance matrix, differences between domain levels carry their own standard errors:
+
+$$
+\widehat{\mathrm{Var}}\!\left(\hat p_{dk} - \hat p_{d'k}\right)
+= \widehat{V}_{dd} + \widehat{V}_{d'd'} - 2\widehat{V}_{dd'} ,
+$$
+
+with the covariance term taken from the replicate covariance rather than assumed zero. The pipeline compares every level of a demographic against that variable's reference level, within segment, on the design $t$, with Holm adjustment applied within each demographic variable. The family is deliberately the set of level comparisons for one variable rather than all comparisons at once; a stricter family definition is a one-line change.
+
+## Which estimator to report
+
+Three separate decisions arise and only one is genuinely the analyst's.
+
+**Weighted or unweighted point estimates** is not a choice. Segment prevalence within a demographic group is a descriptive population quantity, and descriptive estimands are weighted. The literature arguing that unweighted estimation can be preferable concerns causal estimands where weighting adds variance without removing bias, and does not apply.
+
+**Design-based or independence-based intervals** is not a choice either. On a stratified clustered sample the independence standard error is wrong and wrong in an unknown direction.
+
+**Modal or BCH** is the real decision, and it has a decision rule. Compute the shift between the two estimators and compare it to the standard error. When the shift is a small fraction of the standard error, the correction is inside noise and the modal estimates should be reported, with the correction noted as a sensitivity check. When it is comparable to or larger than the standard error, the correction is doing real work.
+
+The direction of the bias then determines when that rule can be overridden. Attenuation always pulls toward the marginal, so it always understates group differences. If the claim is that groups differ, modal assignment is conservative and a surviving difference is real. If the claim is that groups do not differ, modal assignment is not safe, because attenuation manufactures null results. **The case for retaining the BCH machinery is that it protects null findings, not positive ones.**
+
+One counterintuitive consequence is worth stating: the case for BCH weakens as sample size falls. Standard errors grow while the classification-error bias stays the same size, so the shift becomes more dominated by noise in smaller samples, not less.
+
+# Validation
+
+## Against an independent implementation
+
+At unit weights the pseudo-likelihood reduces to the ordinary log-likelihood, so the weighted EM and `poLCA` (Linzer and Lewis 2011) maximize the same function and must agree up to optimizer tolerance and mode selection. The pipeline enforces this at runtime: the unit-weight solution is aligned to `poLCA` by Hungarian matching, maximum absolute gaps in prevalences and conditional probabilities are printed with a verdict, and where a gap appears the two log-likelihoods separate the possible causes. Equal log-likelihoods with different parameters indicate drift along a flat ridge under the stopping rule. A higher log-likelihood here indicates an inferior `poLCA` mode. A higher log-likelihood there indicates our own search needs more starts. The pipeline also fits a third candidate by warm-starting its own EM at the `poLCA` solution, so the comparison is between optima rather than between stopping rules.
+
+## Against the design
+
+The design effect table of Section 5.4 is the second validation, and it checks something the first cannot. Agreement with `poLCA` at unit weights confirms the estimation code and says nothing about the variance code. A cluster-constant covariate landing at the mean cluster size confirms that the replicate weights, the stratum and PSU declaration, and the variance formula are jointly correct.
+
+## Relationship to other software
+
+Mplus (`TYPE = MIXTURE COMPLEX`) and Stata (`gsem` under `svy`) maximize the same objective with the same weight convention, so point estimates and information criteria should match up to optimizer tolerance and mode selection. Their standard errors are linearization-based where these are replication-based; both are design-consistent and neither is a correction of the other.
+
+The `baysc` package (Wu, Williams, Savitsky, and Stephenson 2024) is the closest available work, implementing weighted overfitted latent class analysis in a Bayesian pseudo-posterior with a post-hoc variance adjustment. It differs from this pipeline in three respects that matter for choosing between them. It selects the number of classes through an overfitted mixture with a sparsity-inducing prior, where this pipeline requires the analyst to fix $K$. It obtains uncertainty from an adjusted posterior rather than from replicate weights. And being Bayesian, it propagates classification uncertainty through the posterior draws automatically, which makes a BCH-style correction unnecessary in that framework.
+
+At the time of writing, `baysc` is distributed through GitHub rather than CRAN and requires a C++ and Fortran toolchain to build, which places it outside what can be installed in the deployment environment this pipeline serves. CRAN availability is anticipated. When it arrives, `baysc` becomes the natural Bayesian comparator for this work, and the appropriate comparison is not which is correct but whether a frequentist replicate-variance implementation and a Bayesian variance-adjusted one agree on the same data. Until then, this pipeline is the available option in that environment, and that constraint is the practical case for it rather than a claim of methodological superiority.
 
 # LLM-assisted, analyst-controlled labeling
 
-Segment naming is drafted by a large language model under a fixed instrument: a persona and rule set instructing interpretation strictly from the displayed response probabilities and item wording, one isolated call per segment (joint prompts empirically confused near-neighbor segments), an optional survey-context paragraph fenced to referent resolution only, and a collision-gated harmonization pass that may edit labels, never descriptions. Labels follow one rule: a `segment_labels.csv` on disk is used when present and validated against $K$; otherwise the model drafts once and the result is frozen to that file, which the analyst edits to take over naming; the freeze file, not a sampling seed, is the reproducibility mechanism. The instrument is treated as a measurement device: a certification harness plants a known-meaning model, including near-neighbor segments, a diffuse segment, nonresponse-labelled items, and a fictional context, and checks output format, grounding, hedging on diffuse profiles, persona integrity, context-leak fencing, harmonizer properties, and adoption of the segment terminology; any edit to the instrument obliges re-certification. Labels are drafts, verified by the analyst against the conditional-probability profiles before use.
+Segment naming is drafted by a language model under a fixed instrument and is explicitly a convenience with an audited override path, not a measurement claim.
+
+The instrument comprises a persona and rule set directing interpretation strictly from the displayed response probabilities and item wording, one isolated call per segment, an optional survey-context paragraph fenced to referent resolution only, and a collision-gated harmonization pass that may edit labels but never descriptions. Isolation is empirical: joint prompts, in which the model sees all segments at once and must assign names one-to-one, confused near-neighbor segments and allowed a single confusion to corrupt two labels.
+
+Reproducibility rests on a freeze file rather than a sampling seed. When `segment_labels.csv` exists in the output directory it is used and validated against $K$; otherwise the model drafts once and the result is written to that file. Editing the file is how the analyst takes over naming, and deleting it triggers a redraft. A seed would make the draft reproducible only for a fixed model, endpoint, and package version; the file is reproducible unconditionally.
+
+Labels never re-enter estimation. They are display strings attached after every number is computed, so a wrong label is a presentation error and not a statistical one. Analysts are directed to verify each label against its conditional-probability profile before quoting it.
+
+# Operating documentation
+
+## Repository layout
+
+Four files, run in order.
+
+`survey_lca_source.R` is the engine and is never edited per dataset. It holds the weighted EM, Hungarian alignment, the replicate variance routine, the BCH correction, segment scoring, the diagnostics, plotting and table helpers, and the labeling instrument.
+
+`survey_data_config.R` is the only file edited per dataset. It reads the source data, recodes nonresponse, recodes items to consecutive integers, recodes demographics, builds the dictionary and the recode audit, and defines `cfg`.
+
+`survey_lca_modeling.qmd` presents the data, enumerates over $K$, and once $K$ is fixed produces the chosen model, the diagnostics, and the JKn intervals, saving one `.rds` for the second document.
+
+`survey_lca_segments.qmd` reads that file and produces the labels, the design effects, the domain estimates, the contrasts, the scoring, and the labelled data handoff.
+
+## Porting to a new survey
+
+Editing is confined to `survey_data_config.R`. Six things change.
+
+**The file path and the item list.** `item_codes` is a named character vector mapping analysis names to source variable names; the names become the analysis names automatically.
+
+**The nonresponse codes.** `na_codes` lists the values that represent nonresponse. The file must be read with `user_na = TRUE` for these to be visible, since the default converts declared user-missing values to `NA` on read and the codes then never arrive.
+
+**The design variables.** The configuration renames them to fixed names `id`, `strata`, `psu`, `wt`, so nothing downstream varies by dataset. Determining which source variables these are is the single highest-consequence decision in the port: if the stratification variable is wrong, every standard error in both documents is wrong, and nothing else will reveal it.
+
+**The demographic recodes.** One `case_match` per variable, with every observed source label named explicitly and `.default = "UNMATCHED"`. A regular expression scheme is not acceptable here: a pattern that matches a label it was not intended to match will silently misclassify respondents, and a pattern that matches nothing will silently delete them.
+
+**The profiling variable list.** `cfg$aux` selects which demographics drive the domain estimation. Attitudinal variables should be excluded if they are plausibly correlated with the measurement items by construction, since profiling segments on them partly explains the measurement model with itself.
+
+**The configuration block.** `K_range`, `n_starts`, `seed`, the information floor `min_items`, the complete-case switch, output directory, and language model endpoint.
+
+## What is checked automatically
+
+The following stop the render rather than producing a wrong number.
+
+Any demographic source label that no `case_match` arm matched, reported by variable. Any configured column absent from the data. Any stratum containing a single PSU in the analysis frame, reported by stratum. A mismatch between the number of estimated domain quantities and the metadata describing them. A replicate variance routine that disagrees with `survey::svymean` on a reference statistic. A sequential refit that disagrees with the parallel fit. A label file whose row count does not match $K$.
+
+## What must be checked by the analyst
+
+The recode audit table, once per dataset, confirming that each source label became what was intended. The design effect table, confirming that a cluster-constant covariate lands at the mean cluster size and noting which variables fall below one. The unequal weighting effect and weight coefficient of variation, which determine whether weighting is doing anything at all in this file. The enumeration table and profiles, to choose $K$. The assignment quality table by number of items answered, to set the information floor. The drafted labels against their profile panels. And the shift between modal and BCH domain estimates relative to their standard errors, to decide which to report.
+
+## Outputs
+
+An SPSS file carrying the segment assignment with value labels, the posterior probabilities, and the BCH correction weights. The posteriors and correction weights are exported deliberately: a downstream analyst cross-tabulating the modal assignment alone reintroduces exactly the attenuation the correction removes, and the variable label on the segment column says so. Alongside it, CSV files of the measurement model with intervals, the domain estimates under both estimators, and the contrasts.
 
 # Limitations
 
-The pseudo-likelihood can be multimodal with near-tied optima at moderate sample sizes; the pipeline's claim is the best mode found under many seeded starts, and JKn replication expresses within-mode variance only. The domain step conditions on the fitted measurement model. Analysis uses complete cases, with assignment, not imputation, extending results to item-partial respondents above the information floor. Finally, LLM-drafted labels are a convenience with an audited override path, not a measurement claim.
+The pseudo-likelihood can be multimodal with near-tied optima; the claim is the best mode found under many seeded starts, and the replicate variance expresses within-mode variance only.
+
+The domain step conditions on the fitted measurement model and does not propagate step-one parameter uncertainty. This is standard and is defensible at high entropy, but it is an approximation.
+
+The measurement model is fit on item-complete cases while scoring and domain estimation extend to partially observed respondents. Respondents scored from fewer items carry more classification error, and the BCH correction applies a single pooled classification error matrix across that heterogeneous frame.
+
+The information criteria use the Kish effective sample size, which responds to weight variation and not to clustering. On a self-weighting clustered sample the two criteria coincide and neither reflects the design's cost, so the reported gap between them is a lower bound.
+
+Bivariate residuals and the indicator screen are rankings without reference distributions. They order item pairs and items by how poorly the model accounts for them and support no test.
+
+Where a design imposes quotas at the final selection stage, variables controlled by those quotas have design effects below one and standard errors that reflect fieldwork control rather than sampling information. Such variables should not be used to demonstrate design-based variance estimation and their apparent precision should not be reported without comment.
+
+The replicate count equals the number of PSUs, so the replicate covariance matrix has rank at most that number. Individual variances and pairwise covariances remain consistent, which is all the reported quantities require, but a joint Wald test across more dimensions than there are replicates is not available.
+
+Language model labels are drafts with an audited override path. No claim is made about their validity, and no reliability estimate across runs is reported.
 
 # References {.unnumbered}
 
+Asparouhov, T. (2005). Sampling weights in latent variable modeling. *Structural Equation Modeling* 12(3), 411-434.
+
+Bakk, Z., F. B. Tekle, and J. K. Vermunt (2013). Estimating the association between latent class membership and external variables using bias-adjusted three-step approaches. *Sociological Methodology* 43(1), 272-311. doi:10.1177/0081175012470644.
+
+Binder, D. A. (1983). On the variances of asymptotically normal estimators from complex surveys. *International Statistical Review* 51(3), 279-292.
+
+Bolck, A., M. A. Croon, and J. A. Hagenaars (2004). Estimating latent structure models with categorical variables: one-step versus three-step estimators. *Political Analysis* 12(1), 3-27.
+
+Celeux, G., and G. Soromenho (1996). An entropy criterion for assessing the number of clusters in a mixture model. *Journal of Classification* 13(2), 195-212.
+
 Dempster, A. P., N. M. Laird, and D. B. Rubin (1977). Maximum likelihood from incomplete data via the EM algorithm. *Journal of the Royal Statistical Society, Series B* 39(1), 1-38.
 
-Linzer, D. A., and J. B. Lewis (2011). poLCA: An R package for polytomous variable latent class analysis. *Journal of Statistical Software* 42(10), 1-29.
+Goodman, L. A. (1974). Exploratory latent structure analysis using both identifiable and unidentifiable models. *Biometrika* 61(2), 215-231.
+
+Kish, L. (1965). *Survey Sampling*. New York: Wiley.
+
+Kuhn, H. W. (1955). The Hungarian method for the assignment problem. *Naval Research Logistics Quarterly* 2(1-2), 83-97.
+
+Lazarsfeld, P. F., and N. W. Henry (1968). *Latent Structure Analysis*. Boston: Houghton Mifflin.
+
+Linzer, D. A., and J. B. Lewis (2011). poLCA: an R package for polytomous variable latent class analysis. *Journal of Statistical Software* 42(10), 1-29.
 
 Lumley, T. (2004). Analysis of complex survey samples. *Journal of Statistical Software* 9(8), 1-19.
 
+Lumley, T. (2010). *Complex Surveys: A Guide to Analysis Using R*. Hoboken, NJ: Wiley.
+
 Lumley, T., and A. Scott (2015). AIC and BIC for modeling with complex survey data. *Journal of Survey Statistics and Methodology* 3(1), 1-18. doi:10.1093/jssam/smu021.
+
+Nylund, K. L., T. Asparouhov, and B. O. Muthen (2007). Deciding on the number of classes in latent class analysis and growth mixture modeling: a Monte Carlo simulation study. *Structural Equation Modeling* 14(4), 535-569.
 
 Oberski, D. L., G. H. van Kollenburg, and J. K. Vermunt (2013). A Monte Carlo evaluation of three methods to detect local dependence in binary data latent class models. *Advances in Data Analysis and Classification* 7(3), 267-279. doi:10.1007/s11634-013-0146-2.
 
-Patterson, B. H., C. M. Dayton, and B. I. Graubard (2002). Latent class analysis of complex sample survey data: application to dietary data. *Journal of the American Statistical Association* 97(459), 721-728.
+Papastamoulis, P. (2014). Handling the label switching problem in latent class models via the ECR algorithm. *Communications in Statistics: Simulation and Computation* 43(4), 913-927.
 
-Stephenson, B. J. K., et al. (2026). baysc: An R package for Bayesian survey clustering. *Journal of Open Source Software* 11(119). doi:10.21105/joss.08382.
+Patterson, B. H., C. M. Dayton, and B. I. Graubard (2002). Latent class analysis of complex sample survey data: application to dietary data. *Journal of the American Statistical Association* 97(459), 721-728 (with comments and rejoinder, 728-741). doi:10.1198/016214502388618465.
+
+Rao, J. N. K., and D. R. Thomas (1988). The analysis of cross-classified categorical data from complex sample surveys. *Sociological Methodology* 18, 213-269.
+
+Rust, K. F., and J. N. K. Rao (1996). Variance estimation for complex surveys using replication techniques. *Statistical Methods in Medical Research* 5(3), 283-310.
+
+Savitsky, T. D., and D. Toth (2016). Bayesian estimation under informative sampling. *Electronic Journal of Statistics* 10(1), 1677-1708.
+
+Stephens, M. (2000). Dealing with label switching in mixture models. *Journal of the Royal Statistical Society, Series B* 62(4), 795-809.
+
+Vermunt, J. K. (2010). Latent class modeling with covariates: two improved three-step approaches. *Political Analysis* 18(4), 450-469.
+
+Vermunt, J. K., and J. Magidson (2007). Latent class analysis with sampling weights: a maximum-likelihood approach. *Sociological Methods and Research* 36(1), 87-111. doi:10.1177/0049124107301965.
+
+Wedel, M., F. ter Hofstede, and J.-B. E. M. Steenkamp (1998). Mixture model analysis of complex samples. *Journal of Classification* 15(2), 225-244.
 
 Wolter, K. M. (2007). *Introduction to Variance Estimation*, 2nd ed. New York: Springer.
 
-Wu, S. M., B. J. K. Stephenson, T. D. Savitsky, et al. (2024). Weighted overfitted latent class analysis for complex survey data. *Biometrics* 80(4), ujae122. doi:10.1093/biomtc/ujae122.
+Wu, S. M., M. R. Williams, T. D. Savitsky, and B. J. K. Stephenson (2024). Derivation of outcome-dependent dietary patterns for low-income women obtained from survey data using a supervised weighted overfitted latent class analysis. *Biometrics* 80(4), ujae122. doi:10.1093/biomtc/ujae122.
+
+Wu, S. M., M. R. Williams, T. D. Savitsky, and B. J. K. Stephenson (2025). *baysc: BAYesian Survey Clustering*. R package version 0.1.0. https://github.com/smwu/baysc.

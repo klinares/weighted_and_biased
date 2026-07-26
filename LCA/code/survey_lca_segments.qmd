@@ -1,7 +1,7 @@
 ---
-title: "Design-Weighted LCA: Segments, Prediction, and Handoff"
+title: "Design-Weighted LCA: Segments, Profiling, and Handoff"
 subtitle: "Institutional trust in Mexico: LAPOP AmericasBarometer 2023"
-author: "Kevin"
+author: "Kevin Linares"
 date: today
 format:
   pdf:
@@ -12,7 +12,7 @@ format:
     fig-align: center
     df-print: kable
     geometry: margin=1in
-    fig-crop: false   # MiKTeX's pdfcrop is fragile; cropping is cosmetic only
+    fig-crop: false
 execute:
   warning: false
   message: false
@@ -20,143 +20,101 @@ execute:
 
 # Purpose
 
-This script is the fast, interpretive half of the pipeline. It reads the fitted objects the modeling script saved to `{cfg$out_dir}`, drafts (or reads) the segment labels, presents the measurement model with design-based intervals alongside the unweighted `poLCA` benchmark and its validation verdict, predicts segment membership back to every respondent who answered enough items, profiles the segments on the configured demographics (one page each), and writes the analyst handoff: a labelled `.sav` plus CSVs. Throughout, a latent class is called a **segment**, a word-choice preference; the statistical object is unchanged.
+Reads the fit saved by the modeling script, drafts or reads the segment labels, presents the measurement model, scores every respondent who answered enough items, profiles the segments on demographics against the design, and writes the handoff. A latent class is called a **segment** throughout; the statistical object is unchanged.
+
+The order matters. The measurement model was estimated on item-complete cases in the modeling script. Scoring happens next and covers every respondent above `cfg$min_items`, which is a larger set. All domain estimates are then computed on that larger set, which is standard three-step practice and matters here because item nonresponse on a trust battery is not random: it skews older, less educated, and more rural, so restricting the domain estimates to complete responders would bias the composition in a predictable direction.
 
 ```{r setup}
 #| include: false
 library(matrixStats); library(clue); library(survey); library(furrr)
-library(arrow); library(tidyverse)   # tidyverse LAST (masking)
+library(here); library(tidyverse)   # tidyverse LAST (masking)
 source("survey_lca_source.R")
 source("survey_data_config.R")
-stopifnot(!is.null(cfg$K_force))     # this script only runs on a chosen K
-fit_w      <- readRDS(file.path(cfg$out_dir, "fit_weighted.rds"))
-fit_unw    <- readRDS(file.path(cfg$out_dir, "fit_unweighted.rds"))
-pl_aligned <- readRDS(file.path(cfg$out_dir, "polca_aligned.rds"))
-ci_tbl     <- arrow::read_parquet(file.path(cfg$out_dir, "ci_tbl.parquet"))
-validation <- arrow::read_parquet(file.path(cfg$out_dir, "validation.parquet"))
-K_star     <- length(fit_w$pi)
-prep_fit     <- prepare_items(cfg)      # rebuilt identically from the config script
-dat_prepared <- prep_fit$dat_prepared
-cats         <- prep_fit$cats
-w_vec        <- prep_fit$w_vec
+init_parallel(cfg)
 
-# Posteriors are recomputed here from the SAVED parameters (they lived in the
-# modeling session, not on disk). Deterministic: no refitting, no seed needed.
-inp_full  <- make_inputs(dat_prepared, cfg$items, cats)
-post_w    <- posterior_of(fit_w$pi, fit_w$rho, inp_full$Y)
-colnames(post_w) <- paste0("post_class", seq_len(K_star))
-modal_int <- max.col(post_w, ties.method = "first")
-dat_prepared <- dat_prepared |>
-  bind_cols(as_tibble(post_w)) |>
-  mutate(modal_class   = factor(modal_int, levels = seq_len(K_star)),
-         max_posterior = post_w[cbind(seq_len(n()), modal_int)])
-
-# The sampling design and its JKn replicates are rebuilt from cfg the same way
-# the modeling script built them, so every interval here rests on the design.
-options(survey.lonely.psu = "adjust")
-des     <- svydesign(ids = as.formula(paste0("~", cfg$psu)),
-                     strata = as.formula(paste0("~", cfg$strata)),
-                     weights = as.formula(paste0("~", cfg$weight)),
-                     data = dat_prepared, nest = TRUE)
-rep_des <- as.svrepdesign(des, type = "JKn")
+fit <- readRDS(file.path(cfg$out_dir, "model_fit.rds"))
+fit_w <- fit$fit_w
+pl_aligned <- fit$pl_aligned
+ci_tbl <- fit$ci_tbl
+K_star <- fit$K
+post_cols <- paste0("post_segment", seq_len(K_star))
 ```
 
 # What the segment labeler is asked
 
-Before any label is trusted, here is the instrument verbatim: the system prompt (the persona) and one real user prompt, built for segment 1 from this survey's own wording and probabilities. Three properties to note while reading: the prompt carries only ONE segment (isolated calls, an empirical design: joint prompts confused near-neighbor segments); every probability is shown against the item's actual response labels; and rule 1 fences the survey context to referent resolution, so nothing outside the shown probabilities may be attributed to a segment. This instrument, including the segment terminology, is certified by `llm_label_obedience_experiment.R`; any edit to it obliges a re-run.
+The instrument, verbatim: the system prompt and one real user prompt built from this survey's own wording and probabilities. Each call carries one segment only, because joint prompts confuse near-neighbor segments. Rule 1 fences the survey context to referent resolution, so nothing outside the shown probabilities may be attributed to a segment.
 
 ```{r prompt-example}
-meta_preview <- item_meta(survey_dat, cfg$items, cfg$na_codes, questions)
-cat("=========== SYSTEM PROMPT (persona) ===========\n")
-cat(lca_persona(), "\n\n")
+cat("=========== SYSTEM PROMPT ===========\n")
+cat(wrap_text(lca_persona()), "\n\n")
 cat("=========== USER PROMPT (segment 1) ===========\n")
-cat(prompt_class_label(fit_w, 1, meta_preview, cfg$items, cfg$survey_context), "\n")
+cat(wrap_text(prompt_segment_label(fit_w, 1, dictionary, cfg$items,
+                                   cfg$survey_context)), "\n")
 ```
 
 # Naming the segments
 
-One rule: `segment_labels.csv` in `{cfg$out_dir}` is used when it exists (validated against K); otherwise the LLM drafts once, one call per segment, and writes it, with any harmonizer edit recorded in `Label_draft`. **Editing that file is taking over the naming**; the labels below are drafts to verify against the profile heatmap.
+`segment_labels.csv` in the output directory is used when it exists. Otherwise the model drafts once per segment and writes it, with any harmonizer edit recorded in `Label_draft`. Editing that file is taking over the naming. The labels below are drafts to verify against the profile heatmap.
 
 ```{r segment-labels}
-# get_class_labels() implements the one rule above (survey_lca_source.R,
-# Section 4). The cache file freezes the LLM output for reproducibility.
-# cfg$data, NOT dat_prepared: recode_consecutive() strips attributes, so a
-# recoded copy would silently cost the prompts all wording and labels.
-segment_labels <- get_class_labels(fit_w, survey_dat, cfg$items, cfg,
-                                 questions = set_names(dictionary$question,
-                                                       dictionary$item))
+segment_labels <- get_segment_labels(fit_w, dictionary, cfg$items, cfg)
 
-knitr::kable(segment_labels,
-             caption = "Segment labels and descriptions in use (segment_labels.csv in cfg$out_dir). Verify each against its response profile before quoting; edit the file to take over naming.")
+lca_table(segment_labels, widths = c("2em", "11em", "28em"),
+          caption = "Segment labels and descriptions in use. Verify each against its response profile before quoting.")
 
-# Display labels for every downstream table and figure: short, wrapped, fixed
-# class order so factor levels are stable everywhere.
-# Three display tiers, because one label format cannot serve every surface:
-#   lab_of    wrapped factor, for FIGURE legends and facets (newlines are fine there)
-#   lab_line  single line "Ck: Label", for SMALL tables (a newline inside a kable
-#             cell breaks Typst layout)
-#   lab_short "Ck" only, for LARGE tables; the class-label table above is the legend
-lab_lev   <- stringr::str_wrap(paste0("S", segment_labels$K, ": ", segment_labels$Label), 22)
-lab_of    <- function(k) factor(lab_lev[k], levels = lab_lev)
-lab_line  <- function(k) paste0("S", k, ": ", segment_labels$Label[k])
+lab_lev <- str_wrap(paste0("S", segment_labels$K, ": ", segment_labels$Label), 22)
+lab_of <- function(k) factor(lab_lev[k], levels = lab_lev)
+lab_line <- function(k) paste0("S", k, ": ", segment_labels$Label[k])
 lab_short <- function(k) paste0("S", k)
 ```
 
-# The measurement model: inclusion probabilities, benchmark, and validation
+# The measurement model
 
-One table carries the design-weighted segment prevalences with their JKn intervals, the unweighted `poLCA` prevalences, and the gap. The printed validation line is the trust check: at unit weights our pseudo-EM and `poLCA` maximize the same likelihood, so their prevalences must match to optimization tolerance before the weighted output deserves belief.
+Intervals here are the JKn intervals computed in the modeling script on the estimation sample. They describe the measurement model, not the scored sample.
 
-```{r tbl-inclusion}
-# The verdict is READ from validation.parquet, frozen by the modeling script,
-# so both documents print the same criterion on the same numbers: max of the
-# prevalence gap and the conditional-probability gap, threshold 0.005.
-cat(sprintf(paste0("VALIDATION (unit weights, pseudo-EM vs poLCA): ",
-                   "max |pi gap| = %.5f, max |rho gap| = %.5f -> %s\n"),
-            validation$max_pi_gap, validation$max_rho_gap,
-            ifelse(validation$match, "MATCH (implementations agree)",
-                   "MISMATCH - investigate before trusting weighted results")))
+```{r tbl-prevalence}
+cat(sprintf(paste0("VALIDATION (unit weights, pseudo-EM vs poLCA): max |pi gap| = %.5f, ",
+                   "max |rho gap| = %.5f -> %s\n"),
+            fit$validation$max_pi_gap, fit$validation$max_rho_gap,
+            if (fit$validation$match) "MATCH" else "MISMATCH, investigate"))
 
-# ci_tbl columns (from the modeling script): kind, item, category, class,
-# estimate, se, lo, hi. Renamed here to short names for the display code.
-pi_ci <- ci_tbl |> dplyr::filter(kind == "pi") |>
-  transmute(K = class, est = estimate, lo, hi)
-incl_tbl <- pi_ci |>
+pi_ci <- ci_tbl |>
+  filter(kind == "pi") |>
+  transmute(K = segment, est = estimate, lo, hi)
+
+pi_ci |>
   mutate(Segment = lab_line(K),
-         `Weighted pi [95% CI]` = sprintf("%.3f [%.3f, %.3f]", est, lo, hi),
-         `poLCA (unweighted)`   = sprintf("%.3f", pl_aligned$pi[K]),
+         `Weighted prevalence [95% CI]` = sprintf("%.3f [%.3f, %.3f]", est, lo, hi),
+         `poLCA (unweighted)` = sprintf("%.3f", pl_aligned$pi[K]),
          Gap = sprintf("%+.3f", est - pl_aligned$pi[K])) |>
-  dplyr::select(Segment:Gap)
-knitr::kable(incl_tbl, align = "lrrr",
-             caption = "Segment inclusion probabilities: design-weighted estimates with JKn intervals, the unweighted poLCA benchmark, and the weighting gap. The validation line above certifies the implementations agree at unit weights.")
+  select(Segment:Gap) |>
+  lca_table(align = "lrrr", widths = c("13em", "13em", "9em", "5em"),
+            caption = "Segment prevalences: design-weighted estimates with JKn intervals, the unweighted poLCA benchmark, and the gap. Read the gap against the unequal-weighting effect reported in the modeling script; when that is near 1 the gap is noise rather than correction.")
 ```
 
-```{r fig-inclusion}
-#| fig-cap: "Weighted segment prevalences with 95% JKn intervals (points and bars) against the unweighted poLCA benchmark (open diamonds). Gaps are what the design corrects."
+```{r fig-prevalence}
+#| fig-cap: "Weighted segment prevalences with 95% JKn intervals against the unweighted poLCA benchmark (open diamonds)."
 pi_ci |>
   mutate(Segment = lab_of(K)) |>
   ggplot(aes(Segment, est)) +
   geom_pointrange(aes(ymin = lo, ymax = hi), linewidth = 0.5) +
   geom_point(aes(y = pl_aligned$pi[K]), shape = 5, size = 2.6) +
   scale_y_continuous(limits = c(0, NA)) +
-  labs(x = NULL, y = "Inclusion probability") +
+  labs(x = NULL, y = "Prevalence") +
   theme_lca() +
   theme(axis.text.x = element_text(angle = 20, hjust = 1))
 ```
 
-# Segment profiles: conditional response probabilities
-
 ```{r fig-profiles}
 #| fig-width: 8
 #| fig-height: 7.5
-#| fig-cap: "P(response | segment) for every item. Panel headers carry the drafted segment labels; verify each label against its panel before quoting it."
+#| fig-cap: "P(response | segment) for every item. Panel headers carry the drafted labels; verify each label against its panel before quoting it."
 ci_tbl |>
-  dplyr::filter(kind == "rho") |>
-  mutate(Segment = lab_of(class),
-         item = factor(item, levels = cfg$items),
-         est = estimate) |>
-  ggplot(aes(factor(category), item, fill = est)) +
+  filter(kind == "rho") |>
+  mutate(Segment = lab_of(segment), item = factor(item, levels = cfg$items)) |>
+  ggplot(aes(factor(category), item, fill = estimate)) +
   geom_tile() +
-  geom_text(aes(label = sprintf("%.2f", est)), size = 2.1) +
+  geom_text(aes(label = sprintf("%.2f", estimate)), size = 2.1) +
   scale_fill_viridis_c(name = "P", limits = c(0, 1)) +
   facet_wrap(~ Segment, ncol = min(3, K_star)) +
   labs(x = "Response category", y = NULL) +
@@ -164,152 +122,323 @@ ci_tbl |>
   theme(axis.text.y = element_text(size = 7))
 ```
 
-# Predicting segment membership
+# Scoring segment membership
 
-Prediction runs on the FULL preserved frame: local independence lets a missing item drop out of the within-segment product, so partial responders are predictable, with `cfg$min_items_predict` as the evidence floor (below it, no prediction rather than a guess). Items must be coded exactly as fitted; the config script guarantees that here.
+Local independence lets a missing item drop out of the within-segment product, so a respondent who answered `cfg$min_items` or more is scorable even though they were not in the estimation sample. Everything downstream runs on the scored frame.
 
-```{r predict}
-pred <- predict_segments(survey_dat_original, fit_w, cfg$items,
-                         min_items = cfg$min_items_predict)
-survey_scored <- bind_cols(survey_dat_original, pred)
-cat(sprintf(
-  "Predicted %d complete and %d incomplete cases of %d total (floor: %d items); mean max posterior among predicted = %.3f.\n",
-  sum(!is.na(pred$segment) & survey_scored$keep),
-  sum(!is.na(pred$segment) & !survey_scored$keep),
-  nrow(survey_scored), cfg$min_items_predict,
-  mean(pred$max_posterior, na.rm = TRUE)))
+```{r score}
+pred <- predict_segments(survey_dat_full, fit_w, cfg$items, cfg$min_items)
+survey_scored <- bind_cols(survey_dat_full, pred)
+
+scored <- survey_scored |>
+  filter(!is.na(segment)) |>
+  mutate(segment = factor(segment, levels = seq_len(K_star)))
+
+design <- build_rep_design(scored, cfg)
+des <- design$des
+rep_des <- design$rep_des
+design_df <- degf(rep_des)
+crit <- qt(0.975, df = design_df)
+
+cat(sprintf(paste0("Estimation sample: %d item-complete cases.\n",
+                   "Scored sample: %d of %d respondents (floor: %d items), ",
+                   "a gain of %d cases for the domain estimates.\n",
+                   "Domain design: %d replicates, %d degrees of freedom.\n"),
+            nrow(fit$dat_prepared), nrow(scored), nrow(survey_scored),
+            cfg$min_items, nrow(scored) - nrow(fit$dat_prepared),
+            ncol(rep_des$repweights), design_df))
+```
+
+```{r score-overall}
+# Overall segment prevalence on the scored frame, with the design effect reported
+# here rather than per demographic level. deff is the design variance over the
+# variance a simple random sample of the same size would give, computed directly
+# so it does not depend on a finite-population correction; with self-weighting
+# data the sum of weights equals n and survey's deff = TRUE returns Inf.
+overall <- svymean(~ segment, rep_des)
+
+overall_tbl <- tibble(K = seq_len(K_star),
+                      p = as.numeric(coef(overall)),
+                      se = as.numeric(SE(overall))) |>
+  mutate(lo = pmax(0, p - crit * se), hi = pmin(1, p + crit * se),
+         deff = se^2 / (p * (1 - p) / nrow(scored)))
+
+overall_tbl |>
+  transmute(Segment = lab_line(K),
+            Prevalence = sprintf("%.3f (%.3f)", p, se),
+            `95% CI` = sprintf("[%.3f, %.3f]", lo, hi),
+            Deff = sprintf("%.2f", deff)) |>
+  lca_table(align = "lrrr", widths = c("14em", "10em", "11em", "5em"),
+            caption = "Overall segment prevalence on the scored frame, with JKn standard errors and design effects. Deff above 1 means clustering and weighting cost effective sample size relative to a simple random sample of the same size; below 1 means stratification bought some back.")
+```
+
+```{r score-quality}
+scored |>
+  group_by(n_items_answered) |>
+  summarise(n = n(), mean_max_posterior = round(mean(max_posterior), 3),
+            .groups = "drop") |>
+  lca_table(align = "rrr", widths = c("10em", "6em", "12em"),
+            col.names = c("Items answered", "n", "Mean max posterior"),
+            caption = "Assignment quality by number of items answered. Respondents scored from fewer items carry flatter posteriors and so more classification error, which the domain estimates below pool over. If the mean falls sharply at the low end, raise cfg$min_items.")
+```
+
+# What the design costs
+
+The design effect is the ratio of the variance under this design to the variance a simple random sample of the same size would give. A design effect of 2 means the design cost half the effective sample size; below 1 means it bought some. The table reports it twice: once for the full design and once for a clustering-only design that ignores the strata, so the two sources can be separated.
+
+Three patterns are worth reading for.
+
+**A design effect near the mean cluster size is the ceiling, and it is a specification check.** A variable that is constant within a sampling unit has an intracluster correlation of 1, so its design effect equals the mean cluster size exactly. Any variable measured at the cluster level rather than the respondent level should land there. If it does, the cluster identifier is specified correctly and the replicate variance is computing what it should. If a respondent-level variable lands there, that variable is effectively a cluster attribute and its precision claims are much weaker than its sample size suggests.
+
+**A design effect below 1 means the variance is smaller than random sampling would produce**, which requires the composition of each cluster to be controlled rather than sampled. That is the signature of a quota at the final selection stage: if interviewers must fill a fixed number of respondents in some category per sampling point, the between-cluster variance for that category is suppressed. Precision on those variables is a fieldwork artifact, not information, so read their standard errors with that in mind and do not use them to demonstrate design-based variance estimation.
+
+**If the two design effect columns agree, stratification is contributing nothing** and clustering accounts for all of the difference from simple random sampling. Coarse strata relative to the number of clusters will do this.
+
+```{r design-effects}
+srs <- svydesign(ids = ~1, weights = reformulate(cfg$weight), data = scored)
+clus <- svydesign(ids = reformulate(cfg$psu), weights = reformulate(cfg$weight),
+                  data = scored)
+
+psu_n <- n_distinct(scored[[cfg$psu]])
+
+deff_tbl <- map(cfg$aux, function(v) {
+  f <- reformulate(v)
+  full <- svymean(f, rep_des, na.rm = TRUE)
+  tibble(variable = v,
+         level = str_remove(names(coef(full)), paste0("^", v)),
+         se_design = as.numeric(SE(full)),
+         se_clus = as.numeric(SE(svymean(f, clus, na.rm = TRUE))),
+         se_srs = as.numeric(SE(svymean(f, srs, na.rm = TRUE))))
+}) |>
+  list_rbind() |>
+  mutate(deff = (se_design / se_srs)^2, deff_nostrata = (se_clus / se_srs)^2)
+
+cat(sprintf(paste0("%d clusters, mean cluster size %.1f. A variable constant ",
+                   "within a cluster has design effect %.1f; that is the ceiling.\n"),
+            psu_n, nrow(scored) / psu_n, nrow(scored) / psu_n))
+
+deff_tbl |>
+  transmute(Variable = variable, Level = level,
+            `SE design` = sprintf("%.4f", se_design),
+            `SE SRS` = sprintf("%.4f", se_srs),
+            Deff = sprintf("%.2f", deff),
+            `Deff no strata` = sprintf("%.2f", deff_nostrata)) |>
+  lca_table(align = "llrrrr",
+            widths = c("8em", "9em", "7em", "7em", "4em", "6em"),
+            caption = "Design effects for the profiling variables. SE design is the JKn standard error, SE SRS the standard error a simple random sample of the same size would give. Deff is their squared ratio; Deff no strata drops the stratification and keeps the clustering, so a match between the two columns means stratification contributes nothing.")
 ```
 
 # Segment composition by demographics
 
-BCH-corrected segment prevalence within each demographic level (Bolck, Croon & Hagenaars 2004; Vermunt 2010): modal assignments are reweighted by the inverse of the design-weighted classification-error matrix, so the cross-tabs are unbiased for true-segment composition rather than diluted by classification error. Intervals are JKn on the logit scale with the design t critical value; cells outside (0, 1), possible because BCH weights can be negative, fall back to truncated Wald and are footnoted. Step-1 parameter uncertainty is not propagated, the standard treatment; with entropy 0.907 the understatement is minor (Bakk, Oberski & Vermunt 2014). One demographic per page, table above plot, so nothing crowds.
+One page per demographic: its marginal distribution, the segment prevalences within each of its levels, and a figure. Everything uses the scored frame.
 
-```{r domain-setup}
-# The segment-membership target is the soft posterior attached in the setup
-# chunk; post_cols are the K posterior columns in segment order. des and rep_des
-# (the design and its JKn replicates) were also built in setup.
-post_cols <- paste0("post_class", seq_len(K_star))
+**Design-based** applies the sampling weights and takes its variance from the JKn replicates. It uses hard modal assignment, so it is attenuated: differences between demographic levels are understated by roughly the classification error rate. **BCH-corrected** additionally reweights modal assignment by the inverse of the design-weighted classification error matrix (Bolck, Croon and Hagenaars 2004; Vermunt 2010), removing that attenuation at the cost of wider intervals. Step-1 parameter uncertainty is not propagated, the standard treatment.
 
-# Fixed layout for the flattened statistic: every (demographic, level, class) cell,
-# levels in factor order, class varying fastest within a level. dom_meta names and
-# orders the estimate vector so nothing is recovered by string parsing later.
-dom_meta <- map_dfr(cfg$aux, function(v)
-  expand_grid(plevel = levels(dat_prepared[[v]]), class = seq_len(K_star)) |>
+The gap between them is what classification error costs. Attenuation always biases toward the marginal, so it always understates group differences: a difference that survives under modal assignment is real, but a null under modal assignment may be a real difference that attenuation erased. Read the design-based numbers as primary and the corrected numbers when the claim is that groups do not differ.
+
+```{r domain-estimates}
+# 1. marginal distribution of each demographic, among those who answered it.
+# The design effect is reported once for the overall estimates in the scoring
+# section, not per level.
+marginals <- map(cfg$aux, function(v) {
+  m <- svymean(reformulate(v), rep_des, na.rm = TRUE)
+  raw <- scored |>
+    filter(!is.na(.data[[v]])) |>
+    count(.data[[v]], name = "n") |>
+    set_names(c("level", "n"))
+  tibble(variable = v,
+         level = str_remove(names(coef(m)), paste0("^", v)),
+         weighted = as.numeric(coef(m)),
+         se = as.numeric(SE(m))) |>
+    left_join(mutate(raw, level = as.character(level)), by = "level")
+}) |>
+  list_rbind()
+
+# 2. segment prevalence within each level, straight from the survey package.
+# svyby splits the design by the demographic and runs svymean(~segment) inside
+# each level. Columns are read by position (by-variable, then K estimates, then
+# K SEs) because svyby's naming for a factor outcome varies by version.
+domain_marginals <- map(cfg$aux, function(v) {
+  sb <- as.data.frame(svyby(~ segment, reformulate(v), rep_des, svymean,
+                            na.rm = TRUE))
+  vals <- sb[, -1, drop = FALSE]
+  stopifnot(ncol(vals) == 2 * K_star)
+  tibble(variable = v,
+         level = rep(as.character(sb[[1]]), times = K_star),
+         segment = rep(seq_len(K_star), each = nrow(sb)),
+         p = as.numeric(as.matrix(vals[, seq_len(K_star)])),
+         se = as.numeric(as.matrix(vals[, K_star + seq_len(K_star)])))
+}) |>
+  list_rbind() |>
+  filter(!is.na(level)) |>
+  mutate(lo = pmax(0, p - crit * se), hi = pmin(1, p + crit * se))
+
+# 3. BCH-corrected version of the same quantity. Posteriors and modal assignment
+# are fixed at the scored values; the error matrix and correction weights are
+# rebuilt inside every replicate, so the intervals carry the design variance of
+# the classification table and the cross-tab together.
+dom_meta <- map(cfg$aux, function(v)
+  expand_grid(plevel = levels(scored[[v]]), segment = seq_len(K_star)) |>
     mutate(pvar = v)) |>
-  dplyr::select(pvar, plevel, class) |>
+  list_rbind() |>
+  select(pvar, plevel, segment) |>
   mutate(idx = row_number())
 
-# The statistic survey::withReplicates evaluates on each replicate: the BCH
-# three-step correction. post and modal are FIXED at the full-sample
-# measurement model (step-1 uncertainty not propagated, standard practice);
-# the classification-error matrix D and the correction weights u are rebuilt
-# inside every replicate from the replicate weights, so the intervals carry
-# the design variance of the classification table and the cross-tab jointly.
-# For each demographic: a level-indicator matrix, then the weighted mean of
-# each BCH-corrected membership column within each level,
-# crossprod(M, w * U) / crossprod(M, w), flattened to ONE numeric vector in
-# dom_meta's order (level-major, class-minor) for the replicate covariance.
-domain_theta <- function(w_rep, data) {
-  P  <- as.matrix(data[, post_cols, drop = FALSE])      # n x K, fixed across replicates
-  U  <- bch_weights(P, max.col(P, ties.method = "first"), w_rep)  # n x K BCH
-  wU <- w_rep * U                                       # n x K, weighted corrections
-  flat <- map(cfg$aux, function(v) {
-    f   <- factor(data[[v]], levels = levels(dat_prepared[[v]]))
-    M   <- model.matrix(~ f - 1)                        # n x L, one column per level
-    num <- crossprod(M, wU)                             # L x K: corrected sums per level
-    den <- as.numeric(crossprod(M, w_rep))              # L: weighted total per level
-    as.vector(t(num / den))                             # level-major, class-minor
-  })
-  unlist(flat, use.names = FALSE)
+P_fixed <- as.matrix(scored[, post_cols, drop = FALSE])
+modal_fixed <- as.integer(scored$segment)
+
+domain_theta <- function(w_rep) {
+  wU <- w_rep * bch_weights(P_fixed, modal_fixed, w_rep)
+  unlist(map(cfg$aux, function(v) {
+    # indicator matrix with missing demographics contributing to no level
+    M <- outer(as.character(scored[[v]]), levels(scored[[v]]), "==") + 0
+    M[is.na(M)] <- 0
+    as.vector(t(crossprod(M, wU) / as.numeric(crossprod(M, w_rep))))
+  }), use.names = FALSE)
 }
 
-dom_rep <- withReplicates(rep_des, domain_theta)        # design-based covariance of every cell
-dom_est <- domain_theta(weights(des), dat_prepared)     # full-sample point estimates
-dom_V   <- vcov(dom_rep)                                # full covariance, for the contrasts below
-dom_se  <- sqrt(diag(dom_V))
+dom_est <- domain_theta(weights(des, "sampling"))
+dom_V <- replicate_variance(rep_des, domain_theta, dom_est)
 stopifnot(length(dom_est) == nrow(dom_meta))
-```
 
-```{r domain-prevalence}
-# Per-level BCH-corrected prevalence with a design-based interval: logit-scale
-# delta method (se_logit = se / (p (1 - p))), back-transformed, with the design
-# t critical value. BCH point estimates can fall outside (0, 1); the logit
-# transform is undefined there, so those cells fall back to Wald truncated to
-# [0, 1] and are flagged in `wald_fallback` for the table footnote.
-crit <- qt(0.975, df = survey::degf(rep_des))
 dom_tbl <- dom_meta |>
-  mutate(p = as.numeric(dom_est), se = as.numeric(dom_se)) |>
-  mutate(inside = p > 0 & p < 1,
+  mutate(p = as.numeric(dom_est), se = sqrt(diag(dom_V)),
+         inside = p > 0 & p < 1,
          p_c = pmin(pmax(p, 1e-6), 1 - 1e-6),
          gse = se / (p_c * (1 - p_c)),
-         lo  = if_else(inside, plogis(qlogis(p_c) - crit * gse),
-                       pmax(0, p - crit * se)),
-         hi  = if_else(inside, plogis(qlogis(p_c) + crit * gse),
-                       pmin(1, p + crit * se)),
-         wald_fallback = !inside) |>
-  dplyr::select(pvar, plevel, class, p, se, lo, hi, wald_fallback)
+         lo = if_else(inside, plogis(qlogis(p_c) - crit * gse), pmax(0, p - crit * se)),
+         hi = if_else(inside, plogis(qlogis(p_c) + crit * gse), pmin(1, p + crit * se))) |>
+  select(pvar, plevel, segment, p, se, lo, hi)
+
+# Both estimators in one long frame, uncorrected then corrected.
+est_levels <- c("Design-based", "BCH-corrected")
+
+domain_all <- bind_rows(
+  transmute(domain_marginals, variable, level, segment, p, se, lo, hi,
+            estimator = "Design-based"),
+  transmute(dom_tbl, variable = pvar, level = as.character(plevel), segment,
+            p, se, lo, hi, estimator = "BCH-corrected")) |>
+  mutate(estimator = factor(estimator, levels = est_levels))
 ```
 
 ```{r domain-pages}
 #| results: asis
-#| fig-height: 3.6
+#| fig-height: 5.0
 walk(cfg$aux, function(v) {
-  d <- dom_tbl |> dplyr::filter(pvar == v)
-  d |>
-    transmute(Level = plevel, Segment = lab_short(class),
-              cell = sprintf("%.2f [%.2f, %.2f]", p, lo, hi)) |>
-    pivot_wider(names_from = Segment, values_from = cell) |>
-    # format = "pipe" + cat(): guaranteed emission under results: asis, and a
-    # Pandoc table that wraps instead of overflowing (the kable |> print()
-    # pattern is silently swallowed by some render paths).
-    knitr::kable(format = "pipe", align = str_c("l", strrep("r", K_star)),
-                 caption = paste0("BCH-corrected segment prevalence within ", v,
-                                  " (95% JKn intervals, logit scale; rows sum to one across segments; S1..S",
-                                  K_star, " named in the segment-label table",
-                                  if (any(d$wald_fallback))
-                                    "; cells outside (0, 1) use truncated Wald intervals" else "",
-                                  ").")) |>
+  tag <- str_replace_all(v, "_", "-")
+  cat("\n\n##", v, "\n\n")
+
+  marginals |>
+    filter(variable == v) |>
+    transmute(Level = level, n, Share = sprintf("%.3f (%.3f)", weighted, se)) |>
+    lca_table(align = "lrr", widths = c("12em", "4em", "12em"),
+              label = paste0("comp-", tag),
+              caption = paste0("Composition by ", v,
+                               ". Share is the design-weighted proportion among ",
+                               "respondents who answered the item, with its JKn ",
+                               "standard error.")) |>
     cat(sep = "\n")
   cat("\n\n")
-  p <- d |>
-    mutate(Segment = lab_of(class)) |>
-    ggplot(aes(p, plevel, color = Segment)) +
-    geom_pointrange(aes(xmin = lo, xmax = hi), size = 0.35, linewidth = 0.4,
-                    position = position_dodge(width = 0.6)) +
-    scale_color_viridis_d(begin = 0.1, end = 0.8) +
+
+  domain_all |>
+    filter(variable == v) |>
+    transmute(Level = level, Estimator = as.character(estimator),
+              Segment = lab_short(segment), cell = sprintf("%.3f", p)) |>
+    pivot_wider(names_from = Segment, values_from = cell) |>
+    arrange(Level, match(Estimator, est_levels)) |>
+    lca_table(align = str_c("ll", strrep("r", K_star)),
+              widths = c("9em", "9em", rep("4em", K_star)),
+              label = paste0("est-", tag),
+              caption = paste0("Segment prevalence within each level of ", v,
+                               ", uncorrected and BCH-corrected. Rows sum to one ",
+                               "across segments. Intervals are in the figure below ",
+                               "and the exported CSV.")) |>
+    cat(sep = "\n")
+  cat("\n\n")
+
+  p <- domain_all |>
+    filter(variable == v) |>
+    mutate(Segment = lab_of(segment)) |>
+    ggplot(aes(p, level, color = estimator, shape = estimator)) +
+    geom_pointrange(aes(xmin = lo, xmax = hi), size = 0.3, linewidth = 0.4,
+                    position = position_dodge(width = 0.7)) +
+    facet_wrap(~ Segment, ncol = min(3, K_star)) +
+    scale_color_viridis_d(begin = 0.1, end = 0.75, direction = -1) +
+    scale_shape_manual(values = c(`Design-based` = 16, `BCH-corrected` = 5)) +
     scale_x_continuous(limits = c(0, NA)) +
     labs(x = "Prevalence of segment membership", y = NULL, color = NULL,
-         title = v) +
+         shape = NULL,
+         caption = "95% intervals from JKn replicate variance and the design t. Filled circles: design-based. Open diamonds: BCH-corrected.") +
     theme_lca()
   print(p)
-  cat("\n\n\\newpage\n\n")
+  cat("\n\n{{< pagebreak >}}\n\n")
 })
+```
+
+## Do the segments differ across demographic levels?
+
+Each level compared against the first level of its variable, within segment, using the replicate covariance so the difference carries its own standard error rather than being read off overlapping intervals. Holm adjustment within each demographic variable.
+
+```{r contrasts}
+contrasts <- dom_meta |>
+  group_by(pvar, segment) |>
+  mutate(ref_idx = idx[1], ref_level = plevel[1]) |>
+  ungroup() |>
+  filter(plevel != ref_level) |>
+  mutate(diff = dom_est[idx] - dom_est[ref_idx],
+         se = sqrt(dom_V[cbind(idx, idx)] + dom_V[cbind(ref_idx, ref_idx)] -
+                     2 * dom_V[cbind(idx, ref_idx)]),
+         p_raw = 2 * pt(-abs(diff / se), df = design_df)) |>
+  group_by(pvar) |>
+  mutate(p_adj = p.adjust(p_raw, method = "holm")) |>
+  ungroup()
+
+contrasts |>
+  filter(p_adj < 0.05) |>
+  arrange(pvar, p_adj) |>
+  transmute(Variable = pvar, Comparison = paste(plevel, "vs", ref_level),
+            Segment = lab_short(segment),
+            Difference = sprintf("%+.3f", diff),
+            `95% CI` = sprintf("[%+.3f, %+.3f]", diff - crit * se, diff + crit * se),
+            `Adj. p` = sprintf("%.4f", p_adj)) |>
+  lca_table(align = "lllrrr",
+            widths = c("6em", "13em", "4em", "6em", "10em", "5em"),
+            caption = "Segment composition differences reaching adjusted significance. Each row compares one demographic level against that variable's reference level within one segment. An empty table means no level difference survives adjustment.")
 ```
 
 # The handoff
 
-Three artifacts: the labelled `.sav` for analysts (numeric `segment` with the LLM/analyst labels as value labels, `NA` below the prediction floor, plus `segment_label` as text and the diagnostics from prediction), and CSVs of the measurement model and the demographic results.
+The `.sav` carries the segment assignment, the posterior probabilities, and the BCH correction weights for every scored respondent. The posteriors and correction weights are exported deliberately: cross-tabulating the modal assignment alone attenuates every association by the classification error rate, which is what the BCH tables above correct for.
 
 ```{r handoff}
-seg_labelled <- haven::labelled(
-  survey_scored$segment,
-  labels = set_names(segment_labels$K, segment_labels$Label),
-  label  = "Segment (design-weighted LCA)")
+U_full <- bch_weights(P_fixed, modal_fixed, weights(des, "sampling"))
+colnames(U_full) <- paste0("bch_segment", seq_len(K_star))
+
 out_sav <- survey_scored |>
-  mutate(segment = seg_labelled,
-         segment_label = ifelse(is.na(segment), NA_character_,
-                                segment_labels$Label[survey_scored$segment]))
+  left_join(bind_cols(select(scored, all_of(cfg$id)), as_tibble(U_full)),
+            by = cfg$id) |>
+  mutate(segment_label = if_else(is.na(segment), NA_character_,
+                                 segment_labels$Label[segment]),
+         segment = haven::labelled(
+           segment,
+           labels = set_names(segment_labels$K, segment_labels$Label),
+           label = paste("Segment (design-weighted LCA). Modal assignment:",
+                         "cross-tabs on this variable alone are attenuated by",
+                         "classification error. Use the post_segment columns or",
+                         "the bch_segment weights for unbiased composition.")))
+
 haven::write_sav(out_sav, file.path(cfg$out_dir, "survey_with_segments.sav"))
 
-readr::write_csv(ci_tbl |>
-                   mutate(segment_label = segment_labels$Label[class]),
-                 file.path(cfg$out_dir, "measurement_model_with_CIs.csv"))
-readr::write_csv(dom_tbl |>
-                   transmute(demographic = pvar, level = plevel,
-                             segment = class,
-                             segment_label = segment_labels$Label[class],
-                             prevalence = p, lo, hi),
-                 file.path(cfg$out_dir, "segment_demographics.csv"))
-cat("Wrote survey_with_segments.sav (", sum(!is.na(out_sav$segment)), "assigned ),",
-    "measurement_model_with_CIs.csv, segment_demographics.csv to", cfg$out_dir, "\n")
+write_csv(mutate(ci_tbl, segment_label = segment_labels$Label[segment]),
+          file.path(cfg$out_dir, "measurement_model_with_CIs.csv"))
+write_csv(transmute(domain_all, demographic = variable, level, estimator, segment,
+                    segment_label = segment_labels$Label[segment],
+                    prevalence = p, se, lo, hi),
+          file.path(cfg$out_dir, "segment_demographics.csv"))
+write_csv(transmute(contrasts, demographic = pvar, level = plevel,
+                    reference = ref_level, segment, difference = diff, se, p_adj),
+          file.path(cfg$out_dir, "segment_contrasts.csv"))
+
+cat(sprintf("Wrote survey_with_segments.sav (%d scored) and three CSVs to %s\n",
+            nrow(scored), cfg$out_dir))
 ```

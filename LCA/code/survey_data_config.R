@@ -1,122 +1,237 @@
 # survey_data_config.R
-# ============================================================================
-# DATA CLEANING + CONFIGURATION for the design-weighted LCA pipeline.
-# Sourced by BOTH quarto scripts (modeling and segments) AFTER
-# survey_lca_source.R, so both always see identical data and settings.
-# This is the ONLY file edited per dataset besides the cleaning code below,
-# which is deliberately transparent dplyr the analyst owns.
+# Reading, cleaning, and configuration. This is the only file edited per dataset.
+# Sourced after survey_lca_source.R by both .qmd files.
 #
-# Produces: raw_survey_dat, process_survey_dat, survey_dat_original (full frame
-# with the `keep` flag, preserved for the prediction/export step),
-# survey_dat (complete-case analysis frame), items, dictionary, questions, cfg.
-# ============================================================================
+# Produces: raw_survey_dat, survey_dat_full, item_levels, cats, dictionary,
+# recode_audit, items, cfg.
 
-# ---- 1. Read and process the raw SPSS file ---------------------------------
-# Items and design variables stay numeric; nonresponse codes become NA;
-# demographics are recoded to character via their label text; the `keep` flag
-# marks complete cases (items + demographics); nonresponse value labels are
-# stripped so every label left on an item is a real response.
+# ---- 1. Settings ------------------------------------------------------------
+item_codes <- c(justice_system = "b10a", electoral_tribunal = "b11",
+                armed_forces = "b12", legislature = "b13",
+                public_ministry = "b15", police = "b18", auditor = "b19",
+                political_parties = "b21", president = "b21a",
+                supreme_court = "b31", municipality = "b32", media = "b37",
+                elections = "b47a")
+
+demo_codes <- c(age_cat = "q2", sex = "q1tc_r", education = "edre",
+                urban = "ur", employment = "ocup4a",
+                satis_demo = "pn4", prez_rating = "m1")
+
+items <- names(item_codes)
+demos <- names(demo_codes)
+
+na_codes <- c(888888, 988888, 999999)
+
+# TRUE keeps "don't know" as a substantive category. The recode below sorts
+# values, so the large DK code lands in category C+1 with no extra arithmetic.
+dk_as_category <- FALSE
+codes_to_drop <- if (dk_as_category) setdiff(na_codes, 888888) else na_codes
+
+# TRUE fits on item-complete cases. FALSE fits on everyone with at least
+# min_items answered, using the EM's own handling of missing items.
+complete_cases <- TRUE
+min_items <- 7L
+
+# ---- 2. Read ----------------------------------------------------------------
+# user_na = TRUE keeps the nonresponse codes as values instead of letting haven
+# convert them to NA on read, so na_codes above does real work.
+
 raw_survey_dat <- haven::read_sav(
-  "D:/repos/Latent_to_Language/lapop/MEX_2023_LAPOP_AmericasBarometer_v1.0_w.sav")
+  here::here("lca", "data", "MEX_2023_LAPOP_AmericasBarometer_v1.0_w.sav"),
+  user_na = TRUE)
 
-items       <- c(justice_system = "b10a", electoral_tribunal = "b11",
-                 armed_forces = "b12", legislature = "b13",
-                 public_ministry = "b15", police = "b18", auditor = "b19",
-                 political_parties = "b21", president = "b21a",
-                 supreme_court = "b31", municipality = "b32", media = "b37",
-                 elections = "b47a")
-design_vars <- c(id = "idnum", strata = "strata", psu = "upm", weight = "wt")
-na_codes    <- c(888888, 988888, 999999)
+# ---- 3. Items ---------------------------------------------------------------
+# select() with a named vector renames on the way through. Items are recoded to
+# consecutive integers here, on every row, so the estimation frame and the
+# prediction frame are always on the same coding. Levels come from the rows that
+# will actually be fitted; a value seen only outside that set becomes NA and
+# drops out of that respondent's product.
 
-# Each demographic: source column, idiom, and its parameters. Four idioms cover
-# every case here. cut/index read the numeric view; map/regex read label text;
-# the engine resolves that view regardless of how the column is stored.
-recodes <- list(
-  age_cat     = list(from = "q2",     type = "cut",
-                     breaks = c(17, 29, 44, 59, Inf),
-                     labels = c("18-29", "30-44", "45-59", "60+")),
-  male        = list(from = "q1tc_r", type = "map",
-                     map = c("Mujer/femenino" = "Female"), default = "Male"),
-  Edu         = list(from = "edre",   type = "regex",
-                     rules = c(none = "^Ninguna", primary = "^Primaria",
-                               secondary = "^Secundaria", higher_ed = "^Universitaria")),
-  Urban       = list(from = "ur",     type = "map",
-                     map = c("Urbano" = "urban"), default = "rural"),
-  Employment  = list(from = "ocup4a", type = "regex",
-                     rules = c(Employed     = "^Trabajando|pero tiene trabajo",
-                               house_keeper = "quehaceres",
-                               Student      = "estudiante",
-                               Retired      = "jubilado|pensionado",
-                               Unemployed   = "buscando")),
-  # index: 1-based numeric codes map to positions in `labels`; the inline value
-  # labels below are for the reviewer to confirm the code order is right.
-  satis_demo  = list(from = "pn4",    type = "index",   # 1=Very satisfied ... 4=Very dissatisfied
-                     labels = c("Very satisfied", "Satisfied",
-                                "Dissatisfied", "Very dissatisfied")),
-  prez_rating = list(from = "m1",     type = "index",   # 1=Very good ... 5=Very bad
-                     labels = c("Very good", "Good", "Neither good nor bad",
-                                "Bad", "Very bad"))
-)
-
-process_survey_dat  <- build_process_survey_dat(raw_survey_dat, items, design_vars,
-                                                recodes, na_codes)
-survey_dat_original <- process_survey_dat
-survey_dat          <- process_survey_dat |> dplyr::filter(keep)
-item_codes          <- items
-items               <- names(items)
-
-# ---- 2. Dictionary: what the model and the segment labeler will see --------
-dictionary <- tibble(
-  item     = items,
-  variable = unname(item_codes[items]),
-  # Wording and response labels are read from raw_survey_dat with BASE
-  # attributes, not sjlabelled accessors: haven stores the question in
-  # attr(x, "label") and the value labels in attr(x, "labels") (a named numeric
-  # vector whose NAMES are the response texts). Reading them directly removes
-  # any dependence on accessor behaviour or package version. Response labels are
-  # per item and restricted to the values observed after the nonresponse recode,
-  # so a labeled value prints its label, an unlabeled value prints its number,
-  # and anchors-only, fully labeled, and unlabeled items all work unconfigured.
-  question = map_chr(items, function(it) {
-    lab <- attr(raw_survey_dat[[item_codes[[it]]]], "label", exact = TRUE)
-    if (is.character(lab) && length(lab) == 1 && nzchar(lab)) lab else it
-  }),
-  responses = map_chr(items, function(it) {
-    vl  <- attr(raw_survey_dat[[item_codes[[it]]]], "labels", exact = TRUE)
-    lk  <- if (length(vl)) set_names(names(vl), as.character(unname(vl))) else character(0)
-    obs <- setdiff(sort(unique(as.numeric(survey_dat[[it]]))), na_codes)
-    paste(ifelse(as.character(obs) %in% names(lk), lk[as.character(obs)],
-                 as.character(obs)), collapse = " | ")
+item_dat <- raw_survey_dat |>
+  select(all_of(item_codes)) |>
+  mutate(across(everything(), function(x) {
+    v <- as.numeric(unclass(x))
+    if_else(v %in% codes_to_drop, NA_real_, v)
   }))
+
+n_answered <- rowSums(!is.na(item_dat))
+in_analysis <- if (complete_cases) n_answered == length(items) else n_answered >= min_items
+
+item_levels <- map(item_dat[in_analysis, ], function(x) sort(unique(x[!is.na(x)])))
+cats <- map_int(item_levels, length)
+
+item_dat <- item_dat |>
+  mutate(across(everything(), function(x) match(x, item_levels[[cur_column()]])))
+
+# ---- 4. Design --------------------------------------------------------------
+design_dat <- raw_survey_dat |>
+  transmute(id = as.numeric(unclass(idnum)),
+            strata = as.numeric(unclass(strata)),
+            psu = as.numeric(unclass(upm)),
+            wt = as.numeric(unclass(wt)))
+
+# ---- 5. Demographics --------------------------------------------------------
+# One case_match per variable, every observed label named. Anything unmatched
+# becomes "UNMATCHED" rather than NA, so it shows up in the assertion below
+# instead of silently misclassifying or deleting a respondent. zap_missing()
+# turns the nonresponse codes into NA first, so "DK" and "NR" arrive here as NA.
+
+demo_dat <- raw_survey_dat |>
+  select(all_of(demo_codes)) |>
+  haven::zap_missing() |>
+  transmute(
+
+    age_cat = cut(as.numeric(age_cat), breaks = c(17, 29, 44, 59, Inf),
+                  labels = c("18-29", "30-44", "45-59", "60+")) |>
+      as.character(),
+
+    sex = as.character(haven::as_factor(sex)) |>
+      case_match("Hombre/masculino" ~ "Male",
+                 "Mujer/femenino" ~ "Female",
+                 NA ~ NA_character_,
+                 .default = "UNMATCHED"),
+
+    education = as.character(haven::as_factor(education)) |>
+      case_match(
+        "Ninguna" ~ "None",
+        c("Primaria incompleta", "Primaria completa") ~ "Primary",
+        c("Secundaria o Educaci\u00f3n Media Superior/Bachillerato/Preparatoria/Profesional T\u00e9cnico incompleta",
+          "Secundaria o Educaci\u00f3n Media Superior/Bachillerato/Preparatoria/Profesional T\u00e9cnico completa") ~ "Secondary",
+        c("Universitaria, superior no universitaria o t\u00e9cnico universitario incompleta",
+          "Universitaria, superior no universitaria o t\u00e9cnico universitario completa") ~ "Tertiary",
+        NA ~ NA_character_,
+        .default = "UNMATCHED"),
+
+    urban = as.character(haven::as_factor(urban)) |>
+      case_match("Urbano" ~ "Urban",
+                 "Rural" ~ "Rural",
+                 NA ~ NA_character_,
+                 .default = "UNMATCHED"),
+
+    employment = as.character(haven::as_factor(employment)) |>
+      case_match(
+        c("Trabajando?",
+          "No est\u00e1 trabajando en este momento pero tiene trabajo?") ~ "Employed",
+        "Est\u00e1 buscando trabajo activamente?" ~ "Unemployed",
+        "No trabaja y no est\u00e1 buscando trabajo?" ~ "Not in labor force",
+        "Es estudiante?" ~ "Student",
+        "Se dedica a los quehaceres de su hogar?" ~ "Homemaker",
+        "Est\u00e1 jubilado, pensionado o incapacitado permanentemente para trabajar?" ~ "Retired",
+        NA ~ NA_character_,
+        .default = "UNMATCHED"),
+
+    satis_demo = as.character(haven::as_factor(satis_demo)) |>
+      case_match("Muy satisfecho(a)" ~ "Very satisfied",
+                 "Satisfecho(a)" ~ "Satisfied",
+                 "Insatisfecho(a)" ~ "Dissatisfied",
+                 "Muy insatisfecho(a)" ~ "Very dissatisfied",
+                 NA ~ NA_character_,
+                 .default = "UNMATCHED"),
+
+    prez_rating = as.character(haven::as_factor(prez_rating)) |>
+      case_match("Muy bueno" ~ "Very good",
+                 "Bueno" ~ "Good",
+                 "Ni bueno, ni malo (regular)" ~ "Neither",
+                 "Malo" ~ "Bad",
+                 "Muy malo (p\u00e9simo)" ~ "Very bad",
+                 NA ~ NA_character_,
+                 .default = "UNMATCHED"))
+
+unmatched <- demo_dat |>
+  summarise(across(everything(), function(x) sum(x == "UNMATCHED", na.rm = TRUE))) |>
+  pivot_longer(everything(), names_to = "variable", values_to = "n") |>
+  filter(n > 0)
+
+if (nrow(unmatched) > 0) {
+  print(unmatched)
+  stop("Unmatched source labels in the recodes above. Add the missing levels ",
+       "to the relevant case_match() before continuing.")
+}
+
+# First level of each is the contrast reference in the segments script.
+demo_levels <- list(
+  age_cat = c("18-29", "30-44", "45-59", "60+"),
+  sex = c("Male", "Female"),
+  education = c("Secondary", "None", "Primary", "Tertiary"),
+  urban = c("Urban", "Rural"),
+  employment = c("Employed", "Unemployed", "Not in labor force", "Student",
+                 "Homemaker", "Retired"),
+  satis_demo = c("Satisfied", "Very satisfied", "Dissatisfied", "Very dissatisfied"),
+  prez_rating = c("Good", "Very good", "Neither", "Bad", "Very bad"))
+
+demo_dat <- demo_dat |>
+  mutate(across(all_of(demos),
+                function(x) factor(x, levels = demo_levels[[cur_column()]])))
+
+# ---- 6. Assemble ------------------------------------------------------------
+# n_items_answered is not stored here: predict_segments() computes it from the
+# same items, and two copies would collide in bind_cols() downstream.
+survey_dat_full <- bind_cols(design_dat, item_dat, demo_dat) |>
+  mutate(in_analysis = in_analysis)
+
+# What each source label became. Read once per dataset.
+recode_audit <- imap(demo_codes, function(src, tgt) {
+  tibble(variable = tgt,
+         source_label = as.character(haven::as_factor(raw_survey_dat[[src]])),
+         recoded = as.character(survey_dat_full[[tgt]]))
+}) |>
+  list_rbind() |>
+  count(variable, source_label, recoded, name = "n") |>
+  arrange(variable, desc(n))
+
+# ---- 7. Dictionary ----------------------------------------------------------
+# Question wording and response labels in item_levels order, so the response text
+# lines up with the fitted category indices. Read from base attributes.
+
+dictionary <- tibble(item = items, variable = unname(item_codes)) |>
+  mutate(
+    question = map_chr(variable, function(v) {
+      lab <- attr(raw_survey_dat[[v]], "label", exact = TRUE)
+      if (is.character(lab) && length(lab) == 1 && nzchar(lab)) lab else v
+    }),
+    responses = map2(variable, item, function(v, it) {
+      vl <- attr(raw_survey_dat[[v]], "labels", exact = TRUE)
+      key <- if (length(vl)) set_names(names(vl), as.character(unname(vl))) else character(0)
+      vals <- as.character(item_levels[[it]])
+      unname(if_else(vals %in% names(key), key[vals], vals))
+    }))
+
 questions <- set_names(dictionary$question, dictionary$item)
 
-# ---- 3. Configuration -------------------------------------------------------
-# K_force is THE analyst decision, made by iterating the modeling script:
-# leave NULL, render, read the enumeration diagnostics, set a candidate,
-# re-render, judge discrimination/BVR/profiles, adjust. Segment labels follow
-# one rule: out_dir/segment_labels.csv is used when it exists, otherwise the
-# LLM drafts once and writes it. API keys are never handled in code (ellmer
-# reads OPENAI_API_KEY from .Renviron at home and at work).
+# ---- 8. Configuration -------------------------------------------------------
+# K_force is the analyst decision: leave NULL, render the modeling script, read
+# the enumeration evidence, set a candidate, re-render.
+
+# satis_demo and prez_rating are cleaned and exported but excluded from
+# profiling: they are attitudes, not demographics, and both are correlated with
+# institutional trust by construction, so profiling segments on them would partly
+# explain the measurement model with itself.
+profile_vars <- setdiff(demos, c("satis_demo", "prez_rating"))
+
 cfg <- list(
-  # --- estimation -------------------------------------------------------------
-  items    = items,
-  strata   = "strata", psu = "upm", weight = "wt",
-  K_range  = 2:12,               # candidates shown in the enumeration table
-  K_force  = 5,              # THE analyst decision; set after reviewing diagnostics
-  n_starts = 20, seed = 2026, parallel = TRUE, workers = NULL,
-  aux      = c("age_cat", "male", "Edu", "Urban", "Employment",
-               "satis_demo", "prez_rating"),
-  na_codes = NULL,              # items arrive clean from the processing chunk
-  min_items_predict = 7L,       # evidence floor: a respondent needs at least this many
-  # answered items for a segment prediction (NA below it)
-  
-  # --- outputs ----------------------------------------------------------------
-  out_dir  = "../output/mexico",
-  
-  # --- LLM class labeling -------------------------------------------------------
-  compass_base_url = "https://openrouter.ai/api/v1",  # work: your compass endpoint
-  llm_model        = "google/gemma-4-31b-it",         # work: your model name
-  survey_context   = paste(
+  items = items,
+  aux = profile_vars,
+  strata = "strata", psu = "psu", weight = "wt", id = "id",
+  cats = cats,
+  min_items = min_items,
+
+  K_range = 2:10,
+  K_force = 5,
+  n_starts = 200,
+  seed = 2026,
+  parallel = TRUE,
+  workers = NULL,
+  run_item_screen = TRUE,
+
+  out_dir = here::here("output", "mexico"),
+
+  # Home: leave compass_base_url NULL and OpenRouter is used, reading
+  # OPENROUTER_API_KEY from .Renviron. Work: set compass_base_url and llm_model,
+  # and COMPASS_API_KEY is read instead.
+  compass_base_url = NULL,
+  llm_model = "google/gemma-3-27b-it",
+
+  survey_context = paste(
     "These items come from the 2023 AmericasBarometer survey of Mexico,",
     "conducted by the LAPOP Lab at Vanderbilt University. The AmericasBarometer",
     "is a comparative public opinion study of democratic attitudes and",
@@ -124,9 +239,10 @@ cfg <- list(
     "of voting-age adults.",
     "\n\nThe battery analyzed here measures trust in national institutions:",
     "respondents rate, for each institution, how much they trust it on a",
-    "seven-point scale anchored at 1 (not at all) and 7 (a lot). The latent",
-    "classes summarize patterns of institutional trust across these items."),
-  
-  data = survey_dat             # complete-case analysis frame from the chunks above
+    "seven-point scale anchored at 1 (not at all) and 7 (a lot). The segments",
+    "summarize patterns of institutional trust across these items.")
 )
+
+cfg$data <- filter(survey_dat_full, in_analysis)
+
 dir.create(cfg$out_dir, showWarnings = FALSE, recursive = TRUE)
