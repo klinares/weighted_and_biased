@@ -71,10 +71,11 @@ design_dat <- raw_survey_dat |>
             wt = as.numeric(unclass(wt)))
 
 # ---- 5. Demographics --------------------------------------------------------
-# One case_match per variable, every observed label named. Anything unmatched
-# becomes "UNMATCHED" rather than NA, so it shows up in the assertion below
-# instead of silently misclassifying or deleting a respondent. zap_missing()
-# turns the nonresponse codes into NA first, so "DK" and "NR" arrive here as NA.
+# One recode_values per variable, every observed label named. unmatched = "error"
+# halts the render on any label not named here, which is the point: a
+# pattern-matching scheme would silently misclassify or delete those respondents.
+# The NA ~ NA arms are required by unmatched = "error"; zap_missing() turns the
+# nonresponse codes into NA first, so "DK" and "NR" arrive here as NA.
 
 demo_dat <- raw_survey_dat |>
   select(all_of(demo_codes)) |>
@@ -86,13 +87,13 @@ demo_dat <- raw_survey_dat |>
       as.character(),
 
     sex = as.character(haven::as_factor(sex)) |>
-      case_match("Hombre/masculino" ~ "Male",
-                 "Mujer/femenino" ~ "Female",
-                 NA ~ NA_character_,
-                 .default = "UNMATCHED"),
+      recode_values("Hombre/masculino" ~ "Male",
+                    "Mujer/femenino" ~ "Female",
+                    NA ~ NA_character_,
+                    unmatched = "error"),
 
     education = as.character(haven::as_factor(education)) |>
-      case_match(
+      recode_values(
         "Ninguna" ~ "None",
         c("Primaria incompleta", "Primaria completa") ~ "Primary",
         c("Secundaria o Educaci\u00f3n Media Superior/Bachillerato/Preparatoria/Profesional T\u00e9cnico incompleta",
@@ -100,16 +101,16 @@ demo_dat <- raw_survey_dat |>
         c("Universitaria, superior no universitaria o t\u00e9cnico universitario incompleta",
           "Universitaria, superior no universitaria o t\u00e9cnico universitario completa") ~ "Tertiary",
         NA ~ NA_character_,
-        .default = "UNMATCHED"),
+        unmatched = "error"),
 
     urban = as.character(haven::as_factor(urban)) |>
-      case_match("Urbano" ~ "Urban",
-                 "Rural" ~ "Rural",
-                 NA ~ NA_character_,
-                 .default = "UNMATCHED"),
+      recode_values("Urbano" ~ "Urban",
+                    "Rural" ~ "Rural",
+                    NA ~ NA_character_,
+                    unmatched = "error"),
 
     employment = as.character(haven::as_factor(employment)) |>
-      case_match(
+      recode_values(
         c("Trabajando?",
           "No est\u00e1 trabajando en este momento pero tiene trabajo?") ~ "Employed",
         "Est\u00e1 buscando trabajo activamente?" ~ "Unemployed",
@@ -118,35 +119,24 @@ demo_dat <- raw_survey_dat |>
         "Se dedica a los quehaceres de su hogar?" ~ "Homemaker",
         "Est\u00e1 jubilado, pensionado o incapacitado permanentemente para trabajar?" ~ "Retired",
         NA ~ NA_character_,
-        .default = "UNMATCHED"),
+        unmatched = "error"),
 
     satis_demo = as.character(haven::as_factor(satis_demo)) |>
-      case_match("Muy satisfecho(a)" ~ "Very satisfied",
-                 "Satisfecho(a)" ~ "Satisfied",
-                 "Insatisfecho(a)" ~ "Dissatisfied",
-                 "Muy insatisfecho(a)" ~ "Very dissatisfied",
-                 NA ~ NA_character_,
-                 .default = "UNMATCHED"),
+      recode_values("Muy satisfecho(a)" ~ "Very satisfied",
+                    "Satisfecho(a)" ~ "Satisfied",
+                    "Insatisfecho(a)" ~ "Dissatisfied",
+                    "Muy insatisfecho(a)" ~ "Very dissatisfied",
+                    NA ~ NA_character_,
+                    unmatched = "error"),
 
     prez_rating = as.character(haven::as_factor(prez_rating)) |>
-      case_match("Muy bueno" ~ "Very good",
-                 "Bueno" ~ "Good",
-                 "Ni bueno, ni malo (regular)" ~ "Neither",
-                 "Malo" ~ "Bad",
-                 "Muy malo (p\u00e9simo)" ~ "Very bad",
-                 NA ~ NA_character_,
-                 .default = "UNMATCHED"))
-
-unmatched <- demo_dat |>
-  summarise(across(everything(), function(x) sum(x == "UNMATCHED", na.rm = TRUE))) |>
-  pivot_longer(everything(), names_to = "variable", values_to = "n") |>
-  filter(n > 0)
-
-if (nrow(unmatched) > 0) {
-  print(unmatched)
-  stop("Unmatched source labels in the recodes above. Add the missing levels ",
-       "to the relevant case_match() before continuing.")
-}
+      recode_values("Muy bueno" ~ "Very good",
+                    "Bueno" ~ "Good",
+                    "Ni bueno, ni malo (regular)" ~ "Neither",
+                    "Malo" ~ "Bad",
+                    "Muy malo (p\u00e9simo)" ~ "Very bad",
+                    NA ~ NA_character_,
+                    unmatched = "error"))
 
 # First level of each is the contrast reference in the segments script.
 demo_levels <- list(
@@ -223,7 +213,7 @@ cfg <- list(
   workers = NULL,
   run_item_screen = TRUE,
 
-  out_dir = here::here("output", "mexico"),
+  out_dir = here::here("output"),
 
   # Home: leave compass_base_url NULL and OpenRouter is used, reading
   # OPENROUTER_API_KEY from .Renviron. Work: set compass_base_url and llm_model,

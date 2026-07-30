@@ -287,17 +287,6 @@ replicate_variance <- function(rep_des, theta_fun, theta_hat) {
   rep_des$scale * crossprod(d * sqrt(rep_des$rscales))
 }
 
-# BCH: replace each hard assignment with row W_i of the inverse of the
-# design-weighted classification error matrix D[k, s] = P(W = s | X = k).
-# Entries can be negative; rows sum to one because D's rows do.
-bch_weights <- function(post, modal, w) {
-  K <- ncol(post)
-  num <- crossprod(w * post, outer(modal, seq_len(K), `==`) + 0)
-  D <- sweep(num, 1, rowSums(num), "/")
-  solve(D)[modal, , drop = FALSE]
-}
-
-
 # =============================================================================
 # 4. PREDICTION
 # =============================================================================

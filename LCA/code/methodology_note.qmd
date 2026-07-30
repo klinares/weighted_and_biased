@@ -1,0 +1,134 @@
+---
+title: "Segmenting Survey Respondents Without Overstating Precision: A Design-Based Workflow for Latent Class Analysis"
+subtitle: "Methodology note"
+author: "Kevin Linares"
+date: today
+format:
+  pdf:
+    geometry: margin=0.8in
+    fontsize: 10pt
+    number-sections: false
+    colorlinks: true
+    include-in-header:
+      text: |
+        \usepackage{enumitem}
+        \setlist[itemize]{topsep=2pt,itemsep=1pt,parsep=0pt,leftmargin=1.1em}
+        \setlength{\parskip}{3pt}
+        \setlength{\abovedisplayskip}{3pt}
+        \setlength{\belowdisplayskip}{3pt}
+execute:
+  echo: false
+---
+
+## The problem: correct point estimates, wrong standard errors
+
+**Design-weighted latent class estimation is settled; carrying design-based variance from the measurement model through to domain estimates and contrasts is not, and available software leaves that gap open.** Weighting the likelihood so segments describe the population is standard (Patterson, Dayton and Graubard 2002; Vermunt and Magidson 2007). What is not standard is one variance procedure surviving the whole chain, including the three-step stage where a classification-error correction introduces variance of its own.
+
+- With $J$ items of $C_j$ categories and $K$ segments the model carries $d_K = (K-1) + K\sum_j(C_j-1)$ free parameters, several hundred routinely; linearized sandwich variance requires inverting an information matrix of that dimension with many parameters at the boundary.
+- Replication propagates without rederivation: once replicate weights exist, any downstream statistic inherits design-based variance by recomputation.
+- No R package supplies weighted estimation, replicate variance, bias-adjusted profiling, and a labelled data product together. `poLCA` is unweighted; `survey` has no mixture models; `baysc` is Bayesian, selects $K$ automatically, and needs a compiler toolchain unavailable in restricted environments.
+
+## Estimation
+
+**Sampling weights enter every sufficient statistic of the EM algorithm, so segments and their prevalences estimate census quantities rather than sample quantities.** For response pattern $\mathbf{y}_i$, segment prevalences $\pi_k$, and conditional response probabilities $\rho_{jck} = P(y_{ij}=c \mid X_i=k)$, estimation maximizes the pseudo-log-likelihood
+
+$$
+\ell_w(\boldsymbol\theta) = \sum_i w_i \log\Big(\textstyle\sum_k \pi_k \prod_j \rho_{j\,y_{ij}\,k}\Big),
+\qquad
+p_{ik} = \frac{\pi_k \prod_j \rho_{j\,y_{ij}\,k}}{\sum_l \pi_l \prod_j \rho_{j\,y_{ij}\,l}},
+$$
+
+with the E-step posterior $p_{ik}$ at right and weights appearing in both M-step updates:
+
+$$
+\hat\pi_k = \frac{\sum_i w_i p_{ik}}{\sum_i w_i},
+\qquad
+\hat\rho_{jck} = \frac{\sum_i w_i\, p_{ik}\, \mathbf{1}(y_{ij}=c)}
+{\sum_i w_i\, p_{ik}\, \mathbf{1}(y_{ij}\ \text{observed})}.
+$$
+
+- Restricting the $\hat\rho$ denominator to respondents who answered item $j$ keeps $\sum_c \hat\rho_{jck}=1$ under item nonresponse; with complete cases it is vacuous.
+- The E-step accumulates $\log\rho$ and applies log-sum-exp before exponentiating, since the raw product underflows and $p_{ik}$ becomes $0/0$. A missing item contributes zero on the log scale, exactly equivalent to dropping it from the product; that equivalence licenses partial-response scoring below.
+- Starting values are drawn in the main session from a deterministic seed sequence and passed to workers as data, so no worker touches the RNG and parallel and sequential runs agree bit for bit.
+- The mixture likelihood is label-invariant, so every fit is aligned to a reference by minimizing $\sum_k \lVert \boldsymbol\rho^{\text{fit}}_{\cdot\cdot\sigma(k)} - \boldsymbol\rho^{\text{ref}}_{\cdot\cdot k}\rVert^2$ over permutations, solved exactly by the Hungarian algorithm.
+
+## Variance: one procedure, applied everywhere
+
+**All uncertainty derives from a stratified delete-one-PSU jackknife, and the same replicate weights serve the measurement model, the domain estimates, and the contrasts.** With $n_h$ PSUs in stratum $h$, deleting PSU $j$ and reweighting its stratum-mates by $n_h/(n_h-1)$ gives $\hat{\boldsymbol\theta}_{(hj)}$, and
+
+$$
+\widehat{\mathbf{V}}(\hat{\boldsymbol\theta}) = \sum_h \frac{n_h-1}{n_h}
+\sum_{j=1}^{n_h}\big(\hat{\boldsymbol\theta}_{(hj)}-\hat{\boldsymbol\theta}\big)
+\big(\hat{\boldsymbol\theta}_{(hj)}-\hat{\boldsymbol\theta}\big)^{\!\top}.
+$$
+
+- Replicate refits are warm-started at the full-sample solution and aligned to it, so variance is within-mode by construction; terminal tolerance matches the point estimate, since under-converged replicates enter as bias in every squared deviation.
+- Retaining the off-diagonal of $\widehat{\mathbf{V}}$ makes contrasts available without further derivation.
+- Intervals for any probability use the delta method on the logit scale, $\mathrm{se}_{\text{logit}}(\hat p)=\mathrm{se}(\hat p)/\{\hat p(1-\hat p)\}$, back-transformed, with critical value $t_{0.975,\nu}$ where $\nu$ is PSUs minus strata. Estimates within $10^{-3}$ of a boundary fall back to truncated Wald and are flagged.
+- Singleton strata are a hard stop: `survey.lonely.psu` governs linearization, not replicate construction, so a stratum with $n_h=1$ silently contributes zero variance. The check runs on the analysis frame, since case exclusions can create singletons the released file does not have.
+
+## Validating variance code against an exact target
+
+**A covariate constant within a PSU has intracluster correlation $\rho_{\text{ICC}}=1$, so its design effect must equal the mean cluster size exactly, a sharper check on variance code than agreement with a second point estimator.** This is the practice we would most encourage others to adopt: validation defaults to comparing point estimates, but variance code resists that, since two programs may use different variance methods and disagree legitimately.
+
+$$
+\mathrm{deff} = \frac{\widehat V_{\text{design}}}{\widehat V_{\text{SRS}}} \approx 1+(m-1)\rho_{\text{ICC}}
+\quad\Longrightarrow\quad
+\mathrm{deff} = m \ \text{ when } \rho_{\text{ICC}} = 1 ,
+$$
+
+- In the demonstration survey (130 PSUs, mean cluster size 12.4) urbanicity is PSU-constant and returned $\mathrm{deff}=12.6$, confirming the PSU identifier, the replicate weights, and the variance formula are jointly correct.
+- $\mathrm{deff}<1$ requires $\rho_{\text{ICC}}<0$, meaning within-PSU composition was controlled rather than sampled: the signature of a final-stage quota. Sex and age returned $\approx0.2$ here. That precision is a fieldwork artifact and should not be interpreted.
+- Reporting $\mathrm{deff}$ with and without strata separates the two sources; agreement means stratification contributes nothing.
+- Estimation is validated separately: at unit weights the pseudo-likelihood reduces to the ordinary likelihood, so our EM and `poLCA` must agree, and agreement was exact. That certifies estimation only, which is why the identity above exists.
+
+## Model selection and fit diagnostics
+
+**Weighting breaks the scale on which information criteria compare likelihood against penalty, and the conventional local-dependence statistic has no valid reference distribution under a pseudo-likelihood, so both required modification.** Since $\ell_w$ is linear in the weights, rescaling to $\ell^*_w=\ell_w\cdot n/\sum_i w_i$ is exactly equivalent to fitting with weights summing to $n$: point estimates untouched, criteria calibrated.
+
+$$
+\mathrm{BIC} = -2\ell^*_w + d_K\log n,
+\qquad
+\mathrm{BIC}_{\text{eff}} = -2\ell^*_w + d_K\log n_{\text{eff}},
+\qquad
+n_{\text{eff}} = \frac{(\sum_i w_i)^2}{\sum_i w_i^2}.
+$$
+
+- Both are reported so disagreement is visible rather than hidden by a default. $n_{\text{eff}}$ responds to weight variation, not clustering, so the gap is a lower bound on the design's cost and vanishes for a self-weighting file.
+- The bootstrap LRT is omitted: its parametric bootstrap draws independent observations from the fitted model, not the process that generated a clustered sample.
+- $K$ is never selected automatically. The analyst weighs the criteria against weighted relative entropy, $R^2_E = 1 + \sum_i w_i\sum_k p_{ik}\log p_{ik} \big/ \{(\sum_i w_i)\log K\}$, then fixes $K$ in configuration where the decision is auditable.
+- Local dependence is measured as total variation distance between the design-weighted observed two-way table and the model-implied $\Pi_{ab}=\boldsymbol\rho_a\operatorname{diag}(\boldsymbol\pi)\boldsymbol\rho_b^{\top}$:
+$$
+\mathrm{BVR}_{ab} = \tfrac12\sum_{c,d}\big|\widehat P_{ab}(c,d) - \Pi_{ab}(c,d)\big| \in [0,1].
+$$
+Pearson's form divides by a possibly-empty model cell, and its null distribution is already wrong for unweighted binary data (Oberski, van Kollenburg and Vermunt 2013); under design weighting none is valid. A statistic without a null distribution is an effect size and should sit on a bounded scale. Item discrimination uses the same metric, averaged over segment pairs.
+
+
+## Scoring, domain estimation, and the three-step correction
+
+**Local independence makes assignment exact for item-partial respondents, so scoring precedes domain estimation and domain estimates run on the larger scored frame.** For answered set $A_i$, $p^{\text{obs}}_{ik} \propto \pi_k \prod_{j\in A_i}\rho_{j\,y_{ij}\,k}$ and $\hat X_i = \arg\max_k p^{\text{obs}}_{ik}$, subject to a minimum-items floor. Item nonresponse on attitude batteries correlates with education and age, so restricting domain estimation to complete responders selects on the composition being estimated. The design is rebuilt on the scored frame.
+
+$$
+\hat p_{dk} = \frac{\sum_{i\in d} w_i \mathbf{1}(\hat X_i=k)}{\sum_{i\in d} w_i},
+\qquad
+D_{ks} = \frac{\sum_i w_i p_{ik}\mathbf{1}(\hat X_i=s)}{\sum_i w_i p_{ik}},
+\qquad
+\mathbf{u}_i = \mathbf{e}_{\hat X_i}^{\top}\mathbf{D}^{-1}.
+$$
+
+- Modal assignment attenuates association toward the marginal (Bolck, Croon and Hagenaars 2004). The BCH correction replaces the hard assignment with $\mathbf{u}_i$, unbiased because $\mathbb{E}[u_{ik}\mid X_i=m]=(\mathbf{D}\mathbf{D}^{-1})_{mk}=\mathbf{1}(m=k)$. Two properties follow: entries can be negative, and rows still sum to one since $\mathbf{D}\mathbf{1}=\mathbf{1}\Rightarrow\mathbf{D}^{-1}\mathbf{1}=\mathbf{1}$.
+- $\mathbf{D}$ and $\mathbf{u}$ are rebuilt inside every replicate, so intervals carry the design variance of the classification table and the cross-tabulation jointly. Vermunt (2010) shows BCH point estimates with uncorrected variances yield p-values far too small.
+- Report uncorrected estimates when the shift is small relative to its standard error, as it was here. The correction protects null findings, not positive ones: attenuation always understates group differences, so a surviving difference is real while a null may be classification error.
+- Contrasts use the replicate covariance directly, $\widehat{\mathrm{Var}}(\hat p_{dk}-\hat p_{d'k}) = \widehat V_{dd}+\widehat V_{d'd'}-2\widehat V_{dd'}$, Holm-adjusted within demographic. Overlapping intervals are not a test.
+- Report both normalizations: $P(\text{segment}\mid d)$ describes demographic groups, $P(d\mid\text{segment})$ describes segments. A segment can peak within a tiny group while drawing almost no members from it, and only the second reveals it.
+
+## Replication
+
+**The workflow transfers to any survey with released design identifiers, and porting requires editing one file.** Four files: an engine never edited per dataset, a configuration file that is the only per-dataset edit, and two documents producing the model and the profiles.
+
+- **Required from the provider:** stratum identifier, PSU identifier, analysis weight. Misidentifying the stratification variable invalidates every standard error and nothing else in the output reveals it; this is the highest-consequence decision in a port.
+- **Halts the run:** a response label unmatched by an explicit recode rule; a singleton stratum; disagreement with `survey::svymean` on a reference statistic; disagreement between parallel and sequential fits; a label file whose rows fail to match $K$.
+- **Analyst must check:** the recode audit; the design effect table against mean cluster size; weight CV and unequal weighting effect; assignment quality by items answered; the profiles, to name and confirm the segments.
+- Segment names are drafted by a language model under a frozen, certified instrument, then written to a file the analyst edits to take ownership. Names never enter estimation; a wrong name is a presentation error, not a statistical one.
+
+The full treatment, with derivations and complete references, is in the accompanying methodology paper. Components are established: design-weighted LCA (Patterson, Dayton and Graubard 2002; Vermunt and Magidson 2007), replicate variance (Wolter 2007; Lumley 2010), bias-adjusted three-step profiling (Bolck, Croon and Hagenaars 2004; Vermunt 2010). The contribution is their integration under one variance procedure, with the design-effect identity as a specification check.
