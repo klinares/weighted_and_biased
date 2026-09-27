@@ -1,0 +1,2561 @@
+item_id,kind,origin,question,ref_answer,gold_latex,role,model,answer,secs,gold_in_ctx,n_eq,eq_unsourced,bad_cite,cites,math_ok,correct,equation_correct,unsupported,judge_note
+equation_003,equation,applications_stats_modeling_SURV617/midterm/midterm_study_guide.qmd,How is the test statistic for a Likelihood Ratio Test calculated when comparing two nested models?,$$	ext{LRT} = -2	ext{log}	extstyleinom{L_{	ext{reduced}}}{L_{	ext{full}}} = -2(\ell_{	ext{reduced}} - \ell_{	ext{full}})$$,\text{LRT} = -2\log\left(\frac{L_{\text{reduced}}}{L_{\text{full}}}\right) = -2(\ell_{\text{reduced}} - \ell_{\text{full}}),chat,anthropic/claude-sonnet-4.5,"# Likelihood Ratio Test Statistic
+
+The test statistic for a Likelihood Ratio Test (LRT) comparing two nested models is calculated as:
+
+$$\text{LRT} = -2\log\left(\frac{L_{\text{reduced}}}{L_{\text{full}}}\right) = -2(\ell_{\text{reduced}} - \ell_{\text{full}})$$
+
+Or equivalently:
+
+$$\text{LRT} = (-2\ell_{\text{reduced}}) - (-2\ell_{\text{full}})$$
+
+where:
+- $L_{\text{reduced}}$ = likelihood of the nested (reduced) model with fewer parameters
+- $L_{\text{full}}$ = likelihood of the reference (full) model with more parameters  
+- $\ell$ = log-likelihood (natural log of $L$)
+
+[S2]
+
+## In Practice
+
+The test statistic is **the difference in -2 log-likelihoods** between the nested and reference models [S1]. This can also be written as:
+
+$$G_k - G_p \sim \chi^2_{p-k}$$
+
+where $G_k = -2\log L(\hat{\beta}_k)$ for the reduced model and $G_p = -2\log L(\hat{\beta}_p)$ for the full model, with degrees of freedom equal to the difference in number of parameters ($p - k$) [S5].
+
+## Reference Distribution
+
+Under the null hypothesis that the constrained parameters equal zero, this test statistic follows a **chi-square distribution** with $q$ degrees of freedom, where $q$ is the difference between the two models in number of parameters estimated [S1, S7].
+
+## Important Caveat
+
+The LRT assumes ""large"" sample of clusters and ""large"" samples within clusters [S1]. For testing variance components at boundary values (e.g., testing if a variance equals zero), special considerations apply to the p-value calculation [S3].",8.390838146209717,TRUE,3,0,0,TRUE,1,2,1,1,"The answer is fully correct and complete based on the reference passage. However, it is marked as unsupported because it introduces external information not found in the provided text, such as the chi-square distribution notation ($G_k - G_p igsim 	ext{χ}^2_{p-k}$), the specific assumption regarding 'large' samples of clusters, and the caveat regarding boundary values for variance components."
+equation_024,equation,Fund_Infe_SURV740/assignments/HW3.qmd,What is the formula used to calculate the complier average causal effect (CACE)?,$$CACE = rac{E(Y|Z=1) - E(Y|Z=0) }{ E(A|Z=1) - E(A|Z=0)}$$,.03 = .02 + (.2 \times \theta^0_C),chat,anthropic/claude-sonnet-4.5,"The formula for the complier average causal effect (CACE) is [S1, S4, S8]:
+
+$$CACE = \frac{E(Y|Z=1) - E(Y|Z=0)}{E(A|Z=1) - E(A|Z=0)}$$
+
+Where:
+- $Z$ is the instrumental variable (e.g., treatment assignment or encouragement)
+- $Y$ is the outcome variable
+- $A$ is the actual treatment received
+- $E(Y|Z=1)$ is the expected outcome when $Z=1$ (assigned/encouraged)
+- $E(Y|Z=0)$ is the expected outcome when $Z=0$ (not assigned/encouraged)
+- $E(A|Z=1)$ is the expected treatment receipt when $Z=1$
+- $E(A|Z=0)$ is the expected treatment receipt when $Z=0$
+
+**Interpretation**: The numerator represents the causal effect of treatment assignment on the outcome $Y$, while the denominator represents the causal effect of treatment assignment on actual treatment receipt $A$ (which equals the proportion of compliers in the population) [S1]. The ratio gives the complier average causal effect—the average treatment effect for the subpopulation of compliers [S1, S4].
+
+**Important caveat**: CACE does not provide inference about the average causal effect for the entire population, but only for the complier subpopulation. It provides no information about defiers, always-takers, or never-takers [S1].",7.9301981925964355,TRUE,1,0,0,TRUE,1,2,1,0,"The answer provides the correct formula for CACE as stated in the reference passage. Note: The 'EXPECTED FORMULA' provided in the prompt (.03 = .02 + (.2 	imes 	heta^0_C)) appears to be a specific calculation step for a different variable, whereas the reference passage explicitly states the CACE formula is the ratio of expectations. The answer correctly identifies the CACE formula."
+equation_016,equation,stat_mod_ML_1_SURV615/assignments/HW8.qmd,How is the variance inflation factor (VIF) calculated to assess multicollinearity?,$$VIF_j = rac{1}{1-R^2_j}$$,VIF_j = \frac{1}{1=R^2_j},chat,anthropic/claude-sonnet-4.5,"The variance inflation factor (VIF) for predictor $X_j$ is calculated as:
+
+$$VIF_j = \frac{1}{1 - R_j^2}$$
+
+where $R_j^2$ is the $R^2$ from a regression model with $X_j$ as the response and all other predictors (plus the intercept) as the explanatory variables [S1, S2].
+
+## What VIF measures
+
+VIF quantifies how much the variance of $\hat{\beta}_j$ is inflated due to collinearity with other predictors. The formula shows this directly: for predictor $X_j$,
+
+$$V(\hat{\beta}_j) = \sigma^2 \frac{1}{\sum(X_{ij} - \bar{X}_j)^2} \cdot \frac{1}{1 - R_j^2}$$
+
+where the term $\frac{1}{1 - R_j^2}$ is the VIF [S1].
+
+## Interpretation
+
+- **Minimum value**: $VIF = 1$ when $R_j^2 = 0$ (predictor is orthogonal to all others; no collinearity) [S1]
+- **High collinearity**: As $R_j^2 \to 1$, the denominator $(1 - R_j^2) \to 0$, so $VIF_j \to \infty$ [S1]
+- **Standard error inflation**: $\sqrt{VIF}$ approximates how much larger the standard error is compared to if there were no collinearity [S3, S4]. For example, $VIF = 307.4$ means $SE$ is about $\sqrt{307.4} = 17.5$ times larger than it would be without collinearity [S3]
+
+## Rule of thumb
+
+In the social sciences, $VIF > 5$ or $VIF > 10$ indicates a problematic amount of collinearity [S2, S3, S6]. However, this cannot be used as a correction—it only diagnoses the severity of the problem [S3, S4].
+
+## R code example
+
+```r
+library(olsrr)
+
+# Fit your model
+mod <- lm(y ~ x1 + x2 + x3, data = your_data)
+
+# Calculate VIF
+ols_vif_tol(mod) |>
+  select(Variables, VIF) |>
+  arrange(desc(VIF))
+```
+
+Or using the `faraway` package's `vif()` function on the design matrix without intercept [S5].",12.055631160736084,TRUE,2,2,0,TRUE,1,2,1,1,"The answer is fully correct and complete based on the reference. However, it is marked as unsupported because it introduces significant external information not present in the reference passage, such as the specific formula for the variance of beta, the relationship between VIF and standard error inflation, and references to social science standards (VIF > 10)."
+equation_035,equation,Fund_Infe_SURV740/final/surv740_complete_study_guide.qmd,What is the formula for calculating weights using propensity score subclassification?,$$w_j^{PSC} = rac{\sum_{k \in s_p(g)} d_k}{n_{np}(g)}$$,w_j^{PSC} = \frac{\sum_{k \in s_p(g)} d_k}{n_{np}(g)},chat,anthropic/claude-sonnet-4.5,"# Propensity Score Subclassification Weights
+
+The formula for weights in propensity score subclassification (PSC) is:
+
+$$w_j^{PSC} = \frac{\sum_{k \in s_p(g)} d_k}{n_{np}(g)}$$
+
+for $j \in s_{np}(g)$ [S1, S5]
+
+**Where:**
+- $w_j^{PSC}$ = the weight for unit $j$ in the non-probability sample
+- $\sum_{k \in s_p(g)} d_k$ = the sum of design weights from the probability sample units in subclass $g$
+- $n_{np}(g)$ = the number of non-probability sample units in subclass $g$
+- $s_p(g)$ = probability sample units in subclass $g$
+- $s_{np}(g)$ = non-probability sample units in subclass $g$
+
+**The procedure** [S1, S5]:
+1. Estimate propensity scores for the combined sample (non-probability + weighted probability sample)
+2. Sort and partition the estimated propensities into $G$ subclasses
+3. Within each subclass $g$, the total probability sample weight is evenly distributed to all non-probability sample units in that subclass
+
+**Key assumption**: Participants within subclasses represent the same number of population units [S1, S5]. This means PSC assumes equal representation within each subclass—all non-probability sample units in a subclass get the same weight.",6.623223066329956,TRUE,1,0,0,TRUE,1,NA,NA,NA,"[38;5;255mResponse was truncated because it hit the `max_tokens` limit.
+[36mℹ[38;5;255m Increase `max_tokens` to allow the model to generate the full response.[39m"
+equation_011,equation,complex_sample_data_SURV701/midterm/surv701_midterm_study_guide.qmd,What is the formula for calculating the TSL variance when there are multiple PSUs per stratum?,$$(dx_h)^2 = rac{a_h}{a_h-1}\left[\sum_\alpha x_{h\alpha}^2 - \frac{\bigl(\sum_\alpha x_{h\alpha}\bigr)^2}{a_h}\right]$$,(dx_h)^2 = \frac{a_h}{a_h-1}\left[\sum_\alpha x_{h\alpha}^2 - \frac{\bigl(\sum_\alpha x_{h\alpha}\bigr)^2}{a_h}\right],chat,anthropic/claude-sonnet-4.5,"# TSL Variance Formula for Multiple PSUs per Stratum
+
+When there are **more than 2 PSUs per stratum**, the TSL variance formula uses the same structure as the 2-PSU case but calculates the squared differences differently [S1].
+
+## Formula
+
+$$\widehat{\text{Var}}(\bar{y}_w) = \frac{\displaystyle\sum_h (dx_h)^2 \;+\; \bar{y}_w^2 \sum_h (dz_h)^2 \;-\; 2\bar{y}_w \sum_h dx_h\,dz_h}{\hat{X}^2}$$
+
+where $\hat{X} = \sum_h (z_{h1} + z_{h2} + \ldots)$ is the total estimated $\hat{N}$ [S1].
+
+## Key Difference: Computing the Squared Differences
+
+For stratum $h$ with $a_h$ PSUs, the squared difference terms are calculated as [S1]:
+
+$$
+(dx_h)^2 = \frac{a_h}{a_h-1}\left[\sum_\alpha x_{h\alpha}^2 - \frac{\bigl(\sum_\alpha x_{h\alpha}\bigr)^2}{a_h}\right]
+$$
+
+where:
+- $x_{h\alpha} = \sum_i w_{h\alpha i}\,y_{h\alpha i}$ is the PSU-level weighted total for PSU $\alpha$ in stratum $h$
+- $\alpha$ indexes the PSUs within stratum $h$ (from 1 to $a_h$)
+- $w_{h\alpha i}$ is the weight for element $i$ in PSU $\alpha$ of stratum $h$
+
+The same structure applies to $(dz_h)^2$ (using $z_{h\alpha} = \sum_i w_{h\alpha i}$) and the cross-product $dx_h\,dz_h$ [S1].
+
+## Important Note
+
+This formula requires **at least 2 PSUs per stratum** for variance estimation. With only one PSU per stratum, no design-unbiased variance estimator exists, and strata must be collapsed into pairs [S3, S5].",9.26528286933899,TRUE,2,0,0,TRUE,1,2,1,1,"The answer provides the correct formula for (dx_h)^2 as requested. However, it introduces a larger variance formula for Var(y_w) and mentions 'collapsing strata into pairs' which are not present in the provided reference passage."
+equation_027,equation,complex_sample_data_SURV701/assignments/hw3_surv701_Linares.qmd,What is the formula for estimating the variance of the sample mean using the Jackknife Repeated Replication (JRR) method for a simple random sample?,$$\hat{V}_{JRR}(\bar{y}) = \frac{n-1}{n} \sum_{k=1}^{n} (\bar{y}_{(k)} - \bar{y})^2$$,\hat{V}(\bar{y}) = \frac{\sum_{i=1}^n(y_i - \bar{y}^2) }{n-1} \frac{1}{n},chat,anthropic/claude-sonnet-4.5,"For a simple random sample without replacement, the JRR variance estimator for the sample mean is:
+
+$$\widehat{\text{Var}}_{JRR}(\bar{y}) = \frac{n-1}{n} \sum_{k=1}^{n} (\bar{y}_{(k)} - \bar{y})^2$$
+
+where:
+- $n$ is the sample size
+- $\bar{y}$ is the full-sample mean
+- $\bar{y}_{(k)}$ is the mean computed after deleting observation $k$
+- The sum is over all $n$ replicates (one for each deleted observation)
+
+[S2]
+
+**Important property for SRS:** For a simple random sample, this jackknife variance estimator is algebraically equivalent to the standard textbook SRS variance formula $s^2/n$ [S2, S3]. As stated in the Practical Tools textbook, ""Since this variance estimator can be computed directly, the jackknife has no advantage for $\hat{t} = \bar{N}\bar{y}$, nor for any other linear estimator"" [S3]. The benefit of the jackknife emerges for nonlinear estimators, where it provides an approximately unbiased and consistent variance estimator [S3].
+
+**Implementation in R:**
+```r
+# Manual calculation
+n <- length(y)
+y_bar <- mean(y)
+
+# Compute each replicate mean (delete one observation at a time)
+jrr_means <- map_dbl(1:n, ~mean(y[-.]))
+
+# JRR variance
+var_jrr <- ((n - 1) / n) * sum((jrr_means - y_bar)^2)
+se_jrr <- sqrt(var_jrr)
+```
+[S2]",7.869444131851196,TRUE,1,1,0,TRUE,1,NA,NA,NA,"[38;5;255mResponse was truncated because it hit the `max_tokens` limit.
+[36mℹ[38;5;255m Increase `max_tokens` to allow the model to generate the full response.[39m"
+equation_032,equation,sampling_1_SURV626/assignments/Final.qmd,What is the formula for the design effect in stratified sampling?,$$	ext{deff}_{strat} = rac{	ext{Var}_{strat}(ar{y}_{st})}{	ext{Var}_{SRS}(ar{y})}$$,\text{deff}_{strat} = \frac{\text{Var}_{strat}(\bar{y}_{st})}{\text{Var}_{SRS}(\bar{y})},chat,anthropic/claude-sonnet-4.5,"# Design Effect in Stratified Sampling
+
+The design effect (deff) for stratified sampling is the ratio of the variance under the stratified design to the variance under simple random sampling (SRS):
+
+$$\text{deff}_{\text{strat}} = \frac{\text{Var}_{\text{strat}}(\bar{y}_{st})}{\text{Var}_{\text{SRS}}(\bar{y})}$$
+
+[S3, S2]
+
+## Component Formulas
+
+**Stratified sampling variance** (ignoring fpc):
+$$\widehat{\text{Var}}(\bar{y}_{st}) = \sum_{h=1}^{H} W_h^2 \frac{s_h^2}{n_h}$$
+
+**SRS variance** (ignoring fpc):
+$$\widehat{\text{Var}}_{\text{SRS}}(\bar{y}) = \frac{s^2}{n}$$
+
+where $s^2$ is the overall sample variance [S1].
+
+## With Finite Population Correction
+
+When including the fpc, the design effect becomes:
+
+$$\text{deff} = \frac{\sum_{h=1}^{H} W_h^2 \left(1 - f_h\right) \frac{s_h^2}{n_h}}{\left(1 - f\right) \frac{s^2}{n}}$$
+
+where $f_h = n_h / N_h$ and $f = n / N$ [S2].
+
+## Interpretation
+
+- **deff < 1**: Stratification gains precision relative to SRS (the usual case when strata are homogeneous within and heterogeneous between) [S1, S2, S6]
+- **deff > 1**: Loss in precision (can occur with poor allocation or poor choice of stratification variables) [S3]
+- **deff = 1**: No gain or loss (strata unrelated to the outcome) [S3]
+
+The **effective sample size** is $n_{\text{eff}} = n / \text{deff}$ [S5].",8.494711875915527,TRUE,4,2,0,TRUE,1,2,1,1,"The answer provides the correct formula and additional context. However, it is marked as unsupported because it introduces several formulas (the expanded variance formulas and the effective sample size formula) and specific terminology (fpc) that are not present in the provided reference passage."
+equation_026,equation,applied_sampling_SURV625/assignments/HW2.qmd,How is the overall population mean calculated for a stratified sample based on department means?,$$\bar{Y} = \sum_h \frac{N_h}{N}\bar{Y}_h = \sum_hW_h\bar{Y}_h$$,\bar{Y} = \sum_h \frac{N_h}{N}\bar{Y}_h = \sum_hW_h\bar{Y}h,chat,anthropic/claude-sonnet-4.5,"# Overall Population Mean for Stratified Samples
+
+The overall population mean is calculated as a **weighted sum of the stratum means**, where each stratum mean is weighted by the stratum's proportion of the total population.
+
+## Formula
+
+$$\bar{y}_{st} = \sum_{h=1}^{H} W_h \bar{y}_h$$
+
+where:
+- $\bar{y}_{st}$ = the stratified sample estimate of the population mean
+- $W_h = N_h / N$ = the weight for stratum $h$ (proportion of population in stratum $h$)
+- $N_h$ = the population size in stratum $h$
+- $N$ = the total population size
+- $\bar{y}_h$ = the sample mean in stratum $h$
+- $H$ = the total number of strata
+
+[S6, S7]
+
+## In R Code
+
+From your course materials:
+
+```r
+# Calculate stratum weights
+strata_data <- strata_data |>
+  mutate(W_h = N_h / sum(N_h))
+
+# Calculate overall stratified mean
+y_bar_st <- sum(W_h * y_bar_h)
+```
+[S2]
+
+## Key Point
+
+The population mean is rewritten ""as a weighted sum of the population means for each stratum, where the weight $W_h$ is the relative proportion of the population within each stratum"" [S6]. This weighting ensures that larger strata contribute proportionally more to the overall estimate, making the estimate representative of the full population structure.",6.989558935165405,TRUE,1,1,0,TRUE,1,2,1,1,"The answer is correct and provides the formula in a mathematically equivalent form. However, it is marked as unsupported because it includes R code and specific citations ([S6, S7, S2]) that are not present in the provided reference passage."
+equation_014,equation,Fund_Infe_SURV740/assignments/HW5.qmd,What is the formula for calculating the stratified differential item functioning ($DIF_{strat}$) based on population sizes and group means?,$$DIF_{strat} = rac{N_{women}(ar{y}_{women_{high}} - ar{y}_{women_{low}}) + N_{men}(ar{y}_{men_{high}} - ar{y}_{men_{low}})}{N_{women} + N_{men}}$$,DIF = \frac{\sum w_i \times y_i women high}{\sum w_i womenhigh} - \frac{\sum w_i \times y_i womenlow}{\sum w_i womenlow},chat,anthropic/claude-sonnet-4.5,"Based on your course materials, the formula for the stratified differential item functioning is [S1]:
+
+$$DIF_{strat} = \frac{N_{women}(\bar{y}_{women_{high}} - \bar{y}_{women_{low}}) + N_{men}(\bar{y}_{men_{high}} - \bar{y}_{men_{low}})} {N_{women} + N_{men}}$$
+
+where:
+- $N_{women}$ = population size for women
+- $N_{men}$ = population size for men  
+- $\bar{y}_{women_{high}}$ = mean for women in the high risk group
+- $\bar{y}_{women_{low}}$ = mean for women in the low risk group
+- $\bar{y}_{men_{high}}$ = mean for men in the high risk group
+- $\bar{y}_{men_{low}}$ = mean for men in the low risk group
+
+The materials note that this is a **model-based** formulation [S1]. 
+
+An alternative expression when the population is balanced within risk groups (equal proportions) is [S1]:
+
+$$DIF_{strat} = \frac{Pr_{high} \times (\bar{y}_{women_{high}} - \bar{y}_{women_{low}}) + Pr_{low} \times (\bar{y}_{men_{high}} - \bar{y}_{men_{low}})}{Pr_{high} + Pr_{low}}$$
+
+where $Pr_{high}$ and $Pr_{low}$ are the proportions in the high and low risk groups.
+
+The materials contrast this with the **design-based** estimator $dif$ that uses survey weights $w_i$ [S1].",7.109933137893677,TRUE,2,0,0,TRUE,1,2,1,0,"The answer provides both versions of the $DIF_{strat}$ formula found in the reference passage (the one using population sizes $N$ and the one using proportions $Pr$), which are mathematically equivalent in this context. It correctly identifies the components and the distinction between model-based and design-based estimators."
+equation_018,equation,PracTools_SURV745/assignments/SURV745_Assign_4_Linares.qmd,What is the formula for the relative variance of the estimated total of a proportion when using stratified simple random sampling?,"$$\operatorname{relvar}(\hat{t}_P) = \frac{1}{t_P^2} \sum_{h=1}^{H} N_h \left(\frac{N_h}{n_h} - 1\right) S_h^2, \quad S_h^2 = \frac{P_h(1 - P_h) N_h}{N_h - 1}$$","\operatorname{relvar}(\hat{t}_P) = \frac{1}{t_P^2} \sum_{h=1}^{H} N_h \left(\frac{N_h}{n_h} - 1\right) S_h^2, \quad S_h^2 = \frac{P_h(1 - P_h)\, N_h}{N_h - 1}",chat,anthropic/claude-sonnet-4.5,"Based on your course materials, the **relative variance** formula for an estimated total under stratified simple random sampling is:
+
+$$\text{relvar}(\hat{t}) = \frac{\text{var}(\hat{t})}{t^2}$$
+
+where the variance of the estimated total is [S3]:
+
+$$\text{var}(\hat{t}_{st}) = \sum_{h=1}^H N_h^2 \left(\frac{1}{n_h} - \frac{1}{N_h}\right) S_h^2$$
+
+or equivalently [S7]:
+
+$$\text{var}(\hat{t}_{st}) = \sum_{h=1}^H N_h^2 (1-f_h) \frac{S_h^2}{n_h}$$
+
+where:
+- $N_h$ = population size in stratum $h$
+- $n_h$ = sample size in stratum $h$  
+- $f_h = n_h/N_h$ = sampling fraction in stratum $h$
+- $S_h^2$ = element variance in stratum $h$
+- $t$ = population total
+
+**For a proportion specifically**, when $y$ is a 0-1 variable, the element variance in stratum $h$ is [S2]:
+
+$$S_h^2 = \frac{N_h}{N_h-1} p_h(1-p_h)$$
+
+where $p_h$ is the population proportion in stratum $h$.
+
+The estimated version uses $\hat{S}_h^2 = \frac{n_h}{n_h-1}\hat{p}_h(1-\hat{p}_h)$ [S2].
+
+**Important caveat**: Your materials show the general stratified variance formula but don't explicitly present a combined ""relative variance of an estimated total for a proportion"" formula. The above combines the relvariance definition with the stratified total variance, specialized to proportions.",8.698782920837402,FALSE,4,4,0,TRUE,1,1,1,0,"The answer provides the correct components and a mathematically equivalent derivation of the formula found in the reference passage. While it breaks the formula into parts (relvar definition + variance of total + proportion variance) rather than providing the single combined expression shown in the reference, the resulting mathematical expression is equivalent."
+equation_009,equation,applied_sampling_SURV625/assignments/HW3.qmd,"How is the design effect used to calculate the intra-cluster correlation (ICC), also known as rho, and how can this be used to estimate the design effect for a new cluster size?",The intra-cluster correlation is calculated as $\hat{roh} = \frac{deff - 1}{b - 1}$. This value can then be used to estimate the design effect for a new cluster size using the formula $deff_{new} = 1 + (m_{new}-1) \times \hat{roh}$.,var_{srs}(\bar{y}) = (1 - f)\frac{p(1-p)}{nm-1},chat,anthropic/claude-sonnet-4.5,"# Using Design Effect to Calculate ICC and Project to New Cluster Sizes
+
+## Calculating ICC from Design Effect
+
+The intraclass correlation coefficient (ICC), denoted as $\rho$ (rho), is calculated from an observed design effect using:
+
+$$\hat{\rho} = \frac{d^2(\bar{y}) - 1}{b - 1}$$
+
+where:
+- $d^2(\bar{y})$ = estimated design effect (ratio of complex design variance to SRS variance)
+- $b$ = cluster size (number of elements per cluster)
+- $\hat{\rho}$ = estimated intraclass correlation
+
+[S1, S2, S4]
+
+**The logic:** For equal-probability cluster sampling, the design effect relates to ICC through:
+
+$$D^2(\bar{y}) \approx 1 + (b-1)\rho$$
+
+Solving this equation for $\rho$ gives the formula above [S1].
+
+## Projecting to a New Cluster Size
+
+Once you have estimated $\hat{\rho}$ from your current design, you can project the design effect for a **different cluster size** $b_{new}$:
+
+$$\text{deff}_{new} = 1 + (b_{new} - 1) \times \hat{\rho}$$
+
+[S2, S6, S8]
+
+Then calculate the new variance as:
+
+$$\text{var}_{new}(\bar{y}) = \text{var}_{SRS,new}(\bar{y}) \times \text{deff}_{new}$$
+
+where $\text{var}_{SRS,new}$ is recalculated for the new total sample size $n_{new} \times b_{new}$ [S2, S8].
+
+## Example Workflow from Course Materials
+
+```r
+# Step 1: Calculate current design effect
+deff <- var_complex / var_srs
+
+# Step 2: Estimate ICC from current design
+b <- 50  # current cluster size
+roh <- (deff - 1) / (b - 1)
+
+# Step 3: Project to new cluster size
+b_new <- 10  # new cluster size
+deff_new <- 1 + (b_new - 1) * roh
+
+# Step 4: Calculate new SRS variance with new sample size
+n_new <- 40
+nm_new <- n_new * b_new
+f_new <- nm_new / NM
+var_srs_new <- (1 - f_new) * (y_bar * (1 - y_bar)) / (nm_new - 1)
+
+# Step 5: Calculate projected variance
+var_new <- var_srs_new * deff_new
+```
+
+[S2]
+
+## Key Assumptions and Caveats
+
+1. **ICC is variable-specific**: ""roh is variable-specific! Hence, design-effects are estimate-specific"" [S6]. You must estimate $\rho$ separately for each survey variable.
+
+2. **ICC is a cluster property**: ""Clusters are naturally occurring, and roh is a property of those clusters; we have no control over roh once we define the clusters"" [S6]. The portability assumption is that $\rho$ remains constant when you change cluster size, which may not hold if cluster composition changes.
+
+3. **Equal-sized clusters**: These formulas assume equal or approximately equal cluster sizes. For unequal clusters, use $\bar{b} = \frac{\sum x_{\alpha}}{a}$ (average cluster size) [S8].
+
+4. **Interpretation of $\rho$**:
+   - $\rho > 0$: Within-cluster observations more similar than between clusters → inflated variance
+   - $\rho = 0$: No clustering effect; $D^2 = 1$
+   - $\rho < 0$: Within-cluster observations more different → variance reduction [S1]",14.887346029281616,TRUE,4,2,0,TRUE,1,2,0,1,"The answer is fully correct and complete regarding the question asked. However, the 'EXPECTED FORMULA' provided in the prompt was for the SRS variance, which the answer did not explicitly state as a standalone formula (though it used it in the R code), so equation_correct is 0. The answer is marked as unsupported because it includes several substantive claims (e.g., 'ICC is variable-specific', 'ICC is a cluster property', and the interpretation of rho > 0, = 0, < 0) that are not present in the provided reference passage."
+equation_030,equation,stat_mod_ML_2_SURV616/assignments/HW_4.qmd,How do you perform a likelihood ratio test to compare a full model with a reduced model?,"The test statistic is calculated as $G_k - G_p 	ext{ or } -2	ext{log}rac{L(\hat{\beta_k})}{L(\hat{\beta_p})}$, which follows a $\chi^2$ distribution with $p-k$ degrees of freedom.",G_p = -2logL(\hat{\beta}) \\ G_k = -2logL(\hat{\beta}),chat,anthropic/claude-sonnet-4.5,"# Likelihood Ratio Test for Model Comparison
+
+## Direct Answer
+
+To compare a full model with a reduced model using a likelihood ratio test, compute the difference in their -2 log-likelihoods. This difference follows a chi-square distribution with degrees of freedom equal to the difference in the number of parameters between the models [S1, S3, S6].
+
+## The Test Statistic
+
+The likelihood ratio test statistic can be written in two equivalent ways:
+
+$$\text{LRT} = -2\log\left(\frac{L(\hat{\beta}_k)}{L(\hat{\beta}_p)}\right)$$
+
+where $L(\hat{\beta}_k)$ is the likelihood of the reduced model with $k$ coefficients and $L(\hat{\beta}_p)$ is the likelihood of the full model with $p$ coefficients [S3, S6].
+
+This simplifies to:
+
+$$G_k - G_p \sim \chi^2_{p-k}$$
+
+where:
+- $G_k = -2\log L(\hat{\beta}_k)$ is the -2 log-likelihood for the reduced model
+- $G_p = -2\log L(\hat{\beta}_p)$ is the -2 log-likelihood for the full model  
+- $p - k$ = degrees of freedom (difference in number of parameters) [S1, S3, S6]
+
+Equivalently: $\text{LRT} = (-2\ell_{\text{reduced}}) - (-2\ell_{\text{full}})$ [S2]
+
+## R Implementation
+
+```r
+# Extract log-likelihoods from fitted models
+chi_square <- -2 * (logLik(reduced_model) - logLik(full_model))
+
+# Compute degrees of freedom (difference in number of parameters)
+df <- summary(full_model)$df[1] - summary(reduced_model)$df[1]
+
+# Compare to chi-square distribution
+p_value <- pchisq(chi_square, df, lower.tail = FALSE)
+```
+[S1]
+
+For multilevel models fitted with ML:
+```r
+# Fit models with ML (not REML) for fixed effects comparison
+model_full <- lmer(outcome ~ predictor1 + predictor2 + (1 | cluster), 
+                   data = mydata, REML = FALSE)
+model_reduced <- lmer(outcome ~ predictor1 + (1 | cluster), 
+                      data = mydata, REML = FALSE)
+
+# Use anova() for LRT
+anova(model_reduced, model_full)
+```
+[S2]
+
+## Key Considerations
+
+**Interpretation**: The test evaluates whether the full model contains additional information beyond the reduced model [S3, S6]. The null hypothesis is that the reduced model fits as well as the full model (i.e., the additional parameters equal zero) [S4, S7].
+
+**ML vs REML**: For multilevel models, you **must use ML estimation** (not REML) when comparing models with different fixed effects [S2, S4]. REML can only be used to compare models that differ in variance components but have identical fixed effects [S2].
+
+**Sample size assumptions**: The LRT assumes ""large"" samples of clusters and ""large"" samples within clusters for multilevel models [S4].
+
+**Boundary hypotheses**: When testing if a variance component equals zero, special considerations apply to the p-value calculation [S5].",14.512259006500244,TRUE,2,1,0,TRUE,1,2,1,1,"The answer is fully correct and complete based on the reference. However, it is marked as unsupported because it introduces significant external information not found in the reference passage, such as the specific R functions `lmer`, `anova()`, the distinction between ML and REML, and boundary hypotheses."
+equation_013,equation,stat_mod_ML_1_SURV615/exams/exam_1.qmd,How is the t-statistic calculated when testing whether a specific regression coefficient is significantly different from zero?,$$t = rac{\hat{\beta_i} - 0}{se\hat{\beta_i}}$$,t = \frac{\hat{\beta_i} - 0}{se\hat{\beta_i}},chat,anthropic/claude-sonnet-4.5,"# Testing a Regression Coefficient with a t-Statistic
+
+## Direct Answer
+
+The t-statistic for testing whether a regression coefficient $\beta_j$ is significantly different from zero is calculated as:
+
+$$t = \frac{\hat{\beta}_j}{\sqrt{\text{var}(\hat{\beta}_j)}}$$
+
+where $\hat{\beta}_j$ is the estimated coefficient and $\text{var}(\hat{\beta}_j)$ is its estimated variance [S2].
+
+## The Test
+
+You are testing:
+- **Null hypothesis**: $H_0: \beta_j = 0$  
+- **Alternative hypothesis**: $H_1: \beta_j \neq 0$
+
+The t-statistic is ""referenced against the 100(1 – α/2)th percentile of a t distribution with n – p degrees of freedom. If greater than that value, the null hypothesis is rejected"" [S2], where n is the sample size and p is the number of parameters in the model.
+
+## Where the Variance Comes From
+
+The variance $\text{var}(\hat{\beta}_j)$ is found on the diagonal of the model parameter covariance matrix. For a model with p parameters, this matrix has ""entries along the diagonal [that] are the estimated variances for the p model parameters"" [S2].
+
+## Important Caveat for Survey Data
+
+**If you are working with complex survey data**, the variance estimator must account for the design. The formula above still applies, but $\text{var}(\hat{\beta}_j)$ must be calculated using design-based methods that incorporate strata, PSUs, and weights. Most survey software (like `survey::svyglm()` in R) will automatically produce design-adjusted standard errors and t-statistics [from SURV701 context].
+
+## Alternative: Wald Chi-Square Test
+
+Your materials also present a Wald chi-square version for the same test:
+
+$$W = \frac{\hat{\beta}_j^2}{\text{var}(\hat{\beta}_j)}$$
+
+which ""is like a squared version of the t test"" and is ""referenced against the 100(1 – α)th percentile of a chi-square distribution with 1 degree of freedom"" [S1]. Note that $W = t^2$ when both are valid.",10.847772121429443,TRUE,2,2,0,TRUE,1,1,1,1,"The answer provides a mathematically equivalent formula (using the square root of variance instead of standard error), but it introduces a significant amount of external information not found in the reference passage (degrees of freedom, covariance matrices, survey data, and Wald tests), which constitutes unsupported assertions relative to the provided text."
+equation_034,equation,PracTools_SURV745/assignments/SURV745_Assign_3_Linares.qmd,What is the formula for calculating the required sample size $n_1$ when the variances of the two groups are equal ($\sigma_x = \sigma_y = \sigma$)?,$$n_1 = rac{\sigma^2}{\delta^2}\left[1 + r(1 - 2\gamma\rho)\right](z_{1-\alpha/2} + z_{\beta})^2$$,n_1 = \frac{1}{\delta^2}\left[\sigma_x^2 + r\sigma_y^2 - 2\gamma r \rho \sigma_x \sigma_y\right](z_{1-\alpha/2} - z_\beta)^2,chat,anthropic/claude-sonnet-4.5,"When the variances of the two groups are equal ($\sigma_x = \sigma_y = \sigma$), the formula for the required sample size $n_1$ is:
+
+$$n_1 = \frac{\sigma^2}{\delta^2} [1 + r (1-2\gamma\rho)] (z_{1-\alpha} - z_\beta)^2$$
+
+**Symbol definitions** [S1]:
+- $n_1$ = sample size for group 1
+- $\sigma^2$ = common variance (since $\sigma_x^2 = \sigma_y^2 = \sigma^2$)
+- $\delta$ = the effect size or minimum detectable difference under $H_A: \mu_D = \delta$
+- $r = n_1/n_2$ = ratio of sample sizes between the two groups
+- $\gamma = n_{12}/n_1$ = proportion of overlap between samples (for repeated measures or matched designs)
+- $\rho$ = correlation between the two measurements
+- $z_{1-\alpha}$ = critical value for a one-sided test at level $\alpha$
+- $z_\beta$ = critical value corresponding to power $1-\beta$
+
+**For a two-sided test**, the formula uses $z_{1-\alpha/2}$ instead [S2]:
+
+$$n_1 = \frac{\sigma^2}{\delta^2}\left[1 + r(1 - 2\gamma\rho)\right](z_{1-\alpha/2} + z_{\beta})^2$$
+
+Note that [S2] also writes the power term as $z_\beta$ where $z_\beta = z_{1-\beta}$ (e.g., for 80% power, $z_\beta = z_{0.80}$).
+
+**Special case**: If the samples are independent, then $\gamma = 0$ and the formula simplifies further by removing the correlation term [S1].",8.366603136062622,TRUE,2,0,0,TRUE,1,2,1,0,"The answer provides the correct simplified formula for equal variances as found in the reference passage. While the 'Expected Formula' provided in the prompt was the general case, the question specifically asked for the case where variances are equal, which the answer correctly addressed."
+equation_010,equation,book/practical-tools/chapter-10-area-sampling,What is the formula for the expected total number of sample units in PSU $i$ when summing across domains?,$$\sum_d n_i^*(d) = \frac{\tilde{n}}{S_t} \sum_d f_d N_i(d) = \tilde{n}$$,\sum_d n_i^*(d) = \frac{\tilde{n}}{S_t} \sum_d f_d N_i(d),chat,anthropic/claude-sonnet-4.5,"The formula for the expected total number of sample units in PSU $i$ when summing across domains is:
+
+$$\sum_d n_i^*(d) = \tilde{n}$$
+
+where:
+- $n_i^*(d)$ is the expected sample size in domain $d$ within PSU $i$
+- $\tilde{n}$ is the desired (equal) workload per PSU
+- The sum is taken over all domains $d$
+
+**Derivation from the composite MOS formula:**
+
+Starting from the domain-specific expected sample size formula:
+
+$$n_i^*(d) = \frac{\tilde{n}}{S_i} f_d N_i(d)$$
+
+where:
+- $S_i$ is the composite measure of size for PSU $i$
+- $f_d$ is the desired sampling rate for domain $d$
+- $N_i(d)$ is the number of units in domain $d$ within PSU $i$
+
+Summing across domains and using the fact that $S_i = \sum_d f_d N_i(d)$:
+
+$$\sum_d n_i^*(d) = \frac{\tilde{n}}{S_i} \sum_d f_d N_i(d) = \frac{\tilde{n}}{S_i} \cdot S_i = \tilde{n}$$
+
+**Key point:** This confirms that the within-PSU domain sample sizes sum to the desired equal workload in each PSU, even though the expected sample sizes within each domain are generally not integers [S1, S2].",6.54925799369812,TRUE,3,3,0,TRUE,1,NA,NA,NA,"[38;5;255mResponse was truncated because it hit the `max_tokens` limit.
+[36mℹ[38;5;255m Increase `max_tokens` to allow the model to generate the full response.[39m"
+equation_033,equation,sampling_1_SURV626/assignments/Linares_K_HW3.qmd,How is the variance of the population mean calculated in a stratified sampling design?,$$\text{var}(\bar{y}_w) = \sum_{h=1}^H W_h^2 (1-f_h) \frac{s_h^2}{n_h}$$,\text{var}(\bar{y}_w) = \sum_{h=1}^H W_h^2 \text{var}(\bar{y}_h) = \sum_{h=1}^H W_h^2 (1-f_h) \frac{s_h^2}{n_h},chat,anthropic/claude-sonnet-4.5,"# Variance of the Population Mean in Stratified Sampling
+
+The variance of the estimated population mean under stratified sampling is calculated by summing the stratum-specific variances, weighted by the squared stratum weights [S1, S3].
+
+## Formula
+
+$$\text{var}(\bar{y}_{st}) = \sum_{h=1}^{H} W_h^2 \cdot \text{var}(\bar{y}_h)$$
+
+where:
+- $\bar{y}_{st}$ is the stratified sample mean
+- $H$ is the number of strata
+- $W_h = N_h / N$ is the weight for stratum $h$ (proportion of the population in that stratum) [S3, S7]
+- $\text{var}(\bar{y}_h)$ is the variance of the mean in stratum $h$
+
+## Within-Stratum Variance
+
+For simple random sampling within each stratum, the variance of the stratum mean is [S1, S7]:
+
+$$\text{var}(\bar{y}_h) = \left(1 - f_h\right) \frac{S_h^2}{n_h}$$
+
+where:
+- $f_h = n_h / N_h$ is the sampling fraction in stratum $h$
+- $S_h^2$ is the element variance in stratum $h$
+- $n_h$ is the sample size in stratum $h$
+
+## Complete Formula
+
+Combining these, the full variance estimator is [S7]:
+
+$$\widehat{\text{var}}(\bar{y}_{st}) = \sum_{h=1}^{H} W_h^2 \frac{1 - f_h}{n_h} s_h^2$$
+
+where $s_h^2$ is the sample variance in stratum $h$ (estimating $S_h^2$).
+
+## Key Properties
+
+- The variance depends only on **within-stratum variability**; between-stratum variance is eliminated by the stratification [S4]
+- Each stratum contributes independently to the total variance [S2, S6]
+- The finite population correction $(1 - f_h)$ can be ignored when $f_h$ is small [S1, S2]",8.996172904968262,FALSE,3,3,0,TRUE,1,2,1,1,"The answer is fully correct and provides the complete formula. However, it is marked as unsupported because it asserts a 'Key Property' (that between-stratum variance is eliminated) which is not mentioned in the provided reference passage."
+concept_036,concept,fund_comp_data_display_SURV727/lectures/Comp_05.pdf,Which R package can be used to collect data from Reddit?,RedditExtractoR,NA,chat,anthropic/claude-sonnet-4.5,"Based on your course materials, **RedditExtractoR** is the R package used to collect data from Reddit [S1, S7].
+
+## Basic Usage
+
+The package provides two main functions:
+
+1. **`find_thread_urls()`** - searches for submissions (posts) and returns their URLs
+2. **`get_thread_content()`** - retrieves comments from those submissions
+
+```r
+library(RedditExtractoR)
+
+# Get submission URLs
+biden_urls <- find_thread_urls(
+  keywords = ""biden"", 
+  subreddit = ""liberal"", 
+  sort_by = ""top""
+)
+
+# Get comments from those submissions
+biden_content <- get_thread_content(urls = biden_urls$url[1:5])
+```
+
+The resulting data includes `post_date`, `comm_date`, `link`, `structure`, and `comment` fields [S1].
+
+## Important Caveat
+
+Your instructor notes that ""this package is not ideal for some of the tasks we may be interested in"" and mentions relying mostly on Python for Reddit data collection [S1]. Alternative approaches mentioned in your materials include:
+
+- **Python**: ""praw"" / ""psaw"" packages [S2]
+- **DIY approach**: Using OAuth protocol + Reddit API directly [S2]
+
+So while RedditExtractoR works for basic collection tasks shown in your course examples, be aware of its limitations for more complex data collection needs.",8.448258876800537,TRUE,0,0,0,TRUE,NA,2,NA,1,"The answer correctly identifies the R package. However, it is marked as unsupported because it provides extensive details (specific functions, code examples, and instructor caveats) that are not present in the provided reference passage."
+concept_037,concept,fund_data_coll_1_SURV621/lectures/lecture 13 Interviewers and Interviewing II.pdf,How does the gender of the interviewer influence the responses given by survey participants regarding gender roles and feminist views?,"Research indicates that participants may provide more egalitarian answers when the interviewer is female. Specifically, men are more likely to report sharing childcare and women are more likely to support feminist policies when interviewed by a woman. Other studies have found significant interviewer gender effects across various topics, including feminist identity, pro-choice views, and affirmative action.",NA,chat,anthropic/claude-sonnet-4.5,"# Interviewer Gender Effects on Gender Role and Feminist Responses
+
+**Direct answer:** Both male and female respondents give more egalitarian and feminist answers to female interviewers than to male interviewers, but the specific items affected differ by respondent gender [S1].
+
+## Empirical Evidence
+
+Kane & Macaulay (1993) found gender-of-interviewer effects that varied by respondent gender [S1]:
+- **Male respondents** reported sharing childcare more when interviewed by females
+- **Female respondents** expressed more support for feminist policy when interviewed by females
+
+Huddy et al. (1997) documented substantial effects across multiple gender-related items in two pre-election surveys, with both male and female respondents showing interviewer gender effects on the same questions [S1]. The magnitude of effects (female minus male interviewer ratings on 10-point scales) included:
+
+| Item | 1991 | 1993 |
+|------|------|------|
+| Feminist Identity | — | 0.76*** |
+| Activity on Women's Issues | — | 0.50* |
+| Pro-Collective Action | 0.48* | 0.69** |
+| Egalitarian Roles | 0.35* | — |
+| Pro-Choice | — | 0.82*** |
+| Anti-Sexual Harassment | — | 0.63** |
+| Pro-Affirmative Action | — | 0.84** |
+
+(*p <.1, **p <.05, ***p <.01) [S1]
+
+## Total Survey Error Framework
+
+This is a **measurement error** issue where the interviewer characteristic (gender) systematically influences how respondents answer questions, creating correlated response deviations within interviewers [S4]. The effect represents social desirability bias or interviewer-respondent interaction effects rather than true differences in respondent attitudes.",8.52268099784851,TRUE,0,0,0,TRUE,NA,2,NA,1,"The answer is fully correct and complete based on the reference passage. However, the 'Total Survey Error Framework' section introduces external concepts (measurement error, social desirability bias) not mentioned in the provided reference text, making it unsupported."
+concept_018,concept,Data_visualization_SURV752/lectures/SURV752-IPSDS_2_Graphical_Perception-1.pdf,What are some of the Gestalt principles that explain how people perceive groups of objects visually?,"Key Gestalt principles include similarity (shared attributes), enclosure (surrounded by a boundary), closure (perceiving open structures as complete), continuity (alignment), and connection (linked by a line).",NA,chat,anthropic/claude-sonnet-4.5,"The Gestalt principles that explain how people perceive groups of objects visually are [S1]:
+
+1. **Similarity**: Objects that share similar attributes (e.g., color or shape) are perceived as a group.
+
+2. **Enclosure**: Objects that have a boundary around them are perceived as a group.
+
+3. **Closure**: Open structures are perceived as closed, complete, and regular.
+
+4. **Continuity**: Objects that are aligned together are perceived as a group.
+
+5. **Connection**: Objects that are connected (e.g., by a line) are perceived as a group.
+
+These principles are fundamental to understanding how viewers will interpret visual displays and groupings in data visualizations. They help explain why certain design choices make patterns easier or harder to perceive in graphs and charts.",4.167352914810181,TRUE,0,0,0,TRUE,NA,NA,NA,NA,"[38;5;255mResponse was truncated because it hit the `max_tokens` limit.
+[36mℹ[38;5;255m Increase `max_tokens` to allow the model to generate the full response.[39m"
+concept_038,concept,sampling_1_SURV626/lectures/Unit 6 Unequal sized clusters.pdf,"What are some ways to handle variation in sample size, and how does this affect the choice of estimator for the mean?","When sample size varies, the ratio mean $r = y/x$ is more appropriate than $y/n$ because sample size is treated as a random variable. Alternatives to manage this variation include stratifying by size, using probability proportional to size (PPS) selection, creating new clusters of equal size, or departing from the equal probability selection method (epsem), though the latter introduces weighting which can increase variance.",NA,chat,anthropic/claude-sonnet-4.5,"# Handling Variation in Sample Size and Estimator Choice
+
+## The Problem
+
+When clusters have unequal sizes and you use fixed sampling rates at both stages, **the achieved sample size becomes a random variable** [S5]. This variation matters: ""If we were to treat the achieved sample size as fixed, we would be failing to recognize the variation in the sample size when estimating variance, and we would underestimate the sampling variance"" [S5].
+
+## Ways to Handle the Variation
+
+### 1. **Accept the variation and use a ratio estimator**
+With unequal-size clusters, use a **ratio mean for design-consistent estimation** [S3]. This accounts for the random sample size in both the point estimate and variance.
+
+### 2. **Eliminate the variation through design**
+""We could depart from epsem to eliminate variation in sample size, selecting a **fixed subsample size from each cluster** (need weights)"" [S5]. This gives you control but requires unequal weighting.
+
+### 3. **Form more equal-sized clusters at the design stage**
+""If the designer has some flexibility in forming the clusters, as would usually be the case in a household survey, **clusters with nearly equal numbers of elements should definitely be created**"" [S1]. The Maryland tract example shows why: tract sizes ranged from 86 to 13,579 persons, and ""having such large variation in PSU cluster sizes has a dramatic effect on the factors, like $\delta$, needed to design a sample"" [S1].
+
+## Why This Matters for Estimator Choice
+
+The course materials emphasize three reasons to control sample size variation [S3]:
+
+1. **Bias and variance of the ratio mean** - the ratio estimator needed for unequal clusters has different properties than a simple mean
+2. **Equalize workloads controlling survey costs** - predictable sample sizes help manage fieldwork
+3. The variance estimation becomes more complex with nonlinear (ratio) estimators [S1]
+
+When you cannot avoid unequal clusters (e.g., ""naturally occurring units, like schools, classrooms, or establishments""), ""you may have to live with the pre-defined units, but considering the variation in cluster size will be important when determining sample sizes"" [S1].",10.08772897720337,FALSE,0,0,0,TRUE,1,2,NA,1,"The answer is fully correct and complete based on the reference passage. However, it is marked as unsupported because it incorporates a significant amount of external information (citations like [S1], [S3], [S5], and specific examples like the Maryland tract) that are not present in the provided reference passage."
+concept_012,concept,design_seminar_SURV670/lectures/Week 10.pdf,What are the standard components and approximate page lengths for an NSF proposal?,"An NSF proposal (maximum 15 pages) typically includes a title, an abstract (~0.5 page), hypothesis or goals, specific aims (1-2 pages), background and significance (2-3 pages), preliminary data (2-3 pages), research design and methods (6-8 pages), and a conclusion/summary (0.5 page). References have unlimited pages.",NA,chat,anthropic/claude-sonnet-4.5,"# NSF Proposal Structure and Page Lengths
+
+Based on your course materials, an NSF proposal has a **15-page maximum** for the main body and follows this structure [S1]:
+
+## Required Components with Approximate Lengths
+
+1. **Title**
+
+2. **Abstract (Summary)** — ~250 words, 0.5 page
+
+3. **Hypothesis statement or goals** — 1-3 sentences each; should be clear and well-written
+
+4. **Specific Aims** — 1-2 pages (typically 2-4 specific aims)
+
+5. **Background & Significance** — 2-3 pages
+   - Helps reviewers understand the problem
+   - Should avoid jargon that only experts would appreciate
+
+6. **Preliminary Data** — 2-3 pages
+
+7. **Research Design and Methods** — 6-8 pages (approximately **half the total proposal length**)
+   - Describe experimental design and procedures in detail
+   - Provide rationale for their use
+
+8. **Conclusion/Summary** — 0.5 page
+   - Summarize why the research needs to be done
+   - Explain how it will advance the field
+   - Convey your excitement for the work
+
+9. **References** — unlimited pages
+
+## Important Note
+
+All figures, diagrams, charts, and photos must be included **within** the page limits [S1]. They do not get separate allocation beyond the 15-page maximum.
+
+The materials emphasize that the Research Design and Methods section should constitute roughly half of your proposal, reflecting its importance in demonstrating technical capacity.",7.409743070602417,TRUE,0,0,0,TRUE,NA,2,NA,0,"The answer is fully correct and complete, covering all components and page lengths mentioned in the reference passage."
+concept_029,concept,book/practical-tools/chapter-4-power-calculations-and-sample-size-determination,How should a researcher handle a situation where the available budget for a survey is unknown but there are multiple competing hypotheses about the effect size to be detected?,"The researcher should compute a range of possible sample sizes based on the different hypothesized differences (e.g., whether the rate is 1.5 or 2 times higher) and present these alternatives to the stakeholders, discussing the pros and cons of each sample size in relation to the budget and the desired level of statistical certainty.",NA,chat,anthropic/claude-sonnet-4.5,"# Handling Unknown Budget with Multiple Competing Hypotheses
+
+Your course materials don't directly address the specific scenario of unknown budget combined with multiple competing hypotheses about effect sizes. However, they provide relevant pieces you can combine:
+
+## What Your Materials Do Cover
+
+**On minimum detectable effects with fixed samples:**
+When sample size is fixed (even if you don't know it yet), you can ""think of a power analysis in terms of the minimum effect size that the sample allows you to detect (given a specified significance level, statistical power, and sample size)"" [S1]. Importantly, you must ""run these calculations before looking at the data"" and ""post hoc power not valid"" [S1].
+
+**On multiple hypotheses:**
+When testing multiple hypotheses, ""likelihood of erroneously rejecting correct null hypothesis (Type 1 Error) increases"" and you ""have to account for this via correction: Bonferroni correction, Tukey's honest significant difference test, False discovery rate"" [S3].
+
+**On plausible alternative hypotheses:**
+There are ""two kinds of plausible alternative hypotheses: 1. Those that could exist on some theoretical or conceptual basis... These can be dealt with by including another variable in the study (PAH) 2. Those that are unknown but might exist. These are dealt with in experiments through RANDOMIZATION"" [S2].
+
+## A Practical Approach (not from your course materials)
+
+Since your materials emphasize that survey design requires ""balancing multiple error sources rather than minimizing any single source"" [S6], you would likely need to:
+
+1. Clarify which hypotheses are primary vs. exploratory
+2. Work backward from minimum acceptable power for the primary hypothesis to determine required sample size
+3. Use that to establish the minimum budget needed
+4. Apply multiple testing corrections if testing several hypotheses simultaneously
+
+The materials emphasize that ""the fundamental objective of survey design is minimizing MSE subject to resource constraints including budget"" [S6], suggesting budget clarification should precede final design decisions.",10.51619291305542,TRUE,0,0,0,TRUE,NA,0,NA,1,"The answer fails to provide the correct solution based on the reference passage (computing a range of sample sizes to discuss with stakeholders). Instead, it claims the materials do not address the scenario and provides general information about power analysis and Type 1 errors that are not relevant to the specific problem posed in the reference. It also introduces external 'Practical Approaches' not found in the reference."
+concept_025,concept,cog_comm_surv_measurement_SURV632/lectures/Class 12 Notes.pdf,What are the typical steps involved in the process of adapting a questionnaire for a different culture or language?,"The process involves determining the project's adaptation policies and procedures, recruiting an adaptation team, reviewing the source questionnaire for needs, reviewing the translated version, documenting the adaptations and their rationales, and finally testing the adaptations with the target population.",NA,chat,anthropic/claude-sonnet-4.5,"# Typical Steps for Questionnaire Adaptation
+
+Based on your course materials, the adaptation process follows these steps [S1, S2]:
+
+## The Six-Step Process
+
+1. **Determine the policy, people, and procedures** for adaptation for the project [S2]
+
+2. **Recruit a team** of experts for adaptation [S2]
+
+3. **Review the source questionnaire** for adaptation needs [S2]
+
+4. **Review the translated questionnaire** [S2]
+
+5. **Document adaptations and the rationale** for each decision [S2]
+
+6. **Test adaptations with the target population** [S2]
+
+## What Adaptation Addresses
+
+Adaptation differs from translation in that it involves **modifying parts of the survey to fit the intended audience** [S3]. Your materials give specific examples:
+
+- **Measurement units**: changing feet to meters when adapting from US to British populations [S1, S3]
+- **Comprehension**: adjusting technical terms (e.g., ""flu shot"" vs. ""Fluzone intradermal vaccine"") [S1]
+- **Cultural relevance**: substituting coffee for tea when adapting a US consumption question for British respondents [S3]
+- **Cultural norms**: respecting writing directions, lexicon and grammar differences [S1]
+
+## Key Rationales for Adaptation
+
+Your materials emphasize that adaptations are needed to [S1]:
+- Respect cultural norms
+- Accommodate cultural sensibilities  
+- Account for anchored norms (like writing direction)
+- Address lexicon and grammar differences (e.g., when ""neither agree nor disagree"" has no translation)
+
+**Important caveat**: Translation alone cannot solve problems when a concept is not salient or relevant in the target culture (e.g., political efficacy) [S2]. This requires substantive adaptation decisions beyond linguistic translation.",9.120239973068237,TRUE,0,0,0,TRUE,NA,2,NA,1,"The answer correctly lists all six steps from the reference passage. However, it is marked as unsupported because it introduces several specific examples (measurement units like feet/meters, technical terms like 'flu shot', and coffee vs. tea) that are not present in the provided reference text."
+concept_001,concept,design_seminar_SURV670/lectures/Week 5.pdf,What are the different types of design validity and what does each entail?,"Design validity consists of internal validity, which involves using reliable and valid measures and establishing causality (through covariation, temporal order, and the elimination of rival hypotheses), and external validity, which is the ability to generalize study findings to the real world.",NA,chat,anthropic/claude-sonnet-4.5,"# Types of Design Validity
+
+Design validity comes in **four main types** in the experimental and survey research tradition [S1, S3, S6]:
+
+## 1. Statistical Conclusion Validity
+**What it entails:** Whether the statistical conclusions about covariation between variables are correct [S6]. This addresses whether differences across treatment groups are greater than would be expected by chance [S3].
+
+## 2. Internal Validity
+**What it entails:** Whether the conclusions drawn accurately reflect what happened during the observation period and whether causality was properly established [S1]. Specifically:
+- Do observed differences represent the causal impact of the independent variable of interest? [S3]
+- Were the conditions for causality fulfilled: covariation, temporal order, and elimination of rival hypotheses? [S1, S6]
+- In experiments, random assignment gives treatment groups the same expected value on observed and unobserved characteristics, providing a major advantage [S3]
+
+**Threats include:** mortality (differential dropout), history (other events between measurements), maturation (subjects changing over time), instrumentation (measurement changes), regression to the mean, and testing effects [S1].
+
+## 3. Construct Validity
+**What it entails:** Whether the variables adequately capture the theoretical constructs of interest [S3, S6]. Does the study involve the theoretical variables you intend to study? [S6]
+
+## 4. External Validity
+**What it entails:** Whether results generalize from the study to the real world [S1], or more specifically, ""how generalizable is the relationship over samples, settings, methods, etc?"" [S6]. Can findings from your study be applied to the broader population? [S3]
+
+**Note:** The materials note that experiments may have high internal validity but face external validity challenges because they occur under different conditions or use different populations than real-world surveys [S3, S4].",9.213307857513428,TRUE,0,0,0,TRUE,NA,1,NA,1,"The answer is partly correct as it identifies internal and external validity as described in the reference. However, it claims there are 'four main types' and includes Statistical Conclusion Validity and Construct Validity, neither of which are mentioned in the provided reference passage. Therefore, it contains substantive facts not supported by the text."
+concept_004,concept,fund_comp_data_display_SURV727/lectures/Comp_11.pdf,What does a scatterplot of physics grades versus math grades typically illustrate in a survey dataset?,It illustrates the relationship or correlation between the two academic performance metrics for individual students.,NA,chat,anthropic/claude-sonnet-4.5,"A scatterplot of physics grades versus math grades typically illustrates the **relationship between two quantitative variables** [S4].
+
+## What the plot shows
+
+The scatterplot displays each person as a point, with math grades on the x-axis and physics grades on the y-axis [S1]. This allows you to assess three key features of the relationship [S4]:
+
+1. **Direction**: Whether physics grades tend to increase as math grades increase (positive direction/upward trend), decrease (negative direction/downward trend), or show no consistent pattern [S4]
+
+2. **Strength**: How tightly the points cluster around a pattern—from ""strong"" if points fall in a tight pattern, to ""weak"" if they are spread out [S4]
+
+3. **Form**: The pattern of the points, most commonly linear or curved; if there's no clear pattern, the form may be ""scattered"" [S4]
+
+4. **Unusual observations**: Outliers that don't fit the general pattern [S4]
+
+## Example from your materials
+
+[S1] shows a scatterplot with math grades ranging from approximately -20 to +20 on the x-axis and physics grades in a similar range on the y-axis, with six labeled individuals (Person3 through Person6).
+
+## If this were survey data
+
+If these grades came from a complex survey design rather than a census of students, you would need to account for the survey design when calculating the correlation or fitting a regression line. The scatterplot itself can be weighted (plotting each point with size proportional to its weight) or unweighted, but any statistical inference about the relationship would require design-based methods [design_based_default].",9.394467115402222,TRUE,0,0,0,TRUE,NA,NA,NA,NA,"[38;5;255mResponse was truncated because it hit the `max_tokens` limit.
+[36mℹ[38;5;255m Increase `max_tokens` to allow the model to generate the full response.[39m"
+concept_015,concept,total_survey_error_SURV720/lecture_notes.pdf,What is coverage error and how does it differ from sampling error?,"Coverage error occurs when some members of the target population are not represented in the sampling frame, meaning not all elements of the population are included. It is distinct from sampling error; for example, if a survey only samples online participants, the resulting bias is a coverage error.",NA,chat,anthropic/claude-sonnet-4.5,"# Coverage Error vs. Sampling Error
+
+## Coverage Error
+
+**Coverage error arises because some members of the target population are not represented on the sample frame** [S1, S4, S6]. It is a mismatch between your target population and your frame population—units in the target have zero probability of selection because they're simply not on your list [S5, S8].
+
+### Coverage Bias Formula
+
+$$\text{Coverage Bias} = \left(\frac{U}{N}\right)(\bar{Y}_C - \bar{Y}_U)$$
+
+where [S5, S8]:
+- $U/N$ = proportion of the population that is uncovered
+- $\bar{Y}_C$ = mean of the characteristic among the covered population
+- $\bar{Y}_U$ = mean of the characteristic among the uncovered population
+
+**Key point:** Coverage error is a **bias** problem. It's systematic error, not variable error [S7]. The bias depends on both how many units you miss AND how different those missed units are from the ones you can reach.
+
+### Examples
+- RDD samples may underrepresent certain household types whose characteristics differ from included households [S1]
+- Young establishments may be underrepresented on business survey list frames [S1]
+- Sampling only online creates coverage error (not sampling error) because some target population members have no chance of selection [S3]
+
+## Sampling Error
+
+**Sampling error arises because only a portion of the frame population is sampled** [S1, S4]. Assuming a statistically sound sample design, this is **variance, not bias** [S1].
+
+The magnitude depends on [S1]:
+- Variability of the measure in the population
+- Size of the survey sample  
+- Share of the population sampled
+
+## The Key Difference
+
+**Coverage error = bias from who's missing from your frame**  
+**Sampling error = variance from selecting only some units from your frame**
+
+Coverage error happens *before* you sample—it's about your frame's relationship to your target population [S2]. Sampling error happens *when* you sample—it's the uncertainty from not measuring everyone on the frame [S2].
+
+**Don't confuse them** [S3]: A question about whether ""my sample is representative"" needs clarification—are we talking about coverage (is my frame complete?) or sampling (did I select enough units)?",12.723374128341675,TRUE,1,0,0,TRUE,1,2,0,1,"The answer is fully correct and complete based on the reference, but it includes a significant amount of external information (formulas, specific examples like RDD, and detailed definitions of sampling error) that is not present in the provided reference passage."
+concept_002,concept,complex_sample_data_SURV701/lectures/Module_4.pdf,"What is the formula for approximating the variance of a function $f(x, z)$ using Taylor Series Linearization?","$	ext{var } f(x, z) 	hickapprox A^2 	ext{var } x + B^2 	ext{var } z + 2AB 	ext{cov } x, z$",NA,chat,anthropic/claude-sonnet-4.5,"The Taylor Series Linearization (TSL) formula for approximating the variance of a function of estimated totals is:
+
+$$
+\text{Var}(\hat{\theta}) \approx \sum_{j=1}^p \sum_{k=1}^p \frac{\partial f(\mathbf{t})}{\partial t_j} \frac{\partial f(\mathbf{t})}{\partial t_k} \text{Cov}(\hat{t}_j, \hat{t}_k)
+$$
+
+where:
+- $\hat{\theta} = f(\hat{t}_1, \ldots, \hat{t}_p)$ is the estimator of interest
+- $\mathbf{t} = (t_1, \ldots, t_p)^T$ is the vector of population totals
+- $\hat{t}_j$ are the estimated totals (typically $\hat{t}_j = \sum_{i \in s} d_i y_{ij}$ where $d_i$ is the design weight)
+- $\frac{\partial f(\mathbf{t})}{\partial t_j}$ is the partial derivative of $f$ with respect to the $j$th total, evaluated at the estimated totals [S2]
+
+The linearization works by approximating the deviation of the estimator from the parameter:
+
+$$
+\hat{\theta} - \theta \doteq \sum_{j=1}^p \frac{\partial f(\mathbf{t})}{\partial t_j} (\hat{t}_j - t_j)
+$$
+
+This approximates the nonlinear function $\hat{\theta}$ as a linear combination of the estimated totals [S2].
+
+**For your specific case with two variables** $f(x, z)$, this becomes:
+
+$$
+\text{Var}(f(\hat{x}, \hat{z})) \approx \left(\frac{\partial f}{\partial x}\right)^2 \text{Var}(\hat{x}) + \left(\frac{\partial f}{\partial z}\right)^2 \text{Var}(\hat{z}) + 2\frac{\partial f}{\partial x}\frac{\partial f}{\partial z}\text{Cov}(\hat{x}, \hat{z})
+$$
+
+where the partial derivatives are evaluated at the estimated values.
+
+**Important caveat:** This approximation works well when the denominator (if there is one) has low variability—typically when the coefficient of variation of the denominator is less than 0.15–0.20 [S1].",9.327387809753418,TRUE,3,2,0,TRUE,1,2,1,1,"The answer provides the general formula and the specific two-variable case which is mathematically equivalent to the reference answer (where A and B represent the partial derivatives). However, it introduces significant external information not found in the reference passage, such as the general p-variable summation, the definition of design weights, and the specific caveat regarding the coefficient of variation (0.15-0.20)."
+concept_026,concept,ML_social_science_SURV613/lecture_notes.pdf,What is the purpose of the dropout rate in a neural network?,The dropout rate is a tuning parameter that sets a proportion of nodes to zero to discourage overfitting.,NA,chat,anthropic/claude-sonnet-4.5,"The **dropout rate prevents overfitting** in neural networks [S2, S4].
+
+## How it works
+
+The dropout rate is ""some proportion of nodes [that] aren't used within a layer in a given pass through"" [S2]. In other words, during training, a random fraction of nodes are temporarily set to zero and excluded from that iteration [S4].
+
+## Analogy to other methods
+
+You can think of dropout ""as (very roughly) analogous to random predictors in RF"" [S2] or ""similar"" to regularization methods like elastic net, though ""it doesn't set some nodes to 0 like elastic net"" permanently [S4].
+
+## Tuning
+
+The dropout rate is one of the key hyperparameters to tune using cross-validation [S2]. It's listed alongside other neural network hyperparameters like learning rate, batch size, and number of nodes in hidden layers [S1, S2].
+
+---
+
+**Note:** This is distinct from ""dropout"" in the survey methodology sense (respondents who terminate an interview), which appears in your course materials in a completely different context [S8].",6.509298086166382,TRUE,0,0,0,TRUE,NA,2,NA,1,"The answer is correct regarding the purpose of dropout. However, it is marked as unsupported because it introduces several facts not found in the reference passage, such as the analogy to Random Forest, the mention of batch size, and the reference to survey methodology."
+concept_041,concept,Fund_data_collection_SURV622/lectures/Lecture-ML.pdf,Does including variables like race or sex in a machine learning analysis automatically make the model biased or racist?,"No; it is possible to account for differences in race or sex and still maintain a fair model, provided that the intervention itself is delivered fairly.",NA,chat,anthropic/claude-sonnet-4.5,"No. Including variables like race or sex does not automatically make a model biased or racist, and excluding them does not automatically make it unbiased [S1].
+
+## Two Key Myths
+
+Your course materials identify two common misconceptions [S1]:
+
+1. **Myth: If I don't use race, my analysis can't be racist**
+   - Even without explicitly including race, your model might perform very differently by race
+   - Other variables can serve as proxies for protected attributes
+
+2. **Myth: If I use race, my analysis is always racist**
+   - You can account for differences in race and still have a fair model
+   - The key is being fair in how you provide the intervention
+
+## What Actually Matters
+
+The fairness issue centers on **how the model performs across groups** and **how decisions are made**, not simply which variables are included [S1, S2]. As your materials state: ""In the context of decision-making, fairness is the absence of any prejudice or favoritism toward an individual or a group based on their inherent or acquired characteristics"" [S2].
+
+## The Real Problem
+
+Bias enters through multiple pathways [S2]:
+- Training data that reflects historical biases
+- Models learning to reproduce those biases
+- Differential performance across protected groups
+
+The decision about whether to include protected attributes depends on:
+- Whether they help achieve fairness (e.g., through fairness constraints)
+- Whether excluding them creates proxy discrimination
+- The specific fairness definition and intervention context
+
+Your course materials recommend tools like Aequitas (http://www.datasciencepublicpolicy.org/projects/aequitas/) to assess fairness across different groups [S1].",8.717572927474976,TRUE,0,0,0,TRUE,NA,2,NA,1,"The answer correctly addresses the question based on the reference passage. However, it is marked as unsupported because it introduces significant external information and quotes (e.g., the definition of fairness, the 'Myth: If I don't use race...' section, and the 'Real Problem' section) that are not present in the provided reference text."
+concept_043,concept,PracTools_SURV745/lectures/PracTools Chapter 9.pdf,How does the size of a cluster typically influence the measure of homogeneity ($\delta$)?,"Generally, elements within a cluster tend to be more alike when the cluster size is small, meaning the size of the cluster affects the value of $\delta$.",NA,chat,anthropic/claude-sonnet-4.5,"## Direct Answer
+
+**Smaller clusters tend to have larger measures of homogeneity ($\delta$)**, meaning elements within small clusters are more alike. As cluster size increases, $\delta$ typically decreases [S2].
+
+## Evidence from Course Materials
+
+The relationship is stated explicitly: ""Although this is not always true, the elements in a cluster may be more alike when the cluster size is small. Especially true when clusters are based on geographic areas"" [S2].
+
+### Empirical Example
+
+Hansen, Hurwitz and Meadow (1953a) provide concrete evidence [S2]:
+
+| No. of HHs per cluster | $\delta$ for No. persons in HH | $\delta$ for Unemployed male |
+|------------------------|-------------------------------|------------------------------|
+| 3                      | 0.430                         | 0.060                        |
+| 9                      | 0.439                         | 0.070                        |
+| 27                     | 0.243                         | 0.045                        |
+| 62                     | 0.112                         | 0.034                        |
+
+Notice how $\delta$ generally decreases as cluster size increases from 3 to 62 households.
+
+## Why This Matters for Design
+
+This relationship has important implications for the design effect. Since:
+
+$$\text{deff} = 1 + \delta(\tilde{n} - 1)$$
+
+where $\tilde{n}$ is the average number of elements per cluster [S1], **both** the cluster size and $\delta$ affect efficiency. Smaller geographic clusters may have higher $\delta$ but fewer elements, while larger clusters have lower $\delta$ but more elements—the net effect on deff depends on both factors.
+
+### Special Case
+
+For agricultural variables (e.g., whether farms raise specific crops), ""$\delta$'s of 0.4 or larger may be common as long as cluster sizes are 4 or 5 nearby farms"" [S2], illustrating particularly high homogeneity in small geographic clusters for certain variables.",9.987029075622559,TRUE,1,1,0,TRUE,1,2,NA,1,"The answer is fully correct regarding the relationship between cluster size and homogeneity. However, it is marked as unsupported because it introduces the formula for 'deff' and the concept of 'design effect', which are not present in the provided reference passage."
+code_002,code,design_seminar_SURV670/Project/rfp/RFP_Proposal_DRSS_Final.qmd,"How can I create a formatted table for personnel costs in R that includes salary, effort, fringe benefits, and a subtotal row?","You can use `transmute()` to calculate the fringe and total costs, `bind_rows()` with a `tibble()` to add a subtotal row, and `kable()` to format the final table with specific alignment and a caption.",NA,chat,anthropic/claude-sonnet-4.5,"# Personnel Costs Table in R
+
+Based on the course materials, here's how to create a formatted personnel costs table:
+
+## Direct Answer
+
+Use `transmute()` to calculate the cost columns, then `bind_rows()` to add a subtotal, and `kable()` to format the output [S1].
+
+## Code Example
+
+```r
+library(tidyverse)
+library(knitr)
+library(scales)  # for dollar() and percent()
+
+# Assuming you have a personnel data frame with:
+# position, annual_salary, effort (as decimal, e.g., 0.25 for 25%)
+# and a fringe_rate constant (e.g., 0.45 for 45%)
+
+fringe_rate <- 0.45
+
+personnel_table <- personnel |>
+  transmute(
+    Position = position,
+    `Annual Salary` = dollar(annual_salary),
+    `% Effort` = percent(effort, accuracy = 1),
+    Fringe = dollar(annual_salary * effort * fringe_rate),
+    Total = dollar(annual_salary * effort * (1 + fringe_rate))
+  ) |>
+  bind_rows(
+    tibble(
+      Position = ""Subtotal Personnel"",
+      `Annual Salary` = """",
+      `% Effort` = """",
+      Fringe = """",
+      Total = dollar(sum(personnel$annual_salary * 
+                         personnel$effort * 
+                         (1 + fringe_rate)))
+    )
+  ) |>
+  kable(
+    align = c(""l"", ""r"", ""c"", ""r"", ""r""),
+    caption = ""Key Personnel Costs (Year 1)""
+  )
+```
+
+## Key Components
+
+**Calculation**: The total cost per person is `annual_salary * effort * (1 + fringe_rate)`. The fringe alone is `annual_salary * effort * fringe_rate` [S1].
+
+**Formatting**: Use `scales::dollar()` for currency and `scales::percent()` for effort percentages [S1, S2].
+
+**Subtotal row**: Create a one-row tibble with empty strings for non-total columns and `sum()` for the total column, then bind it with `bind_rows()` [S1, S3].
+
+**Alignment**: The `align` argument controls column alignment: ""l"" (left), ""r"" (right), ""c"" (center) [S1].
+
+## Salary Guidelines
+
+The course materials note that salaries should fall within guideline ranges: Project Directors \$150,000-\$200,000, Co-investigators \$100,000-\$200,000, Research support staff \$80,000-\$150,000, with 45% fringe being standard [S1, S4].",11.292042016983032,TRUE,0,0,0,TRUE,NA,NA,NA,NA,"[38;5;255mResponse was truncated because it hit the `max_tokens` limit.
+[36mℹ[38;5;255m Increase `max_tokens` to allow the model to generate the full response.[39m"
+code_008,code,Data_visualization_SURV752/assignments/Linares_k_hw2.qmd,How can I create a ggplot line chart that shows all countries in a light gray background while highlighting a few specific countries in color?,"You can achieve this by calling `geom_line()` twice: first with a fixed color (e.g., `color = ""grey80""`) for the entire dataset, and second by passing a filtered dataset to `geom_line()` and mapping the `color` aesthetic to the country variable.",NA,chat,anthropic/claude-sonnet-4.5,"# Highlighting Specific Countries in a Line Chart
+
+**Direct answer:** Filter the data into two groups—background countries and highlighted countries—then layer them with separate `geom_line()` calls, using `filter()` to control which countries appear in each layer.
+
+## Code Pattern from Course Materials
+
+Here's the approach from your SURV752 assignment [S1]:
+
+```r
+library(tidyverse)
+
+# Define which countries to highlight
+highlight_country <- ""Laos""
+
+pr_long |>
+  ggplot(aes(x = year, y = pr_score, group = Country)) +
+  # Background: all non-highlighted countries in gray
+  geom_line(
+    data = pr_long |> filter(Country != highlight_country),
+    color = ""grey70"",
+    linewidth = 0.5
+  ) +
+  # Foreground: highlighted country in black
+  geom_line(
+    data = pr_long |> filter(Country == highlight_country),
+    color = ""black"",
+    linewidth = 1.5
+  ) +
+  labs(
+    title = ""Political Rights Score for 30 Countries"",
+    subtitle = paste(""Highlighted Country,"", highlight_country),
+    x = """",
+    y = ""Political Rights""
+  ) +
+  theme_classic()
+```
+
+## For Multiple Highlighted Countries
+
+To highlight several countries in different colors:
+
+```r
+# Define countries to highlight
+highlight_countries <- c(""Laos"", ""Rwanda"", ""Cambodia"")
+
+pr_long |>
+  ggplot(aes(x = year, y = pr_score, group = Country)) +
+  # Background: all other countries
+  geom_line(
+    data = pr_long |> filter(!Country %in% highlight_countries),
+    color = ""grey70"",
+    linewidth = 0.5
+  ) +
+  # Foreground: highlighted countries with color aesthetic
+  geom_line(
+    data = pr_long |> filter(Country %in% highlight_countries),
+    aes(color = Country),
+    linewidth = 1.5
+  ) +
+  labs(
+    title = ""Political Rights Score"",
+    x = """",
+    y = ""Political Rights""
+  ) +
+  theme_classic()
+```
+
+## Key Design Principles
+
+**Layering order matters:** Background lines first, then highlighted lines on top [S1].
+
+**Visual hierarchy:** Use lighter colors (`grey70`) and thinner lines (`linewidth = 0.5`) for background; darker colors and thicker lines (`linewidth = 1.5`) for emphasis [S1].
+
+**The `data` argument:** Each `geom_*()` can take its own filtered dataset, overriding the main `ggplot()` data [S1].
+
+This follows Tukey's principle of minimizing ink while maximizing information, which your course materials describe as ""very plain and has very little black ink while highlighting one country"" [S1].",11.013776063919067,TRUE,0,0,0,TRUE,NA,2,NA,1,"The answer is correct and complete in its explanation of the technique (layering geom_line calls). However, it is marked as unsupported because it introduces external information not found in the reference passage, such as specific country names (Laos, Rwanda, Cambodia), references to a specific course assignment (SURV752), and mentions of Tukey's principles."
+code_009,code,stat_mod_ML_1_SURV615/assignments/SSML_project_1.Rmd,How can I load the hprice dataset from the faraway package and view its summary statistics and documentation in R?,"Use `data(""hprice"")` to load the data, `summary(hprice)` to see the summary statistics, and `?faraway::hprice` to view the variable information.",NA,chat,anthropic/claude-sonnet-4.5,"To load the `hprice` dataset from the `faraway` package and view its summary statistics and documentation, use the following code:
+
+```r
+library(faraway)
+
+# Load the dataset
+data(""hprice"")
+
+# View summary statistics
+summary(hprice)
+
+# View documentation
+?faraway::hprice
+```
+
+**What each step does:**
+
+- `library(faraway)` loads the package [S1]
+- `data(""hprice"")` reads in the dataset from the package [S1]
+- `summary(hprice)` prints summary statistics for each variable [S1]
+- `?faraway::hprice` opens the help documentation with variable definitions and background information [S1]
+
+**Additional exploration functions** (from your course materials):
+
+```r
+# View first few rows
+head(hprice)
+
+# View structure of the dataset
+str(hprice)
+```
+
+These functions (`head()` and `str()`) are shown in your course materials for getting a first impression of data [S4].
+
+**About the hprice dataset:** The data includes 324 observations from 36 US metropolitan statistical areas (MSAs) over 9 years (1986-1994), where 36 × 9 = 324. The materials assume the MSAs are a simple random sample of the population of US MSAs. The housing sale price is the outcome variable of interest, with `narsp` being the natural log transformed price variable [S1].",6.4610819816589355,TRUE,0,0,0,TRUE,NA,NA,NA,NA,"[38;5;255mResponse was truncated because it hit the `max_tokens` limit.
+[36mℹ[38;5;255m Increase `max_tokens` to allow the model to generate the full response.[39m"
+code_024,code,sampling_1_SURV626/assignments/Linares_K_HW1.qmd,How can I calculate the empirical variance of sample means and compare it to the theoretical variance in R?,"```r
+empirical_var <- all_sample |>
+  summarise(mean((y_bar - mean(y_bar))^2)) |>
+  pull()
+
+f <- n/N
+theoretical_var <- ((1-f)/3) * S_sqrd
+```",NA,chat,anthropic/claude-sonnet-4.5,"# Calculating Empirical vs. Theoretical Variance of Sample Means
+
+## Direct Answer
+
+Draw all possible samples (or many random samples), compute each sample mean, then calculate the variance of those means. Compare this empirical variance to the theoretical formula $(1-f) \times S^2 / n$, where $f = n/N$ is the sampling fraction [S1].
+
+## The Theoretical Formula
+
+For simple random sampling without replacement, the variance of the sample mean is:
+
+$$V(\bar{y}) = \frac{1-f}{n} \times S^2$$
+
+where:
+- $f = n/N$ is the finite population correction (sampling fraction)
+- $n$ is the sample size
+- $N$ is the population size
+- $S^2 = \frac{1}{N-1}\sum_{i=1}^{N}(Y_i - \bar{Y})^2$ is the population element variance
+
+[S1] demonstrates that ""the theoretical formula of the sampling variance is describing perfectly the variation we observe across all possible samples"" when you enumerate all samples.
+
+## R Code Example
+
+```r
+library(dplyr)
+
+# Create a small population
+population <- tibble(id = 1:5, value = c(10, 15, 20, 25, 30))
+N <- nrow(population)
+n <- 3
+
+# Population parameters
+pop_mean <- mean(population$value)
+pop_var <- sum((population$value - pop_mean)^2) / (N - 1)  # S^2
+
+# Generate all possible samples
+all_samples <- combn(population$value, n, simplify = FALSE)
+
+# Calculate mean of each sample
+sample_means <- map_dbl(all_samples, mean)
+
+# Empirical variance of sample means
+empirical_var <- var(sample_means)
+
+# Theoretical variance
+f <- n / N
+theoretical_var <- ((1 - f) / n) * pop_var
+
+# Compare
+tibble(
+  Method = c(""Empirical"", ""Theoretical""),
+  Variance = c(empirical_var, theoretical_var)
+)
+```
+
+## For Large Populations (Simulation Approach)
+
+When enumerating all samples is infeasible:
+
+```r
+library(purrr)
+
+# Simulate many samples
+n_simulations <- 10000
+
+sample_means <- map_dbl(1:n_simulations, ~{
+  sample_idx <- sample(1:N, size = n, replace = FALSE)
+  mean(population$value[sample_idx])
+})
+
+# Empirical variance from simulation
+empirical_var_sim <- var(sample_means)
+
+# Compare to theoretical
+tibble(
+  Method = c(""Empirical (simulated)"", ""Theoretical""),
+  Variance = c(empirical_var_sim, theoretical_var)
+)
+```
+
+## Important Notes
+
+**Population vs. Sample Variance**: When calculating $S^2$ from the full population, use $N-1$ in the denominator for the unbiased estimator [S2]. The distinction between population variance (dividing by $N$) and sample variance (dividing by $n-1$) matters for which formula you're implementing [S2].
+
+**What This Demonstrates**: This comparison shows that sample means are unbiased estimators and that ""the process is correct on average"" [S1]. The empirical variance should equal the theoretical variance when all samples are enumerated, demonstrating that the variance formula correctly describes the sampling distribution.",14.543856859207153,TRUE,1,1,0,TRUE,1,1,NA,1,"The answer is partly correct as it provides the general logic and R code to achieve the goal. However, it deviates from the specific implementation in the reference passage (which uses a specific dataframe `all_sample` and a specific formula `((1-f)/3) * S_sqrd`). The answer introduces a general formula $(1-f)/n * S^2$ and additional simulation logic/population definitions not present in the reference passage, making it 'unsupported' by the provided text."
+code_019,code,intro_ML_big_data_SURV751/assignments/SVY751_HW2.qmd,How can I use 10-fold cross-validation in R to find the optimal value of k for a k-nearest neighbors model?,"```r
+# Create fold assignments
+n_fold <- 10
+fold_id <- sample(rep(1:n_fold, length.out = nrow(train_df)))
+
+# Test a range of k values
+k_values <- seq(1, 21, by = 2)
+
+# Loop over k values and compute accuracy for each fold
+cv_results <- map_dfr(k_values, function(k) {
+  fold_acc <- map_dbl(1:n_fold, function(f) {
+    train_idx = fold_id != f
+    val_idx = fold_id == f
+    pred = knn(knntrain.x[train_idx, ], knntrain.x[val_idx, ],
+                knntrain.y[train_idx], k = k)
+    mean(pred == knntrain.y[val_idx])
+  })
+  tibble(k = k, accuracy = mean(fold_acc), sd = sd(fold_acc))
+})
+
+# Identify the k with the maximum accuracy
+best_k <- cv_results |> slice_max(accuracy, n = 1) |> pull(k)
+```",NA,chat,anthropic/claude-sonnet-4.5,"# 10-Fold Cross-Validation for k-NN in R
+
+Use the `caret::train()` function with `method = ""cv""` and `number = 10` to perform 10-fold cross-validation for selecting the optimal k.
+
+## Complete Example
+
+```r
+library(caret)
+
+# Set seed for reproducibility
+set.seed(2016751)
+
+# Define 10-fold cross-validation
+ctrl <- trainControl(
+  method = ""cv"",        # cross-validation
+  number = 10,          # 10 folds
+  returnResamp = ""all""  # return all resampling results
+)
+
+# Train k-NN with cross-validation over candidate k values
+knn_model <- train(
+  x = X_train,                              # predictor variables
+  y = y_train,                              # outcome variable
+  method = ""knn"",                           # k-nearest neighbors
+  tuneGrid = data.frame(.k = seq(1, 21, 2)), # odd values 1 to 21
+  trControl = ctrl
+)
+
+# View results
+print(knn_model)
+
+# Get optimal k
+knn_model$bestTune
+
+# Plot accuracy vs k
+plot(knn_model, lwd = 3, col = 2)
+```
+
+## Alternative: Using `e1071::tune.knn()`
+
+```r
+library(e1071)
+
+set.seed(761)
+
+# Tune k using 10-fold CV
+tune_results <- tune.knn(
+  X_train, 
+  y_train,
+  k = seq(1, 50, 2),                        # candidate k values
+  tunecontrol = tune.control(sampling = ""cross""),
+  cross = 10                                 # 10-fold CV
+)
+
+# View results
+summary(tune_results)
+plot(tune_results)
+
+# Extract optimal k
+optimal_k <- tune_results$best.parameters$k
+```
+
+## Key Points
+
+**Choosing k values**: Test odd values to avoid ties in voting [S6]. Your course materials show ranges like 1-21 [S1] or 1-50 [S3].
+
+**Accuracy pattern**: ""Accuracy generally increased with k while standard errors shrink as k increases"" [S1], though this depends on your data.
+
+**Cross-validation formula**: The CV error averages loss over all folds: $\text{CV}(\hat{f}) = \frac{1}{n}\sum_{i=1}^{n} L(y_i, \hat{f}^{-\kappa(i)}(x_i))$ where $\kappa(i)$ indicates which fold observation $i$ belongs to [S5].
+
+**Set seed**: Always set a seed before cross-validation for reproducibility [S1, S3, S8].
+
+**Trade-off**: Larger k reduces overfitting but may underfit; smaller k is more flexible but may overfit [S6]. Cross-validation helps balance this trade-off empirically.",12.575011014938354,TRUE,0,0,0,TRUE,1,0,NA,1,"The answer provides a completely different implementation using the `caret` and `e1071` packages, whereas the reference passage and answer provide a manual implementation using `map_dfr`, `map_dbl`, and the `knn` function. The answer is not based on the provided reference passage."
+code_005,code,fund_comp_data_display_SURV727/code/BigDataTools.Rmd,How can I calculate the median number of arrests for each year and beat using the data.table package in R?,"df[,.(arrest_med = median(arrest)), by = .(year, beat)]",NA,chat,anthropic/claude-sonnet-4.5,"Based on your course materials, here's how to calculate the median number of arrests for each year and beat using `data.table`:
+
+## Direct Answer
+
+Convert your data to a `data.table` object, then use the `data.table` syntax with `.SD` or direct aggregation:
+
+```r
+library(data.table)
+
+# Convert to data.table
+dt <- as.data.table(df)
+
+# Calculate median arrests by year and beat
+result <- dt[, .(median_arrests = median(arrest)), by = .(year, beat)]
+```
+
+## Alternative Approach from Your Materials
+
+Your course materials show using `dtplyr`, which translates `dplyr` syntax to `data.table` operations [S1]:
+
+```r
+library(dtplyr)
+library(dplyr)
+
+# Create a lazy data.table
+dftbl <- lazy_dt(df)
+
+# Use dplyr syntax (translated to data.table behind the scenes)
+result <- dftbl %>%
+  group_by(year, beat) %>%
+  summarise(median(arrest))
+
+# To see the actual data.table code generated:
+result %>% show_query()
+
+# To collect results:
+result <- result %>% as_tibble()
+```
+
+The course materials demonstrate checking performance with `system.time()` [S1]:
+
+```r
+system.time(
+  dftbl %>% 
+    group_by(year, beat) %>% 
+    summarise(median(arrest))
+)
+```
+
+## Note on the `arrest` Variable
+
+From the context in your materials [S2, S5], `arrest` appears to be a logical/boolean variable (TRUE/FALSE). If you're calculating the median of a binary variable, you're getting the proportion of arrests ≥ 0.5. You might instead want `mean(arrest)` for the arrest rate, or `sum(arrest)` for the count of arrests per year/beat.",8.672076940536499,TRUE,0,0,0,TRUE,NA,2,NA,1,"The answer is correct and complete. However, it is marked as unsupported because it asserts that the 'arrest' variable is logical/boolean based on context, which is not stated in the provided reference passage."
+code_022,code,PracTools_SURV745/assignments/SURV745_Assign_12_Linares.qmd,How can I compare the total sum of base weights and GREG weights against the population size in R?,"```r
+cat(""Base weight total "", sum(weights(smho_dsgn)),
+    ""\nGREG weight total "",
+    sum(weights(sam_lin)),
+    ""\nPopulation size "", N)
+```",NA,chat,anthropic/claude-sonnet-4.5,"## Comparing Weight Sums to Population Size
+
+**Direct answer:** Calculate `sum(weights(design_object))` for both your base-weight design and your GREG-calibrated design, then compare both to the known population size `N`.
+
+### Code Example
+
+```r
+# Assume you have:
+# - base_dsgn: your design object with base weights
+# - greg_dsgn: your GREG-calibrated design object  
+# - N: known population size
+
+# Extract and compare weight sums
+base_sum <- sum(weights(base_dsgn))
+greg_sum <- sum(weights(greg_dsgn))
+
+cat(""Base weight total:  "", base_sum, ""\n"")
+cat(""GREG weight total:  "", greg_sum, ""\n"")
+cat(""Population size:    "", N, ""\n"")
+cat(""Base - N:           "", base_sum - N, ""\n"")
+cat(""GREG - N:           "", greg_sum - N, ""\n"")
+```
+
+### What to Expect
+
+**Base weights:** The sum depends on your sampling design [S1, S8]:
+- For **equal-probability designs** (SRS, systematic), base weights are $d_i = N/n$ for all units, so they sum exactly to $N$ [S8]
+- For **unequal-probability designs** (PPS, systematic PPS), base weights are $d_i = 1/\pi_i$, which may not sum exactly to $N$ [S1, S5]
+
+**GREG weights:** When calibration includes an **intercept**, the weights are forced to sum exactly to $N$ [S1]:
+> ""Any calibration with an intercept forces the weights to sum to $N$... After calibration, the GREG weights sum to exactly 725 because the intercept is in the calibration formula."" [S1]
+
+### Verification with Auxiliary Variables
+
+You can verify calibration worked by checking that calibrated totals match known population totals for your auxiliary variables [S3]:
+
+```r
+# Check auxiliary variable (e.g., SEENCNT)
+pop_total <- sum(population$SEENCNT)  # Known population total
+
+svytotal(~SEENCNT, base_dsgn)   # Estimate with base weights
+svytotal(~SEENCNT, greg_dsgn)   # Should equal pop_total exactly
+```
+
+For variables used in calibration, the GREG estimate will have SE = 0 because it's forced to the known total [S3, S4].",12.249678134918213,TRUE,0,0,0,TRUE,1,2,NA,1,"The answer is correct and complete regarding the R code needed to compare the sums. However, it is marked as unsupported because it introduces external information and citations ([S1], [S3], etc.) and specific variable names (SEENCNT) that are not present in the provided reference passage."
+code_018,code,applied_sampling_SURV625/assignments/HW5.qmd,How can I use R to calculate the expected number of housing units to be selected and the associated probabilities for the possible achieved subsample sizes when using PPS?,"To find the expected number of units, multiply the sampling fraction $f_h$ by the number of housing units (e.g., 90) using `summarise()` and `pull()`. To determine the probabilities for the two possible achieved subsample sizes (e.g., 5 and 6), calculate the probability for the lower estimate as `(lower * expected_hu) + (upper * (1 - expected_hu))` and the upper estimate as `1 - lower_expected`.",NA,chat,anthropic/claude-sonnet-4.5,"# Calculating Expected Housing Units and Probabilities in PPS Sampling
+
+When using PPS (probability proportional to size) sampling, you often need to determine the expected number of housing units to select when the actual count differs from the frame. Here's how to handle this in R:
+
+## The Core Calculation
+
+The expected number of housing units is:
+$$\text{expected} = f_2 \times B_i$$
+
+where $f_2 = m/M_i$ is the second-stage sampling rate and $B_i$ is the actual count of housing units in the selected cluster [S1, S2].
+
+## R Code Example
+
+```r
+library(tidyverse)
+
+# Given values
+f <- 0.05  # overall sampling rate
+n <- 10    # number of clusters selected
+N <- 200   # total clusters in frame
+m <- f * (N/n)  # expected subsample size per cluster
+
+# For a selected cluster with frame MOS and actual count
+cluster_data <- tibble(
+  cluster = 1,
+  MOS = 100,      # measure of size from frame
+  actual_B = 95   # actual housing units found
+)
+
+# Calculate second-stage sampling rate
+f_2 <- m / cluster_data$MOS
+
+# Calculate expected number to select
+expected_hu <- f_2 * cluster_data$actual_B
+expected_hu
+```
+
+## Handling Non-Integer Expected Values
+
+When the expected number falls between two integers, calculate the probabilities for each possible value [S1, S2]:
+
+```r
+# Expected value between integers
+lower <- floor(expected_hu)
+upper <- ceiling(expected_hu)
+
+# Calculate probabilities
+# P(lower) = upper - expected
+# P(upper) = expected - lower
+probs <- tibble(
+  expected_values = c(lower, upper),
+  expected_prob = c(upper - expected_hu, expected_hu - lower)
+) |>
+  mutate(expected_prob = round(expected_prob, 2))
+
+probs
+```
+
+**Example from your materials:** When $f_2 \times 95 = 11.4$, you get [S2]:
+- Select 11 units with probability 0.60
+- Select 12 units with probability 0.40
+
+## Complete Workflow
+
+```r
+# Full calculation for a selected cluster
+calculate_pps_subsample <- function(f, n, N, MOS_frame, B_actual) {
+  m <- f * (N/n)
+  f_2 <- m / MOS_frame
+  expected <- f_2 * B_actual
+  
+  lower <- floor(expected)
+  upper <- ceiling(expected)
+  
+  tibble(
+    expected_value = expected,
+    lower_bound = lower,
+    upper_bound = upper,
+    prob_lower = upper - expected,
+    prob_upper = expected - lower
+  )
+}
+
+# Use it
+calculate_pps_subsample(
+  f = 0.05, 
+  n = 10, 
+  N = 200, 
+  MOS_frame = 100, 
+  B_actual = 95
+)
+```
+
+## Key Points
+
+1. **The expected number uses actual counts**, not frame MOS, because field staff verify the true size [S2, S7]
+
+2. **Probabilities must sum to 1**: The fractional part determines how to randomize between the two integer values [S1]
+
+3. **Selection method**: Use systematic PPS (e.g., `sampling::UPsystematic()`) for the first stage [S3], then apply these second-stage rates to actual counts [S4]
+
+4. **Why this matters**: Using outdated frame counts can create unequal workloads across selected clusters [S7], so the adjustment to actual counts maintains the intended sampling rate
+
+The materials show this is standard practice when ""field staff are sent to selected blocks to count the number of housing units that are actually there"" [S2].",17.850620985031128,TRUE,1,1,0,TRUE,1,1,NA,1,"The answer is partly correct in terms of the general logic of PPS sampling, but it fails to accurately reflect the specific R implementation provided in the reference passage. The reference passage uses a very specific (and mathematically unusual) formula for probability: `(lower * expected_hu) + (upper * (1-expected_hu))`. The graded answer instead provides the standard mathematical way to calculate probabilities for rounding (e.g., `upper - expected`), which contradicts the provided reference text. Additionally, the answer introduces a significant amount of external information and hypothetical variables (f, n, N, MOS_frame) not present in the reference passage, making it unsupported."
+code_003,code,stat_mod_ML_2_SURV616/assignments/HW_2.qmd,What is the formula for calculating the confidence interval of the relative risk?,$$CI_{RR} = 1.96 	imes 	ext{sqrt}(V\{\ln(\hat\theta)\})$$,NA,chat,anthropic/claude-sonnet-4.5,"# Confidence Interval for Relative Risk
+
+The confidence interval for the relative risk is calculated **on the logarithmic scale** and then exponentiated back to the original scale [S1, S3, S5].
+
+## Formula
+
+The variance of the log relative risk is:
+
+$$V\{\ln(\hat{R})\} = \frac{b}{a(a+b)} + \frac{d}{c(c+d)}$$
+
+where the 2×2 table is:
+
+|           | Outcome + | Outcome - | Total   |
+|-----------|-----------|-----------|---------|
+| Exposed   | a         | b         | a+b     |
+| Unexposed | c         | d         | c+d     |
+
+[S7]
+
+## Steps to Calculate the 95% CI
+
+1. Calculate the relative risk: $\hat{R} = \frac{a/(a+b)}{c/(c+d)} = \frac{a(c+d)}{c(a+b)}$ [S6]
+
+2. Calculate the variance of $\ln(\hat{R})$ using the formula above
+
+3. Form the confidence interval on the log scale:
+   $$\ln(\hat{R}) \pm 1.96 \times \sqrt{V\{\ln(\hat{R})\}}$$
+
+4. Exponentiate to get back to the scale of $\hat{R}$:
+   $$\left(\exp\left[\ln(\hat{R}) - 1.96\sqrt{V\{\ln(\hat{R})\}}\right], \exp\left[\ln(\hat{R}) + 1.96\sqrt{V\{\ln(\hat{R})\}}\right]\right)$$
+
+[S1, S3, S5]
+
+**Critical point:** All calculations must be done on the logarithmic scale before exponentiating [S5]. This ensures the confidence interval respects the positive constraint on the relative risk.",7.486668109893799,TRUE,3,3,0,TRUE,1,2,NA,0,"The answer provides a comprehensive explanation of the formula and the steps to calculate the confidence interval, which is fully supported by the reference passage (both the LaTeX formula and the R code implementation)."
+code_010,code,stat_mod_ML_2_SURV616/class_code/hypothetical_mean.r,How do I perform a Hotelling's $T^2$ test to compare a sample mean vector to a hypothetical mean vector using the DescTools package in R?,"You can use the `HotellingsT2Test()` function from the `DescTools` library, specifying the dataset and the null hypothesis mean vector as the `mu` argument: `HotellingsT2Test(nutrient, mu=mu0)`.",NA,chat,anthropic/claude-sonnet-4.5,"# Hotelling's T² Test for Sample vs. Hypothetical Mean Vector
+
+To test whether a sample mean vector equals a hypothetical mean vector, use `DescTools::HotellingsT2Test()` with your data and the null hypothesis mean vector [S2].
+
+## R Code
+
+```r
+library(DescTools)
+
+# Your multivariate data (n × p matrix or data frame)
+# Example: nutrient data with 5 variables
+nutrient <- read.table(""nutrient.txt"")
+names(nutrient) <- c('id', ""calcium"", ""iron"", ""protein"", ""vita"", ""vitc"")
+nutrient <- nutrient[, -1]  # Remove ID column
+
+# Specify the hypothetical mean vector under H₀
+mu0 <- matrix(c(1000, 15, 60, 800, 75))
+
+# Perform Hotelling's T² test
+T2_result <- HotellingsT2Test(nutrient, mu = mu0)
+T2_result
+T2_result$statistic
+```
+
+## The Test Statistic
+
+The formula being computed is [S2]:
+
+$$T^2 = n(\bar{x} - \mu_0)' S^{-1} (\bar{x} - \mu_0)$$
+
+where:
+- $n$ = sample size
+- $\bar{x}$ = sample mean vector (p × 1)
+- $\mu_0$ = hypothetical mean vector under H₀ (p × 1)
+- $S$ = sample covariance matrix (p × p)
+- $S^{-1}$ = inverse of the covariance matrix
+
+## Reference Distribution
+
+The test statistic is compared to [S1]:
+
+$$F_{p, n-p} = \frac{n-p}{(n-1)p} T^2$$
+
+which follows an F-distribution with $p$ and $n-p$ degrees of freedom, where $p$ is the number of variables [S1, S2].
+
+The critical value at significance level $\alpha$ is [S2]:
+
+$$\frac{(n-1)p}{n-p} F_{p, n-p}(\alpha)$$
+
+## What You Need
+
+- **Data**: An $n \times p$ matrix or data frame with complete cases
+- **Null hypothesis**: The `mu` argument specifying $\mu_0$ (must match the number of columns in your data)
+
+The function handles the matrix algebra and reference distribution automatically [S1, S2].",11.486480951309204,TRUE,3,3,0,TRUE,1,2,NA,0,The answer correctly identifies the function and usage from the reference passage and provides a comprehensive example.
+equation_003,equation,applications_stats_modeling_SURV617/midterm/midterm_study_guide.qmd,How is the test statistic for a Likelihood Ratio Test calculated when comparing two nested models?,$$	ext{LRT} = -2	ext{log}	extstyleinom{L_{	ext{reduced}}}{L_{	ext{full}}} = -2(\ell_{	ext{reduced}} - \ell_{	ext{full}})$$,\text{LRT} = -2\log\left(\frac{L_{\text{reduced}}}{L_{\text{full}}}\right) = -2(\ell_{\text{reduced}} - \ell_{\text{full}}),worker,google/gemma-4-31b-it,"To calculate the test statistic for a Likelihood Ratio Test (LRT) when comparing two nested models, you compute the difference between the $-2 \times \text{log-likelihoods}$ of the reduced (nested) model and the full (reference) model [S1, S2].
+
+### Formula
+The test statistic is expressed in the course materials in the following ways:
+
+From [S2]:
+$$\text{LRT} = -2\log\left(\frac{L_{\text{reduced}}}{L_{\text{full}}}\right) = -2(\ell_{\text{reduced}} - \ell_{\text{full}})$$
+Or equivalently:
+$$\text{LRT} = (-2\ell_{\text{reduced}}) - (-2\ell_{\text{full}})$$
+
+From [S5]:
+$$-2\log\frac{L(\hat{\beta_k})}{L(\hat{\beta_p})}$$
+Which is simplified to:
+$$G_k - G_p \sim \chi^2_{p-k}$$
+
+**Definitions:**
+*   $L_{\text{reduced}}$ (or $L(\hat{\beta_k})$): The likelihood of the reduced/nested model [S2, S5].
+*   $L_{\text{full}}$ (or $L(\hat{\beta_p})$): The likelihood of the full/reference model [S2, S5].
+*   $\ell$: The log-likelihood [S2].
+*   $G_k, G_p$: The $-2\log\text{likelihood}$ of the reduced and full models, respectively [S5].
+*   $p, k$: The number of parameters in the full and reduced models, respectively [S5].
+
+### R Implementation
+In R, this is typically implemented by extracting the log-likelihood using `logLik()` [S5, S6]:
+
+```r
+# Example based on [S5] and [S6]
+# full_model: more parameters; reduced_model: fewer parameters
+lrt_statistic <- -2 * (logLik(reduced_model) - logLik(full_model))
+```
+
+### Caveats for the Analyst
+*   **Estimation Method (ML vs. REML):** When comparing models with different **fixed effects**, you must use Maximum Likelihood (**ML**) estimation [S2]. Restricted Maximum Likelihood (**REML**) is used for final model reporting or when comparing models that differ only in their **variance components** [S2].
+*   **Distribution:** The resulting statistic is referred to a chi-square ($\chi^2$) distribution with degrees of freedom equal to the difference in the number of parameters (fixed effects) estimated between the two models [S1, S5].
+*   **Assumptions:** For fixed effects, the LRT assumes a ""large"" sample of clusters and ""large"" samples within clusters [S1].
+*   **Boundary Hypotheses:** When testing if a single variance component is zero, the p-value calculation may differ (e.g., using a mixture of chi-square distributions) because it is a ""boundary"" hypothesis [S3, S6].",7.3142170906066895,TRUE,4,1,0,TRUE,1,2,1,1,"The answer is fully correct and complete based on the reference passage. However, it is marked as unsupported because it includes a significant amount of information (e.g., chi-square distributions, boundary hypotheses, R's logLik() function, and specific parameter notation like beta_k/beta_p) that is not present in the provided reference passage."
+equation_024,equation,Fund_Infe_SURV740/assignments/HW3.qmd,What is the formula used to calculate the complier average causal effect (CACE)?,$$CACE = rac{E(Y|Z=1) - E(Y|Z=0) }{ E(A|Z=1) - E(A|Z=0)}$$,.03 = .02 + (.2 \times \theta^0_C),worker,google/gemma-4-31b-it,"The formula used to calculate the Complier Average Causal Effect (CACE) is the ratio of the effect of the instrument $Z$ on the outcome $Y$ to the effect of the instrument $Z$ on the treatment $A$ [S4].
+
+As stated in the course materials [S1, S4, S8]:
+
+$$CACE = \frac{E(Y|Z=1) - E(Y|Z=0)}{E(A|Z=1) - E(A|Z=0)}$$
+
+**Definition of symbols:**
+*   $E(Y|Z=1)$: The expected outcome for those assigned to the instrument group (e.g., encouragement to receive treatment) [S1].
+*   $E(Y|Z=0)$: The expected outcome for those not assigned to the instrument group [S1].
+*   $E(A|Z=1)$: The proportion of people who received the treatment among those assigned to the instrument group (includes Always-Takers and Compliers) [S1].
+*   $E(A|Z=0)$: The proportion of people who received the treatment among those not assigned to the instrument group (includes Always-Takers) [S1].
+*   The denominator $E(A|Z=1) - E(A|Z=0)$ represents the proportion of compliers in the population [S1, S4].
+
+**Caveat for the analyst:**
+The IV estimator provides a consistent estimate of the CACE rather than the average causal effect for the entire population [S1]. It specifically provides no inference regarding defiers, always-takers, or never-takers [S1]. For this identification to hold, the instrument $Z$ must satisfy three conditions: it must affect treatment $A$, it must not directly affect outcome $Y$, and it must affect $Y$ only through $A$ [S4].",24.166954040527344,TRUE,1,0,0,TRUE,1,2,1,0,"The answer provides the correct formula as stated in the reference passage. Note: The 'EXPECTED FORMULA' provided in the prompt (.03 = .02 + (.2 * theta)) is actually a specific calculation for a component of the CACE, whereas the reference passage explicitly states that the formula for CACE is the ratio of expectations. The answer correctly identifies the general formula."
+equation_016,equation,stat_mod_ML_1_SURV615/assignments/HW8.qmd,How is the variance inflation factor (VIF) calculated to assess multicollinearity?,$$VIF_j = rac{1}{1-R^2_j}$$,VIF_j = \frac{1}{1=R^2_j},worker,google/gemma-4-31b-it,"The Variance Inflation Factor (VIF) assesses multicollinearity by calculating the ratio of the variance of the estimated coefficient $\hat{\beta}_j$ when fitting the full model to the variance of $\hat{\beta}_j$ if it were fit on its own [S2, S7].
+
+### Formula
+Based on the provided materials, VIF is expressed as:
+
+$$VIF_j = \frac{1}{1-R^2_j}$$ [S1, S2]
+
+Where:
+*   $R^2_j$ is the $R^2$ from a model regressing the predictor $X_j$ on all other predictors and the intercept [S1].
+
+### Implementation in R
+To compute VIFs for a model object, the materials reference the `vif()` function from the Faraway package [S5] or a custom function `ols_vif_tol()` [S2, S7].
+
+```r
+# Example using the Faraway vif function as described in [S5]
+# Assuming 'mod' is a fitted lm object
+# library(faraway) 
+vif(mod) 
+
+# Example of extracting and arranging VIFs as seen in [S2, S7]
+ols_vif_tol(mod) |> 
+  dplyr::select(Variables, VIF) |> 
+  arrange(desc(VIF))
+```
+
+### Analyst's Caveats
+*   **Interpretation of Magnitude:** The smallest possible value is 1, indicating an absence of collinearity [S2, S7]. In the social sciences, a rule of thumb is that VIF values greater than 5 or 10 are likely problematic [S3, S6].
+*   **Impact on Precision:** $\sqrt{VIF}$ approximates how much the standard error is inflated compared to a scenario with no collinearity [S4]. For example, a $VIF = 307.4$ implies the standard error is $\sqrt{307.4} \approx 17.5$ times larger than it would be if the predictors were orthogonal [S3].
+*   **Decision Making:** While VIF identifies the severity of inflation—which affects inference, precision, and hypothesis testing—it cannot be used as a correction because orthogonal data was not actually observed [S3, S4]. High VIFs may lead an analyst to consider whether to drop a variable and, if so, which one [S3].",21.42645287513733,TRUE,1,1,0,TRUE,1,2,1,1,"The answer is correct and complete based on the reference. However, it is marked as unsupported because it includes significant external information not found in the reference passage (e.g., the definition of $R^2_j$, the $\sqrt{VIF}$ interpretation, and the discussion on orthogonal data/dropping variables)."
+equation_035,equation,Fund_Infe_SURV740/final/surv740_complete_study_guide.qmd,What is the formula for calculating weights using propensity score subclassification?,$$w_j^{PSC} = rac{\sum_{k \in s_p(g)} d_k}{n_{np}(g)}$$,w_j^{PSC} = \frac{\sum_{k \in s_p(g)} d_k}{n_{np}(g)},worker,google/gemma-4-31b-it,"The formula for calculating weights using the propensity score subclassification (PSC) method is as follows:
+
+$$w_j^{PSC} = \frac{\sum_{k \in s_p(g)} d_k}{n_{np}(g)}$$
+
+**Definition of symbols:**
+*   $w_j^{PSC}$: The weight assigned to a non-probability sample unit $j$ within subclass $g$ [S1, S5].
+*   $s_p(g)$: The set of probability sample units falling into subclass $g$ [S5].
+*   $d_k$: The design weight of probability sample unit $k$ [S5].
+*   $n_{np}(g)$: The number of non-probability sample units in subclass $g$ [S1, S5].
+
+**Caveat for the analyst:**
+This method relies on the assumption that participants within each subclass represent the same number of population units [S5]. The process involves three steps: estimating propensity scores using a combined sample of non-probability ($s_{np}$) and weighted probability ($s_p$) units, sorting and partitioning these scores into $G$ subclasses, and then distributing the total probability sample weight within each subclass evenly across the non-probability units [S1, S5].",15.753026008605957,TRUE,1,0,0,TRUE,1,NA,NA,NA,"[38;5;255mResponse was truncated because it hit the `max_tokens` limit.
+[36mℹ[38;5;255m Increase `max_tokens` to allow the model to generate the full response.[39m"
+equation_011,equation,complex_sample_data_SURV701/midterm/surv701_midterm_study_guide.qmd,What is the formula for calculating the TSL variance when there are multiple PSUs per stratum?,$$(dx_h)^2 = rac{a_h}{a_h-1}\left[\sum_\alpha x_{h\alpha}^2 - \frac{\bigl(\sum_\alpha x_{h\alpha}\bigr)^2}{a_h}\right]$$,(dx_h)^2 = \frac{a_h}{a_h-1}\left[\sum_\alpha x_{h\alpha}^2 - \frac{\bigl(\sum_\alpha x_{h\alpha}\bigr)^2}{a_h}\right],worker,google/gemma-4-31b-it,"For a weighted mean $\bar{y}_w$ in a stratified cluster design with multiple PSUs per stratum, the Taylor Series Linearization (TSL) variance is calculated using the following structure [S1, S2, S4]:
+
+$$\widehat{\text{Var}}(\bar{y}_w) = \frac{\displaystyle\sum_h (dx_h)^2 \;+\; \bar{y}_w^2 \sum_h (dz_h)^2 \;-\; 2\bar{y}_w \sum_h dx_h\,dz_h}{\hat{X}^2}$$
+
+Where:
+*   $\hat{X} = \sum_h (z_{h1} + z_{h2})$ is the total estimated population size $\hat{N}$ [S1].
+*   $\bar{y}_w$ is the weighted mean [S1].
+*   $x_{h\alpha} = \sum_i w_{h\alpha i}\,y_{h\alpha i}$ is the PSU-level weighted total for the variable of interest in stratum $h$, PSU $\alpha$ [S1].
+*   $z_{h\alpha} = \sum_i w_{h\alpha i}$ is the PSU-level weighted total for the population size (sum of weights) in stratum $h$, PSU $\alpha$ [S1].
+
+For strata with $a_h$ PSUs, the term $(dx_h)^2$ is calculated as:
+$$(dx_h)^2 = \frac{a_h}{a_h-1}\left[\sum_\alpha x_{h\alpha}^2 - \frac{\bigl(\sum_\alpha x_{h\alpha}\bigr)^2}{a_h}\right]$$
+The same structure applies to the calculation of $(dz_h)^2$ and the cross-product $dx_h\,dz_h$ [S1].
+
+**Caveat for the Analyst:**
+TSL requires at least two PSUs per stratum to estimate the variance [S5]. If you encounter ""singleton"" strata (only one PSU), the design cannot estimate that stratum's variance [S5]. In such cases, you must either collapse ""similar"" strata based on population characteristics—not the selected PSUs [S3, S5]—or use an ad-hoc software option to handle singletons [S5]. Ignoring the complex design (stratification and clustering) will lead to incorrect point estimates (if weights are ignored) and typically underestimated standard errors [SURV625, SURV701, SURV740].",6.014549016952515,TRUE,2,0,0,TRUE,1,2,1,1,"The answer provides the correct formula for (dx_h)^2 as requested. However, it includes a significant amount of additional information (the full variance formula for a weighted mean, definitions of X, y_w, etc., and caveats about singleton strata) that is not present in the provided reference passage, making it unsupported by the provided text."
+equation_027,equation,complex_sample_data_SURV701/assignments/hw3_surv701_Linares.qmd,What is the formula for estimating the variance of the sample mean using the Jackknife Repeated Replication (JRR) method for a simple random sample?,$$\hat{V}_{JRR}(\bar{y}) = \frac{n-1}{n} \sum_{k=1}^{n} (\bar{y}_{(k)} - \bar{y})^2$$,\hat{V}(\bar{y}) = \frac{\sum_{i=1}^n(y_i - \bar{y}^2) }{n-1} \frac{1}{n},worker,google/gemma-4-31b-it,"For a simple random sample (SRS), the Jackknife Repeated Replication (JRR) variance estimator is algebraically equivalent to the textbook SRS variance estimator [S2].
+
+The formula for the variance of the sample mean $\bar{y}$ using the delete-one jackknife is:
+
+$$\hat{V}_{JRR}(\bar{y}) = \frac{n-1}{n} \sum_{k=1}^{n} (\bar{y}_{(k)} - \bar{y})^2$$ [S2]
+
+Where:
+*   $n$ is the sample size.
+*   $\bar{y}$ is the full-sample mean.
+*   $\bar{y}_{(k)}$ is the mean computed after deleting the $k$-th observation (the $k$-th jackknife replicate mean) [S2].
+
+**Caveat for the Analyst:**
+While the jackknife is computationally redundant for linear estimators like the sample mean—where the standard SRS formula is more direct [S3]—its primary benefit is that it provides an approximately unbiased and consistent variance estimator for **nonlinear estimators** [S3]. If you are implementing this in R, you can verify these results by wrapping the data in a `survey::svydesign()` object and converting it to a `svrepdesign` with `type = ""JK1""` [S2].",16.457834005355835,TRUE,1,0,0,TRUE,1,2,1,0,"The answer provides the correct formula for JRR as specified in the reference passage and answer. Note: The 'EXPECTED FORMULA' provided in the prompt is actually the textbook formula, not the JRR formula, but the answer correctly provides the JRR formula requested in the QUESTION."
+equation_032,equation,sampling_1_SURV626/assignments/Final.qmd,What is the formula for the design effect in stratified sampling?,$$	ext{deff}_{strat} = rac{	ext{Var}_{strat}(ar{y}_{st})}{	ext{Var}_{SRS}(ar{y})}$$,\text{deff}_{strat} = \frac{\text{Var}_{strat}(\bar{y}_{st})}{\text{Var}_{SRS}(\bar{y})},worker,google/gemma-4-31b-it,"Based on the retrieved course materials, the design effect ($deff$ or $D^2$) for stratified sampling is defined as the ratio of the variance under the complex stratified design to the variance under simple random sampling (SRS) [S1, S2, S3].
+
+Depending on the course, the formula is expressed as follows:
+
+**From SURV701 [S1]:**
+$$ D^2(\bar{y}) = \frac{\widehat{\text{var}}(\bar{y}_{st})}{\widehat{\text{var}}(\bar{y}_{srs})} $$
+Where:
+- $D^2(\bar{y})$ is the design effect for the estimated mean.
+- $\widehat{\text{var}}(\bar{y}_{st})$ is the estimated variance of the stratified mean.
+- $\widehat{\text{var}}(\bar{y}_{srs})$ is the estimated variance under simple random sampling.
+
+**From SURV626 [S2]:**
+$$ deff = \frac{\sum_{h=1}^{H} W_h^2 \left( \frac{1-f_h}{n_h} \right) s_h^2}{\text{var}_{SRS}(\bar{y})} = \frac{\sum_{h=1}^{H} W_h^2 \left( \frac{1-f_h}{n_h} \right) s_h^2}{\left( \frac{1-f}{n} \right) s^2} $$
+Where:
+- $W_h$ is the stratum weight.
+- $f_h$ is the sampling fraction in stratum $h$.
+- $n_h$ is the sample size in stratum $h$.
+- $s_h^2$ is the variance within stratum $h$.
+- $f$ is the overall sampling fraction.
+- $n$ is the total sample size.
+- $s^2$ is the population variance.
+
+**Caveat for the Analyst:**
+The design effect is not guaranteed to be less than 1 [S2]. While proportional allocation usually results in $deff < 1$ when strata are homogeneous within and heterogeneous between [S2, S3], a $deff > 1$ can occur if the allocation is poor (e.g., purposive oversampling of certain groups) or if the auxiliary variables used for stratification are unrelated to the outcome [S3].",5.185503959655762,TRUE,2,1,0,TRUE,1,NA,NA,NA,"[38;5;255mResponse was truncated because it hit the `max_tokens` limit.
+[36mℹ[38;5;255m Increase `max_tokens` to allow the model to generate the full response.[39m"
+equation_026,equation,applied_sampling_SURV625/assignments/HW2.qmd,How is the overall population mean calculated for a stratified sample based on department means?,$$\bar{Y} = \sum_h \frac{N_h}{N}\bar{Y}_h = \sum_hW_h\bar{Y}_h$$,\bar{Y} = \sum_h \frac{N_h}{N}\bar{Y}_h = \sum_hW_h\bar{Y}h,worker,google/gemma-4-31b-it,"To calculate the overall population mean for a stratified sample, you compute a weighted sum of the sample means from each stratum (e.g., department), where the weights are the relative proportions of the population within each stratum [S4, S5, S6].
+
+### Formula
+Based on the provided materials, the estimator for the population mean ($\bar{y}_{st}$) is:
+
+$$\bar{y}_{st} = \sum_{h=1}^{H} W_h \bar{y}_h$$ [S2, S6, S7]
+
+**Definitions:**
+*   $H$: The total number of strata (e.g., departments) [S7].
+*   $W_h$: The stratum weight, defined as $W_h = \frac{N_h}{N}$, where $N_h$ is the population size of stratum $h$ and $N$ is the total population size [S2, S5, S7].
+*   $\bar{y}_h$: The sample mean of the variable of interest within stratum $h$ [S7].
+
+### Implementation Example
+Following the logic in the provided Quarto code, you would calculate this by multiplying the stratum weights by the stratum means and summing them [S2].
+
+```r
+# Example based on [S2]
+library(tidyverse)
+
+strata_data <- tibble(
+  h = 1:3, 
+  N_h = c(1000, 600, 400), 
+  y_bar_h = c(40, 30, 50)
+) |> 
+  mutate(
+    W_h = N_h / sum(N_h)
+  )
+
+# Calculate overall population mean
+overall_mean <- strata_data |> 
+  summarise(y_bar_st = sum(W_h * y_bar_h))
+
+print(overall_mean)
+```
+
+### Analyst's Caveat
+When calculating the overall mean, ensure that the weights $W_h$ are based on the **population** totals ($N_h$), not the sample totals [S5, S7]. If you use sample proportions instead of population weights, you are calculating an unweighted sample mean, which may be biased if the sample was not allocated proportionately to the population [S1, S8]. For variance estimation of this mean, you must account for the complex design (strata and weights) using a design-based approach (e.g., `survey::svydesign()`) to avoid underestimating the standard error [SURV625, SURV701].",32.34394598007202,TRUE,1,1,0,TRUE,1,-1,1,1,"The answer is marked as unsupported because it introduces a significant amount of external information not found in the reference passage, including specific R code examples, references to other courses (SURV625, SURV701), and detailed statistical caveats about bias and variance estimation. While the formula is correct, the 'correct' score is -1 because the answer is not derived from the provided reference but from external knowledge."
+equation_014,equation,Fund_Infe_SURV740/assignments/HW5.qmd,What is the formula for calculating the stratified differential item functioning ($DIF_{strat}$) based on population sizes and group means?,$$DIF_{strat} = rac{N_{women}(ar{y}_{women_{high}} - ar{y}_{women_{low}}) + N_{men}(ar{y}_{men_{high}} - ar{y}_{men_{low}})}{N_{women} + N_{men}}$$,DIF = \frac{\sum w_i \times y_i women high}{\sum w_i womenhigh} - \frac{\sum w_i \times y_i womenlow}{\sum w_i womenlow},worker,google/gemma-4-31b-it,"Based on the provided course materials, the formula for calculating the stratified differential item functioning ($DIF_{strat}$) is:
+
+$$ DIF_{strat} = \frac{N_{women}(\bar{y}_{women_{high}} - \bar{y}_{women_{low}}) + N_{men}(\bar{y}_{men_{high}} - \bar{y}_{men_{low}})} {N_{women} + N_{men}} $$ [S1]
+
+**Definition of symbols:**
+*   $N_{women}$: Population size of women [S1].
+*   $N_{men}$: Population size of men [S1].
+*   $\bar{y}_{women_{high}}$: Mean for women in the high risk group [S1].
+*   $\bar{y}_{women_{low}}$: Mean for women in the low risk group [S1].
+*   $\bar{y}_{men_{high}}$: Mean for men in the high risk group [S1].
+*   $\bar{y}_{men_{low}}$: Mean for men in the low risk group [S1].
+
+**Caveat for the analyst:**
+Note that $DIF_{strat}$ is considered a **model-based** estimate, whereas the standard $dif$ (calculated using weights $w_i$) is **design-based** [S1]. These two estimates are equivalent ($DIF = DIF_{strat}$) specifically when the population is balanced within each risk group (e.g., half the population is women for each risk group) [S1].",9.256102085113525,TRUE,1,0,0,TRUE,1,2,1,0,"The answer provides the correct formula for $DIF_{strat}$ as requested by the question and found in the reference passage/answer. Note: The 'EXPECTED FORMULA' provided in the prompt actually lists the formula for $DIF$, not $DIF_{strat}$, but the answer correctly identifies the $DIF_{strat}$ formula from the text."
+equation_018,equation,PracTools_SURV745/assignments/SURV745_Assign_4_Linares.qmd,What is the formula for the relative variance of the estimated total of a proportion when using stratified simple random sampling?,"$$\operatorname{relvar}(\hat{t}_P) = \frac{1}{t_P^2} \sum_{h=1}^{H} N_h \left(\frac{N_h}{n_h} - 1\right) S_h^2, \quad S_h^2 = \frac{P_h(1 - P_h) N_h}{N_h - 1}$$","\operatorname{relvar}(\hat{t}_P) = \frac{1}{t_P^2} \sum_{h=1}^{H} N_h \left(\frac{N_h}{n_h} - 1\right) S_h^2, \quad S_h^2 = \frac{P_h(1 - P_h)\, N_h}{N_h - 1}",worker,google/gemma-4-31b-it,"Based on the provided materials, there is no single formula explicitly labeled as the ""relative variance of the estimated total of a proportion."" However, the materials provide the formula for the relative variance of an estimated total for a domain (which can be applied to a proportion if the domain is defined by a specific characteristic) under stratified sampling [S5].
+
+For a domain $d$ in a stratified design, the relative variance of the estimated total $\hat{t}_d$ is:
+
+$$\text{relvar}(\hat{t}_d) = N_d^{-2} \sum_{h=1}^H N_h \left( \frac{N_h}{n_h} - 1 \right) P_{dh} R_{dh}^2 (CV_{dh}^2 + Q_{dh}) \quad \quad (5.3)$$
+
+**Definitions:**
+*   $N_d$: Population size of the domain.
+*   $H$: Number of strata.
+*   $N_h$: Population size of stratum $h$.
+*   $n_h$: Sample size of stratum $h$.
+*   $P_{dh} = N_{dh}/N_h$: Proportion of elements in stratum $h$ that are in the domain.
+*   $Q_{dh} = 1 - P_{dh}$.
+*   $R_{dh} = \bar{y}_{dh}/\bar{y}_{Ud}$: Ratio of the domain mean in stratum $h$ to the population mean for that domain.
+*   $CV_{dh}^2$: The squared coefficient of variation for the domain in stratum $h$.
+
+**Caveat for the Analyst:**
+This formula [S5] is specifically for domain estimation. If you are estimating a general population proportion using stratified simple random sampling (stsrswor), you would typically use the variance of the mean $\text{var}(\bar{y}_{st})$ [S3, S4, S7] and then calculate the relative variance as $\text{var}(\hat{t}) / \hat{t}^2$. Note that the provided materials distinguish between ""exact methods"" for simple stratified samples [S3] and the more complex domain-specific approximations [S5]. Ensure you are applying the domain formula only if the proportion refers to a subpopulation (domain) rather than the entire sampled population.",15.509377002716064,FALSE,1,0,0,TRUE,1,0,0,1,"The answer fails to provide the formula explicitly stated in the reference passage. Instead, it provides a different, more complex formula for domain estimation that is not present in the provided text, and incorrectly claims that the requested formula is not explicitly labeled in the materials."
+equation_009,equation,applied_sampling_SURV625/assignments/HW3.qmd,"How is the design effect used to calculate the intra-cluster correlation (ICC), also known as rho, and how can this be used to estimate the design effect for a new cluster size?",The intra-cluster correlation is calculated as $\hat{roh} = \frac{deff - 1}{b - 1}$. This value can then be used to estimate the design effect for a new cluster size using the formula $deff_{new} = 1 + (m_{new}-1) \times \hat{roh}$.,var_{srs}(\bar{y}) = (1 - f)\frac{p(1-p)}{nm-1},worker,google/gemma-4-31b-it,"To calculate the intra-cluster correlation (ICC or $\rho$) from the design effect and use it to project a new design effect, follow the procedures below based on the course materials.
+
+### Calculating ICC ($\rho$) from Design Effect
+The design effect ($D^2$ or $\text{deff}$) is the ratio of the variance under a complex design to the variance under simple random sampling (SRS) of the same sample size [S1, S4]. For equal-probability cluster sampling, the ICC represents the degree of within-cluster homogeneity [S1, S3].
+
+**Formula:**
+The ICC is estimated by solving the design effect formula for $\rho$:
+$$\hat{\rho} = \frac{d^2(\bar{y}) - 1}{b - 1}$$
+Where:
+- $d^2(\bar{y})$ (or $\text{deff}$) is the estimated design effect [S1, S2, S4].
+- $b$ (or $M$) is the cluster size (number of elements per cluster) [S1, S2, S3].
+
+### Estimating Design Effect for a New Cluster Size
+Because $\rho$ is considered a property of the clusters and is variable-specific, it is treated as portable when changing the design's cluster size [S6]. To estimate the design effect for a new cluster size ($b_{new}$), you plug the estimated $\rho$ back into the design effect formula.
+
+**Formula:**
+$$\text{deff}_{new} = 1 + (b_{new} - 1)\rho$$
+Where:
+- $b_{new}$ is the new number of elements per cluster [S2, S8].
+- $\rho$ is the ICC estimated from the original design [S2, S6].
+
+### Analyst's Caveats
+*   **Interpretation of $\rho$:** A positive $\rho$ indicates that observations within clusters are more similar than those between clusters, which inflates the variance ($D^2 > 1$) [S1, S4]. If $\rho = 0$, there is no within-cluster homogeneity and $D^2 = 1$ [S1].
+*   **Variance Projection:** When using $\text{deff}_{new}$ to project a new sampling variance, you must also re-estimate the SRS variance ($\text{var}_{SRS}$) to account for the new total sample size and the updated population fraction (fpc) [S2, S3].
+*   **Design-Based Implementation:** In R, these calculations are typically performed after estimating the complex variance using `survey::svydesign()` or `srvyr`. Ignoring the design (treating the data as iid) would lead to an incorrect $\text{var}_{complex}$ and thus an incorrect $\text{deff}$ and $\rho$ [SURV625, SURV701].
+
+**Example R Implementation:**
+```r
+# Example: Original design had b = 10, deff = 2.5. 
+# Projecting for a new design with b_new = 20.
+b_old <- 10
+deff_old <- 2.5
+b_new <- 20
+
+# 1. Calculate ICC (rho)
+rho <- (deff_old - 1) / (b_old - 1)
+
+# 2. Calculate new design effect
+deff_new <- 1 + (b_new - 1) * rho
+
+# Results
+list(icc = rho, projected_deff = deff_new)
+```",12.084787845611572,TRUE,2,1,0,TRUE,1,2,0,1,"The answer is fully correct and complete regarding the question asked. However, the 'EXPECTED FORMULA' provided in the prompt was for the SRS variance, which was not the focus of the specific question asked (the question asked for ICC and new design effect formulas), so the answer did not include it. The answer is marked as unsupported because it introduces external information not found in the reference passage, such as the `survey` package, `svydesign()`, and specific interpretations of rho (e.g., 'degree of within-cluster homogeneity')."
+equation_030,equation,stat_mod_ML_2_SURV616/assignments/HW_4.qmd,How do you perform a likelihood ratio test to compare a full model with a reduced model?,"The test statistic is calculated as $G_k - G_p 	ext{ or } -2	ext{log}rac{L(\hat{\beta_k})}{L(\hat{\beta_p})}$, which follows a $\chi^2$ distribution with $p-k$ degrees of freedom.",G_p = -2logL(\hat{\beta}) \\ G_k = -2logL(\hat{\beta}),worker,google/gemma-4-31b-it,"To perform a likelihood ratio test (LRT) to compare a full model with a reduced model, you evaluate whether the more complex model fits significantly better by comparing their log-likelihoods [S2, S4].
+
+### Procedure
+1.  **Define the Models**: Identify a ""full"" (or reference) model containing all parameters of interest and a ""reduced"" (or nested) model where some parameters are constrained to zero [S4].
+2.  **Estimate Likelihoods**: Calculate the maximum likelihood for both the full model ($L(\hat{\beta}_p)$) and the reduced model ($L(\hat{\beta}_k)$) [S1, S6].
+3.  **Calculate the Test Statistic**: Compute the difference between the $-2 \log$-likelihoods of the two models [S1, S2].
+4.  **Determine Significance**: Compare the resulting statistic to a $\chi^2$ distribution with degrees of freedom equal to the difference in the number of parameters between the two models ($p - k$) [S1, S3, S4, S6].
+
+### Formulas
+Depending on the course material, the LRT is expressed in the following equivalent ways:
+
+**From SURV616 [S1, S3, S6]:**
+$$\text{LRT} = -2\log\frac{L(\hat{\beta}_k)}{L(\hat{\beta}_p)}$$
+Or simplified as:
+$$G_k - G_p \sim \chi^2_{p-k}$$
+Where:
+*   $G_k = -2\log L(\hat{\beta}_k)$ is the $-2\log$-likelihood of the reduced model with $k$ coefficients.
+*   $G_p = -2\log L(\hat{\beta}_p)$ is the $-2\log$-likelihood of the full model with $p$ coefficients.
+
+**From SURV617 [S2]:**
+$$\text{LRT} = -2\log\left(\frac{L_{\text{reduced}}}{L_{\text{full}}}\right) = -2(\ell_{\text{reduced}} - \ell_{\text{full}})$$
+Or equivalently:
+$$\text{LRT} = (-2\ell_{\text{reduced}}) - (-2\ell_{\text{full}})$$
+Where:
+*   $\ell$ represents the log-likelihood.
+
+### R Implementation
+In R, you can extract the log-likelihood using the `logLik()` function [S1].
+
+```r
+# Example: Comparing a full model (logitmod) to a reduced model (logitmod_age_g)
+# Compute the LRT statistic
+chi_square <- -2 * (logLik(logitmod_age_g) - logLik(logitmod))
+
+# Compute the difference in degrees of freedom
+df <- summary(logitmod_age_g)$df[1] - summary(logitmod)$df[1]
+
+# To get the p-value: pchisq(chi_square, df, lower.tail = FALSE)
+```
+
+### Caveats for the Analyst
+*   **Estimation Method (ML vs. REML)**: When comparing models with different fixed effects, you **must** use Maximum Likelihood (ML) rather than Restricted Maximum Likelihood (REML) [S2]. REML is only appropriate for comparing models where only variance components differ [S2].
+*   **Assumptions**: The LRT for fixed effects assumes a ""large"" sample of clusters and ""large"" samples within clusters [S4].
+*   **Interpretation**: The test determines if the full model contains additional information beyond the reduced model [S3, S6]. If the null hypothesis (that the selected fixed effects are zero) is rejected, the more complex model is preferred [S4].",22.034924030303955,TRUE,4,1,0,TRUE,1,2,1,1,"The answer is fully correct and complete based on the reference. It provides the correct formulas and procedure. However, it is marked as unsupported because it introduces external information not found in the reference passage, specifically the 'Caveats for the Analyst' section regarding ML vs REML and sample size assumptions."
+equation_013,equation,stat_mod_ML_1_SURV615/exams/exam_1.qmd,How is the t-statistic calculated when testing whether a specific regression coefficient is significantly different from zero?,$$t = rac{\hat{\beta_i} - 0}{se\hat{\beta_i}}$$,t = \frac{\hat{\beta_i} - 0}{se\hat{\beta_i}},worker,google/gemma-4-31b-it,"Based on the provided course materials, the calculation of the t-statistic for testing whether a specific regression coefficient $\beta_j$ is significantly different from zero depends on the context of the model:
+
+**General Calculation**
+For a regression model parameter, the t-statistic is calculated as the ratio of the estimated coefficient to its estimated variance [S2]:
+
+$$t = \frac{\hat{\beta}_j}{\text{var}(\hat{\beta}_j)}$$
+
+Where:
+- $\hat{\beta}_j$ is the estimated model parameter [S2].
+- $\text{var}(\hat{\beta}_j)$ is the estimated variance for that parameter, found on the diagonal of the model parameter covariance matrix $\hat{\text{cov}}(\beta)$ [S2].
+
+**Alternative Wald Formulation**
+In some contexts, a Wald chi-square test statistic ($W$) is used, which is described as a ""squared version of the t test"" [S1]:
+
+$$W = \left( \frac{\hat{\beta}_j}{\text{var}(\hat{\beta}_j)} \right)^2$$
+
+**Caveats for the Analyst**
+*   **Reference Distribution:** The t-statistic is referenced against the $100(1 - \alpha/2)\text{th}$ percentile of a $t$ distribution with $n - p$ degrees of freedom [S2]. In contrast, the Wald $W$ statistic is referenced against the $100(1 - \alpha)\text{th}$ percentile of a chi-square distribution with 1 degree of freedom [S1].
+*   **Complex Designs:** When using `PROC SURVEYREG` for domain mean significance testing, a t-test assessing whether a dichotomous indicator variable's parameter is significantly different from zero is equivalent to testing the difference between two domain means [S6].
+*   **Decision Threshold:** The decision to reject the null hypothesis ($H_0: \beta_j = 0$) depends on the chosen significance level $\alpha$ (commonly $0.05$ in social sciences), which determines the critical values [S5].",9.988826990127563,TRUE,2,2,0,TRUE,1,0,0,1,"The answer provides a mathematically incorrect formula (dividing the coefficient by the variance instead of the standard error) and introduces a large amount of external information (Wald tests, PROC SURVEYREG, etc.) not found in the reference passage."
+equation_034,equation,PracTools_SURV745/assignments/SURV745_Assign_3_Linares.qmd,What is the formula for calculating the required sample size $n_1$ when the variances of the two groups are equal ($\sigma_x = \sigma_y = \sigma$)?,$$n_1 = rac{\sigma^2}{\delta^2}\left[1 + r(1 - 2\gamma\rho)\right](z_{1-\alpha/2} + z_{\beta})^2$$,n_1 = \frac{1}{\delta^2}\left[\sigma_x^2 + r\sigma_y^2 - 2\gamma r \rho \sigma_x \sigma_y\right](z_{1-\alpha/2} - z_\beta)^2,worker,google/gemma-4-31b-it,"When the variances of the two groups are equal ($\sigma_x = \sigma_y = \sigma$), the required sample size $n_1$ is calculated using the following formula:
+
+$$ n_1 = \frac{\sigma^2}{\delta^2} [1 + r (1-2\gamma\rho)] (z_{1-\alpha} - z_\beta)^2 \text{.} \quad \quad (4.14) $$ [S1]
+
+**Definitions of symbols:**
+*   $n_1$: The required sample size for the first group [S1].
+*   $\sigma^2$: The common variance of the two groups [S1].
+*   $\delta$: The difference to be detected ($\mu_D = \delta$) [S1].
+*   $r$: The ratio of the sample sizes ($n_1/n_2$) [S1].
+*   $\gamma$: The proportion of overlap (where $n_{12} = \gamma n_1$ and $n_{12}$ is the number of units in the overlap $s_{12}$) [S1].
+*   $\rho$: The correlation between the two groups [S1, S2].
+*   $z_{1-\alpha}$: The critical value for the significance level $\alpha$ [S1].
+*   $z_\beta$: The critical value for the power $1-\beta$ [S1].
+
+**Caveat for the analyst:**
+Note that the specific formulation of the $z$-score term varies depending on whether the test is one-sided or two-sided. While the textbook [S1] presents the formula for a 1-sided test as $(z_{1-\alpha} - z_\beta)^2$, the assignment code [S2] applies this to a two-sided test using $(z_{1-\alpha/2} + z_{\beta})^2$. Ensure the $z$-critical values are aligned with your specific hypothesis test (one-sided vs. two-sided).",15.013476133346558,TRUE,1,0,0,TRUE,1,1,0,0,"The answer provides the simplified formula for equal variances as requested. However, it fails the 'equation_correct' check because the EXPECTED FORMULA provided in the prompt is the general formula (not the simplified one), and the answer's formula differs from the general one. Additionally, the answer uses $z_{1-\alpha}$ instead of $z_{1-\alpha/2}$ in the formula, though it discusses this in the caveat."
+equation_010,equation,book/practical-tools/chapter-10-area-sampling,What is the formula for the expected total number of sample units in PSU $i$ when summing across domains?,$$\sum_d n_i^*(d) = \frac{\tilde{n}}{S_t} \sum_d f_d N_i(d) = \tilde{n}$$,\sum_d n_i^*(d) = \frac{\tilde{n}}{S_t} \sum_d f_d N_i(d),worker,google/gemma-4-31b-it,"Based on the retrieved course materials, the expected total number of sample units in PSU $i$ when summing across domains is equal to the desired workload per PSU, denoted as $\tilde{n}$ (or $\bar{n}$ in some contexts).
+
+The formula for the expected total number of sample units in PSU $i$ is:
+
+$$ \sum_d n_i^*(d) = \frac{\tilde{n}}{S_t} \sum_d f_d N_i(d) = \tilde{n} $$ [S1]
+
+**Definitions:**
+*   $\sum_d n_i^*(d)$: The sum of the expected sample sizes for all domains $d$ within PSU $i$.
+*   $\tilde{n}$: The desired workload (sample size) in each PSU across all domains [S1, S4].
+*   $S_t$: The composite measure of size (MOS) for PSU $i$, defined as $\sum_d f_d N_i(d)$ [S1].
+*   $f_d$: The desired sampling rate for units in domain $d$ ($f_d = n_d / N_d$) [S1, S4].
+*   $N_i(d)$: The number of elementary units in domain $d$ within PSU $i$ [S1, S4].
+
+**Caveat for the analyst:**
+While the total expected workload $\tilde{n}$ per PSU is typically an integer, the expected sample sizes within each specific domain ($n_i^*(d)$) are generally not integers [S1, S2]. To maintain the self-weighting property and the desired workload, you should sample domain units at the specified rates $\pi_{k|i}(d)$ using systematic sampling rather than rounding to fixed integer counts [S2].",3.8616039752960205,TRUE,1,1,0,TRUE,1,NA,NA,NA,"[38;5;255mResponse was truncated because it hit the `max_tokens` limit.
+[36mℹ[38;5;255m Increase `max_tokens` to allow the model to generate the full response.[39m"
+equation_033,equation,sampling_1_SURV626/assignments/Linares_K_HW3.qmd,How is the variance of the population mean calculated in a stratified sampling design?,$$\text{var}(\bar{y}_w) = \sum_{h=1}^H W_h^2 (1-f_h) \frac{s_h^2}{n_h}$$,\text{var}(\bar{y}_w) = \sum_{h=1}^H W_h^2 \text{var}(\bar{y}_h) = \sum_{h=1}^H W_h^2 (1-f_h) \frac{s_h^2}{n_h},worker,google/gemma-4-31b-it,"Based on the provided course materials, the variance of the population mean in a stratified sampling design is calculated by summing the weighted variances of the individual strata.
+
+### Formulas
+Depending on whether the finite population correction (fpc) is included, the materials provide the following formulas:
+
+**1. Ignoring the fpc (used in SURV701):**
+$$\widehat{\text{var}}(\bar{y}_{st}) = \sum_{h=1}^{H} W_h^2 \frac{s_h^2}{n_h}$$ [S1]
+
+**2. Including the fpc (used in SURV626 and PracTools):**
+$$\text{deff} = \frac{\sum_{h=1}^{H} W_h^2 \frac{s_h^2}{n_h} (1 - f_h)}{\text{var}_{SRS}(\bar{y})}$$ [S4]
+OR
+$$V(\bar{y}_{st}) = \sum_{h=1}^{H} W_h^2 \frac{1-f_h}{n_h} S_h^2$$ [S7]
+
+**Symbol Definitions:**
+*   $H$: Total number of strata [S1, S7].
+*   $W_h$: Stratum weight, defined as $N_h / N$ [S3, S7].
+*   $s_h^2$ or $S_h^2$: The variance within stratum $h$ [S1, S7].
+*   $n_h$: The sample size selected from stratum $h$ [S1, S7].
+*   $f_h$: The sampling fraction for stratum $h$ ($n_h / N_h$) [S4, S7].
+
+### Analyst's Caveats
+*   **Design-Based Implementation:** For a complex design, the variance estimator requires the strata identifiers and weights. In R, this is handled via `survey::svydesign()` or `srvyr`. Ignoring the stratified design and treating the data as iid (SRS) would typically result in an incorrect standard error; specifically, if the strata are homogeneous within and heterogeneous between, SRS will overestimate the variance [S4].
+*   **Precision Gains:** The sampling variance for the mean in a stratified design is based only on the **within-stratum component**; the between-stratum variance is ignored completely [S4]. Consequently, precision is increased (and $deff < 1$) when strata are constructed to be homogeneous within and heterogeneous between [S4].
+*   **Total Survey Error:** Stratification is a design-stage decision used to reduce sampling error [S4]. However, the analyst must ensure that the auxiliary information used to form strata is accurate to avoid introducing coverage or processing errors within the Total Survey Error framework.",16.586575984954834,FALSE,3,2,0,TRUE,1,1,1,1,"The answer provides the correct formula (under the 'Including the fpc' section), but it includes a significant amount of information (references to SURV701, SURV626, PracTools, and general survey design theory) that is not present in the provided reference passage."
+concept_036,concept,fund_comp_data_display_SURV727/lectures/Comp_05.pdf,Which R package can be used to collect data from Reddit?,RedditExtractoR,NA,worker,google/gemma-4-31b-it,"Based on the provided course materials, the R package that can be used to collect data from Reddit is `RedditExtractoR` [S1, S2, S7].
+
+Example usage from the course code involves using `find_thread_urls()` to obtain submission URLs and `get_thread_content()` to retrieve the comments associated with those URLs [S1, S7]:
+
+```r
+library(RedditExtractoR)
+
+# Search for submissions containing 'biden' in the 'liberal' subreddit
+biden_urls <- find_thread_urls(keywords = ""biden"", subreddit = ""liberal"", sort_by = ""top"")
+
+# Get the comments for the first 5 submissions
+biden_content <- get_thread_content(urls = biden_urls$url[1:5])
+```
+
+**Caveat:** The course materials note that `RedditExtractoR` may not be ideal for all tasks, and the instructor has relied mostly on Python (using `praw` or `psaw`) for certain Reddit data collection needs [S1, S2].",6.951478958129883,TRUE,0,0,0,TRUE,NA,2,NA,1,"The answer correctly identifies the R package. However, it is marked as unsupported because it provides specific function names (`find_thread_urls`, `get_thread_content`) and code examples that are not present in the provided reference passage."
+concept_037,concept,fund_data_coll_1_SURV621/lectures/lecture 13 Interviewers and Interviewing II.pdf,How does the gender of the interviewer influence the responses given by survey participants regarding gender roles and feminist views?,"Research indicates that participants may provide more egalitarian answers when the interviewer is female. Specifically, men are more likely to report sharing childcare and women are more likely to support feminist policies when interviewed by a woman. Other studies have found significant interviewer gender effects across various topics, including feminist identity, pro-choice views, and affirmative action.",NA,worker,google/gemma-4-31b-it,"Based on the provided course materials, the gender of the interviewer can lead to different responses from participants, often resulting in more egalitarian answers when the interviewer is female [S1].
+
+Specifically:
+*   **For male respondents:** More men reported sharing childcare when the interviewer was female [S1].
+*   **For female respondents:** More women expressed support for feminist policy when the interviewer was female [S1].
+
+Evidence from Huddy et al. (1997) indicates that both male and female respondents show gender-of-interviewer effects for the same questions [S1]. The difference in ratings on a 10-point scale between female and male interviewers (F-M diff) was statistically significant for several items, including:
+*   **Feminist Identity:** .76*** [S1]
+*   **Pro-Choice:** .82*** [S1]
+*   **Pro-Affirmative Action:** .84** [S1]
+*   **Egalitarian Roles:** .35* [S1]
+
+**Caveat for the Analyst:**
+From a Total Survey Error perspective, these effects represent **measurement error** [S2, S4]. The interviewer's characteristics influence how respondents answer questions, creating correlated response deviations [S4]. This suggests that the choice of interviewer gender can introduce systematic bias into the estimates of gender roles and feminist views, which may not be captured by standard sampling variance.",10.037811994552612,TRUE,0,0,0,TRUE,NA,2,NA,1,"The answer is fully correct and complete based on the reference passage. However, it is marked as unsupported because the 'Caveat for the Analyst' section introduces concepts (Total Survey Error, measurement error, systematic bias) that are not present in the provided reference text."
+concept_018,concept,Data_visualization_SURV752/lectures/SURV752-IPSDS_2_Graphical_Perception-1.pdf,What are some of the Gestalt principles that explain how people perceive groups of objects visually?,"Key Gestalt principles include similarity (shared attributes), enclosure (surrounded by a boundary), closure (perceiving open structures as complete), continuity (alignment), and connection (linked by a line).",NA,worker,google/gemma-4-31b-it,"Based on the retrieved course materials, the Gestalt principles that explain how people perceive groups of objects visually include:
+
+*   **Similarity**: Objects are perceived as a group if they share similar attributes, such as shape or color [S1].
+*   **Enclosure**: Objects are perceived as a group when they have a boundary around them [S1].
+*   **Closure**: Open structures are perceived as being closed, regular, and complete [S1].
+*   **Continuity**: Objects that are aligned together are perceived as a group [S1].
+*   **Connection**: Objects are perceived as a group if they are connected, for example, by a line [S1].",4.49283504486084,TRUE,0,0,0,TRUE,NA,NA,NA,NA,"[38;5;255mResponse was truncated because it hit the `max_tokens` limit.
+[36mℹ[38;5;255m Increase `max_tokens` to allow the model to generate the full response.[39m"
+concept_038,concept,sampling_1_SURV626/lectures/Unit 6 Unequal sized clusters.pdf,"What are some ways to handle variation in sample size, and how does this affect the choice of estimator for the mean?","When sample size varies, the ratio mean $r = y/x$ is more appropriate than $y/n$ because sample size is treated as a random variable. Alternatives to manage this variation include stratifying by size, using probability proportional to size (PPS) selection, creating new clusters of equal size, or departing from the equal probability selection method (epsem), though the latter introduces weighting which can increase variance.",NA,worker,google/gemma-4-31b-it,"Based on the provided course materials, variation in sample size typically arises in unequal-size cluster sampling when fixed sampling rates are used at both stages of selection [S3, S5].
+
+### Ways to Handle Variation in Sample Size
+There are two primary design-based approaches to managing this variation:
+
+1.  **Depart from Equal Probability Selection Method (epsem):** Instead of using fixed sampling rates, the designer can select a fixed subsample size from each cluster [S5]. This eliminates the variation in sample size but requires the use of weights [S5].
+2.  **Cluster Formation:** If the designer has flexibility in forming clusters (e.g., in a household survey), they should create clusters with nearly equal numbers of elements [S1]. This is contrasted with naturally occurring units (like schools or classrooms) where the designer must accept the pre-defined variation [S1].
+
+### Effect on the Choice of Estimator for the Mean
+The variation in sample size influences the choice of estimator and the subsequent variance estimation:
+
+*   **Ratio Means:** When unequal-size cluster sampling is used, a ratio mean is employed for design-consistent estimation [S3].
+*   **Linear vs. Nonlinear Estimators:** A ratio mean is a **nonlinear estimator** [S1]. In design-based sampling, a linear estimator is defined as $\hat{\theta} = \sum_{i \in s} a_i y_i$ where $a_i$ are constants [S4]. Because ratio estimators are nonlinear, they do not have exact variance formulas [S4].
+*   **Variance Estimation Approach:** To estimate the variance of a nonlinear estimator (like the ratio mean), analysts must use a linear approximation of the nonlinear estimator, such as the **linear substitute method** [S1].
+
+**Caveat for the Analyst:**
+If an analyst treats the achieved sample size as fixed when it is actually a random variable (due to unequal-sized clusters and fixed sampling rates), they will fail to recognize the variation in the sample size during variance estimation, leading to an **underestimation of the sampling variance** [S5].",12.49134612083435,FALSE,0,0,0,TRUE,1,NA,NA,NA,"[38;5;255mResponse was truncated because it hit the `max_tokens` limit.
+[36mℹ[38;5;255m Increase `max_tokens` to allow the model to generate the full response.[39m"
+concept_012,concept,design_seminar_SURV670/lectures/Week 10.pdf,What are the standard components and approximate page lengths for an NSF proposal?,"An NSF proposal (maximum 15 pages) typically includes a title, an abstract (~0.5 page), hypothesis or goals, specific aims (1-2 pages), background and significance (2-3 pages), preliminary data (2-3 pages), research design and methods (6-8 pages), and a conclusion/summary (0.5 page). References have unlimited pages.",NA,worker,google/gemma-4-31b-it,"Based on the retrieved course materials, the standard components and approximate page lengths for an NSF proposal (which has a maximum limit of 15 pages) are as follows [S1]:
+
+1.  **Title**
+2.  **Abstract (Summary):** ~250 words or 0.5 page
+3.  **Hypothesis statement or goals:** 1-3 sentences each
+4.  **Specific Aims:** 1-2 pages (typically 2-4 specific aims)
+5.  **Background & Significance:** 2-3 pages
+6.  **Preliminary Data:** 2-3 pages
+7.  **Research Design and Methods:** 6-8 pages (approximately half of the total proposal length)
+8.  **Conclusion/Summary:** 0.5 page
+9.  **References:** Unlimited pages
+
+**Caveat for the analyst:** All figures, diagrams, charts, and photos are included as part of the page limits [S1].",4.906293153762817,TRUE,0,0,0,TRUE,NA,NA,NA,NA,"[38;5;255mResponse was truncated because it hit the `max_tokens` limit.
+[36mℹ[38;5;255m Increase `max_tokens` to allow the model to generate the full response.[39m"
+concept_029,concept,book/practical-tools/chapter-4-power-calculations-and-sample-size-determination,How should a researcher handle a situation where the available budget for a survey is unknown but there are multiple competing hypotheses about the effect size to be detected?,"The researcher should compute a range of possible sample sizes based on the different hypothesized differences (e.g., whether the rate is 1.5 or 2 times higher) and present these alternatives to the stakeholders, discussing the pros and cons of each sample size in relation to the budget and the desired level of statistical certainty.",NA,worker,google/gemma-4-31b-it,"Based on the provided course materials, the researcher should approach this by shifting the focus from a fixed sample size to the **Minimum Detectable Effect Size (MDES)** and utilizing **multicriteria optimization** to manage competing goals.
+
+### 1. Handling Multiple Hypotheses on Effect Size
+When the sample size is fixed (or in this case, constrained by an unknown budget), a power analysis should be used to determine the smallest effect size the sample allows the researcher to detect, given a specified significance level and statistical power [S1]. 
+
+If there are multiple competing hypotheses regarding the effect size, the researcher must:
+*   **Run calculations before looking at the data** to avoid invalid post hoc power analyses [S1].
+*   **Scale power** for results that are both ""important and achievable"" [S1].
+*   **Account for Multiple Hypotheses:** If these competing hypotheses lead to multiple pairwise difference tests (especially with $>2$ levels of treatment), the researcher must apply corrections to avoid inflating Type 1 Error, such as the **Bonferroni correction**, **Tukey's honest significant difference test**, or **False discovery rate** [S3].
+
+### 2. Handling the Unknown Budget and Competing Goals
+Since the budget is unknown but there are multiple goals and constraints, the researcher should use **mathematical programming (MP)** [S4]. This is a general approach to choosing the best solution to an optimization problem from available alternatives to accommodate multicriteria optimization [S4].
+
+From a Total Survey Error (TSE) perspective, the researcher must recognize that the fundamental objective is **minimizing Mean Squared Error (MSE) subject to resource constraints** [S6]. This involves a trade-off:
+*   Reducing variable error (by increasing sample size to detect smaller effect sizes) may increase systematic error (e.g., compromising data quality due to reduced interviewer training) [S6].
+*   The researcher should prioritize reducing systematic errors (frame coverage, nonresponse, and measurement bias) over variable error, as bias does not decrease with sample size while variance does [S6].
+
+### Caveat for the Analyst
+The analyst must decide which ""important"" effect size takes priority. Because reducing one error source often increases another given fixed resources, the decision to pursue a smaller MDES (requiring a larger sample) may necessitate a trade-off in measurement quality or a delay in the timeline [S6]. If the budget is eventually set or cut, the analyst can use the `strAlloc` function to compute cost-constrained allocations or reduce sample sizes proportionally across strata [S8].",31.15385603904724,TRUE,0,0,0,TRUE,1,0,NA,1,"The answer completely ignores the specific guidance in the reference passage and answer, which suggests computing a range of sample sizes based on the hypothesized differences to discuss with stakeholders. Instead, it introduces external concepts (MDES, Bonferroni correction, mathematical programming, TSE, strAlloc) that are not present in the reference passage."
+concept_025,concept,cog_comm_surv_measurement_SURV632/lectures/Class 12 Notes.pdf,What are the typical steps involved in the process of adapting a questionnaire for a different culture or language?,"The process involves determining the project's adaptation policies and procedures, recruiting an adaptation team, reviewing the source questionnaire for needs, reviewing the translated version, documenting the adaptations and their rationales, and finally testing the adaptations with the target population.",NA,worker,google/gemma-4-31b-it,"Based on the provided course materials, the process of adapting a questionnaire involves a specific sequence of steps to ensure the instrument fits the intended audience and maintains comparability [S1, S2].
+
+The typical steps for adaptation are:
+1. **Determine policy, people, and procedures** for the adaptation project [S1, S2].
+2. **Recruit a team** of experts for the adaptation [S1, S2].
+3. **Review the source questionnaire** to identify adaptation needs [S1, S2].
+4. **Review the translated questionnaire** [S1, S2].
+5. **Document the decisions** and the rationale for the adaptations [S1, S2].
+6. **Test the adaptations** on the target population [S1, S2].
+
+**Caveat for the Analyst:**
+It is critical to distinguish between **translation** and **adaptation**. Translation is the process of moving a survey from a source language to a target language [S3]. Adaptation involves modifying parts of the survey to fit the audience's cultural context—such as changing measurement units (e.g., feet to meters) or substituting culturally relevant items (e.g., coffee for tea) [S3]. The analyst should be aware that translation alone cannot solve problems where a concept (such as political efficacy) may not be salient or relevant in all cultures [S2]. Failure in translation or adaptation leads to a failure in comparability [S2].",3.6934750080108643,TRUE,0,0,0,TRUE,NA,2,NA,1,"The answer correctly lists all six steps from the reference passage. However, it is marked as unsupported because the 'Caveat for the Analyst' section introduces substantive facts (e.g., specific examples like feet to meters, coffee for tea, and the concept of political efficacy) that are not present in the provided reference passage."
+concept_001,concept,design_seminar_SURV670/lectures/Week 5.pdf,What are the different types of design validity and what does each entail?,"Design validity consists of internal validity, which involves using reliable and valid measures and establishing causality (through covariation, temporal order, and the elimination of rival hypotheses), and external validity, which is the ability to generalize study findings to the real world.",NA,worker,google/gemma-4-31b-it,"Based on the provided course materials, design validity is categorized into several types, primarily following the tradition of experimental design (Cook & Campbell; Campbell & Stanley) [S6].
+
+### Types of Design Validity
+
+**1. Internal Validity**
+Internal validity concerns whether the conclusions drawn from the analysis accurately reflect what occurred during the observation period [S1] and whether observed differences across treatment groups represent the causal impact of the independent variable of interest [S3]. To establish internal validity and causality, three conditions must be met:
+*   **Covariation:** One value changes as another variable changes [S5].
+*   **Temporal Order:** Establishing that the cause (X) precedes the effect (Y) [S6].
+*   **Elimination of Rival Hypotheses:** Ruling out other potential causes or alternative explanations for the association [S1, S6].
+
+Threats to internal validity include mortality (subject dropout), history (events between measurements), maturation (subjects changing over time), instrumentation (changes in measurement), regression to the mean, and testing/sensitization [S1].
+
+**2. External Validity**
+External validity refers to the ability to generalize the results of a study to the ""real world,"" including broader populations, different settings, and other methods [S1, S3, S6]. There is often a trade-off between internal and external validity; for example, laboratory experiments offer high internal validity but face external validity challenges, whereas field experiments provide better external validity but less control [S4].
+
+**3. Construct Validity**
+Construct validity addresses whether the variables used in the study adequately capture the theoretical constructs of interest [S3]. It focuses on the ability of a test to measure the specific individual trait or characteristic of interest rather than just predicting a criterion [S8].
+
+**4. Statistical Conclusion Validity**
+Statistical validity asks whether the observed differences across treatment groups are greater than would be expected by chance [S3, S5, S6].
+
+### Summary Table of Validity Types
+
+| Validity Type | Primary Focus | Key Question |
+| :--- | :--- | :--- |
+| **Internal** | Causal Inference | Do the results reflect the causal impact of the IV? [S3] |
+| **External** | Generalizability | Can results be generalized to the broader population/setting? [S3] |
+| **Construct** | Measurement | Do variables capture the theoretical construct? [S3] |
+| **Statistical** | Chance | Are differences greater than expected by chance? [S3] |",13.064441919326782,TRUE,0,0,0,TRUE,NA,1,NA,1,"The answer is partly correct as it identifies Internal and External validity and their requirements as listed in the reference. However, it is heavily unsupported, introducing Construct Validity, Statistical Conclusion Validity, and various threats to validity (mortality, history, etc.) that are not present in the provided reference passage."
+concept_004,concept,fund_comp_data_display_SURV727/lectures/Comp_11.pdf,What does a scatterplot of physics grades versus math grades typically illustrate in a survey dataset?,It illustrates the relationship or correlation between the two academic performance metrics for individual students.,NA,worker,google/gemma-4-31b-it,"Based on the provided course materials, a scatterplot of two quantitative variables (such as physics and math grades) is used to illustrate the following characteristics of their relationship [S4]:
+
+*   **Direction:** Whether the y-variable tends to decrease as the x-variable increases (downward trend), increase as the x-variable increases (upward trend), or if there is no consistent positive or negative pattern [S4].
+*   **Strength:** How closely the points follow a pattern; a ""tight"" pattern indicates a strong relationship, while spread-out points indicate a weak relationship [S4].
+*   **Form:** The general pattern of the points, most commonly linear or curved; if no clear pattern exists, the form is described as ""scattered"" [S4].
+*   **Unusual Observations:** The presence of outliers, which are points that do not fit the general pattern of the scatterplot [S4].
+
+**Caveat for the Analyst:**
+When analyzing these relationships in a survey dataset, the analyst must account for the complex design. If the data are not iid, using unweighted scatterplots or calculating simple correlations (such as the Pearson method mentioned in [S6]) without incorporating weights, strata, and PSUs will lead to biased point estimates and incorrect standard errors [SURV625, SURV701, SURV740].",13.249948978424072,TRUE,0,0,0,TRUE,NA,NA,NA,NA,"[38;5;255mResponse was truncated because it hit the `max_tokens` limit.
+[36mℹ[38;5;255m Increase `max_tokens` to allow the model to generate the full response.[39m"
+concept_015,concept,total_survey_error_SURV720/lecture_notes.pdf,What is coverage error and how does it differ from sampling error?,"Coverage error occurs when some members of the target population are not represented in the sampling frame, meaning not all elements of the population are included. It is distinct from sampling error; for example, if a survey only samples online participants, the resulting bias is a coverage error.",NA,worker,google/gemma-4-31b-it,"Coverage error is a representation error that occurs when there is a mismatch between the target population and the sampling frame, resulting in some members of the target population not being represented on the frame and thus having zero probability of selection [S4, S5, S8].
+
+### Difference from Sampling Error
+The distinction lies in whether the error arises from the **frame** (who *could* be selected) or the **sampling process** (who *was* selected):
+
+*   **Coverage Error:** Arises because some members of the target population are missing from the sample frame [S1, S4]. This is a systematic error that can lead to coverage bias if the covered units differ from the uncovered units [S1, S7].
+*   **Sampling Error:** Arises because only a portion of the frame population is actually sampled [S1, S4]. Assuming a statistically sound sample design, this is viewed as variance rather than bias [S1].
+
+### Coverage Bias Formula
+When coverage error leads to bias, it is quantified as:
+$$\text{Coverage Bias} = \left(\frac{U}{N}\right)(\bar{Y}_C - \bar{Y}_U)$$
+Where:
+*   $U/N$ = proportion of the population that is uncovered [S5, S8].
+*   $\bar{Y}_C - \bar{Y}_U$ = difference in the mean of the characteristic of interest between the covered and uncovered populations [S5, S8].
+
+### Analyst's Caveat
+In the Total Survey Error (TSE) framework, these are both ""Errors of Representation"" [S4, S6]. It is critical not to confuse the two: if a sample is deemed ""unrepresentative"" because it only sampled online, this is actually a coverage error (a frame issue) rather than a sampling error [S3]. While sampling error is reduced by increasing the sample size, coverage error cannot be reduced by increasing the sample size if the target population members are entirely absent from the frame [S1, S5].",12.418632984161377,TRUE,1,0,0,TRUE,1,2,0,1,"The answer is fully correct and complete based on the reference, providing a detailed explanation of coverage error and its difference from sampling error. However, it is marked as unsupported because it introduces a specific formula for Coverage Bias and detailed theoretical distinctions (e.g., variance vs. bias, TSE framework) that are not present in the provided reference passage."
+concept_002,concept,complex_sample_data_SURV701/lectures/Module_4.pdf,"What is the formula for approximating the variance of a function $f(x, z)$ using Taylor Series Linearization?","$	ext{var } f(x, z) 	hickapprox A^2 	ext{var } x + B^2 	ext{var } z + 2AB 	ext{cov } x, z$",NA,worker,google/gemma-4-31b-it,"Based on the provided course materials, Taylor Series Linearization (TSL) approximates a nonlinear estimator by treating it as a linear function of estimated totals [S2, S3].
+
+For an estimator $\hat{\theta}$ that can be written as a function $f$ of $p$ estimated totals $\mathbf{t} = (t_1, \ldots, t_p)^T$, the linear approximation of the difference between the estimate and the population parameter is:
+
+$$\hat{\theta} - \theta \doteq \sum_{j=1}^p \frac{\partial f(\mathbf{t})}{\partial t_j} (\hat{t}_j - t_j) \quad \quad [S2]$$
+
+**Definition of symbols:**
+*   $\hat{\theta}$: The estimate of the population parameter $\theta$ [S2].
+*   $\mathbf{t} = (t_1, \ldots, t_p)^T$: The vector of population totals [S2].
+*   $\hat{t}_j$: The estimated total for the $j$th variable, typically a $\pi$-estimator of the form $\hat{t}_j = \sum_{i \in s} \alpha_{ij} y_{ij}$ [S2].
+*   $\frac{\partial f(\mathbf{t})}{\partial t_j}$: The partial derivative of the function $f$ with respect to the $j$th estimated total in $\mathbf{t}$ [S2].
+
+**Caveats for the Analyst:**
+*   **Applicability:** TSL is suitable for ""smooth"" functions (e.g., ratios, regression coefficients) but is not directly suitable for non-smooth functions such as percentiles or the median [S5].
+*   **Stability of the Denominator:** For ratio estimators, the approximation works well if the denominator has low variability. TSL is typically not recommended if the coefficient of variation (CV) of the denominator is greater than 0.15 or 0.2 [S1].
+*   **Design Implementation:** In practice, this is the default method in most software (e.g., SAS, Stata) [S1, S8]. When implementing in R, you must use a design-based approach (e.g., `survey::svydesign()`) to ensure the variance estimator accounts for strata, PSUs, and weights; ignoring the design would lead to incorrect standard errors [S1, S2].",13.969089031219482,TRUE,1,1,0,TRUE,1,0,0,1,"The answer fails to provide the specific formula for the variance of $f(x, z)$ found in the reference passage. Instead, it provides a general linear approximation for an estimator $\hat{\theta}$ and a large amount of external information (e.g., CV thresholds, software mentions, R packages) not present in the provided reference text."
+concept_026,concept,ML_social_science_SURV613/lecture_notes.pdf,What is the purpose of the dropout rate in a neural network?,The dropout rate is a tuning parameter that sets a proportion of nodes to zero to discourage overfitting.,NA,worker,google/gemma-4-31b-it,"The purpose of the dropout rate in a neural network is to prevent overfitting [S1]. It achieves this by ensuring that some proportion of nodes (or input units) are not used within a layer during a given pass through the network [S2, S4]. This mechanism is described as being roughly analogous to the use of random predictors in Random Forests [S2].",2.1454858779907227,TRUE,0,0,0,TRUE,NA,2,NA,1,"The answer is correct and complete based on the reference. However, the comparison to Random Forests is not mentioned in the provided reference passage, making it unsupported."
+concept_041,concept,Fund_data_collection_SURV622/lectures/Lecture-ML.pdf,Does including variables like race or sex in a machine learning analysis automatically make the model biased or racist?,"No; it is possible to account for differences in race or sex and still maintain a fair model, provided that the intervention itself is delivered fairly.",NA,worker,google/gemma-4-31b-it,"No, including variables like race or sex in a machine learning analysis does not automatically make the model biased or racist [S1].
+
+According to the course materials, there are two common myths regarding the use of protected attributes:
+1. **Myth:** If you do not use race in your analysis, the analysis cannot be racist [S1]. In reality, a model may still perform very differently by race even if those variables are omitted [S1].
+2. **Myth:** If you use race in your analysis, the analysis is always racist [S1]. The materials state that you can account for differences in race and still have a fair model; the critical factor is ensuring fairness in how the resulting intervention is provided [S1].
+
+**Caveat for the Analyst:**
+While including these variables does not automatically create bias, the analyst must be aware that models trained on biased data can learn to reproduce those biases [S2]. To combat this, the materials suggest several potential solutions [S3]:
+* **Pre-processing:** Removing linear dependence between legitimate and protected predictors or re-labeling response values [S3].
+* **In-processing:** Adding a fairness penalty to the loss function during model building [S3].
+* **Post-processing:** Adjusting model outputs post-training (e.g., randomly re-assigning some predicted class labels) to increase fairness [S3].",23.479197025299072,TRUE,0,0,0,TRUE,NA,2,NA,1,"The answer correctly addresses the question based on the reference passage. However, it is marked as unsupported because it introduces detailed technical concepts (Pre-processing, In-processing, Post-processing, and the myth about omitting race) that are not present in the provided reference text."
+concept_043,concept,PracTools_SURV745/lectures/PracTools Chapter 9.pdf,How does the size of a cluster typically influence the measure of homogeneity ($\delta$)?,"Generally, elements within a cluster tend to be more alike when the cluster size is small, meaning the size of the cluster affects the value of $\delta$.",NA,worker,google/gemma-4-31b-it,"Based on the provided course materials, the size of a cluster typically influences the measure of homogeneity ($\delta$) in the following ways:
+
+*   **Inverse Relationship with Homogeneity:** Generally, elements within a cluster may be more alike (more homogeneous) when the cluster size is small [S2]. This is especially true for clusters based on geographic areas [S2].
+*   **Impact of Cluster Size on $\delta$:** The size of $\delta$ is affected by the size of the cluster [S2]. For example, agricultural variables may have high $\delta$ values (0.4 or larger) as long as the cluster sizes remain small (e.g., 4 or 5 nearby farms) [S2].
+*   **Effect on Design Effect ($\text{deff}$):** The measure of homogeneity $\delta$ interacts with the number of sample elements per cluster ($\tilde{n}$) to determine the design effect. According to Table 9.1, as the number of elements per cluster ($\tilde{n}$) increases, the $\text{deff}$ increases for any given $\delta > 0$ [S1].
+
+The formula relating these variables is:
+$$\text{deff} = 1 + \delta(\tilde{n}-1)$$
+Where:
+*   $\text{deff}$ is the approximate design effect [S1].
+*   $\delta$ is the homogeneity measure [S1].
+*   $\tilde{n}$ is the number of sample elements per cluster [S1].
+
+**Caveat for the Analyst:**
+When designing a multistage sample, the analyst must consider that while smaller clusters tend to be more homogeneous (higher $\delta$), the total variance increase (the $\text{deff}$) is driven by the product of the homogeneity and the cluster size [S1, S2]. Therefore, a high $\delta$ may be tolerable if the number of elements sampled per cluster ($\tilde{n}$) is kept small [S1].",1.9811551570892334,TRUE,1,1,0,TRUE,1,2,NA,1,"The answer is fully correct regarding the reference passage. However, it is marked as unsupported because it introduces a significant amount of external information (Design Effect, Table 9.1, and the formula for deff) that is not present in the provided reference passage."
+code_002,code,design_seminar_SURV670/Project/rfp/RFP_Proposal_DRSS_Final.qmd,"How can I create a formatted table for personnel costs in R that includes salary, effort, fringe benefits, and a subtotal row?","You can use `transmute()` to calculate the fringe and total costs, `bind_rows()` with a `tibble()` to add a subtotal row, and `kable()` to format the final table with specific alignment and a caption.",NA,worker,google/gemma-4-31b-it,"To create a formatted table for personnel costs that includes salary, effort, fringe benefits, and a subtotal row, you can use a `tidyverse` pipeline combined with `kable` for formatting.
+
+Based on the provided course materials [S1], the process involves transforming the personnel data to calculate fringe and totals, appending a summary row using `bind_rows()`, and then rendering the table.
+
+### R Code Example
+The following example follows the logic used in the DRSS proposal [S1]:
+
+```r
+library(tidyverse)
+library(knitr)
+library(scales)
+
+# Example data based on [S1]
+personnel <- tibble(
+  position = c(""Project Director"", ""Co-Investigator"", ""Research Support""),
+  annual_salary = c(175000, 120000, 90000),
+  effort = c(0.20, 0.10, 0.50),
+  fringe_rate = 0.45,
+  y1_cost = c(31500, 16560, 40500) # Pre-calculated total cost for Year 1
+)
+
+# Create formatted table
+personnel |> 
+  transmute(
+    Position = position, 
+    `Annual Salary` = dollar(annual_salary), 
+    `% Effort` = percent(effort, accuracy = 1), 
+    Fringe = dollar(annual_salary * effort * fringe_rate), 
+    Total = dollar(y1_cost)
+  ) |> 
+  bind_rows(
+    tibble(
+      Position = ""Subtotal Personnel"", 
+      `Annual Salary` = """", 
+      `% Effort` = """", 
+      Fringe = """", 
+      Total = dollar(sum(personnel$y1_cost))
+    )
+  ) |> 
+  kable(
+    align = c(""l"", ""r"", ""c"", ""r"", ""r""), 
+    caption = ""Key Personnel Costs (Year 1)""
+  )
+```
+
+### Analyst's Caveats
+*   **Fringe Calculation:** In this implementation, fringe is calculated as a percentage of the salary adjusted for effort (Salary $\times$ Effort $\times$ Fringe Rate) [S1].
+*   **Budgetary Components:** When budgeting for personnel, ensure you distinguish between hourly wages and annual salaries, and account for FICA, retirement, and health care within the fringe benefit rate [S4].
+*   **Budget Narrative:** The budget table should be supported by a narrative that specifies the type of staff (e.g., research, technical, or clerical) and the overall effort versus work on specific tasks [S5].",14.763140201568604,TRUE,0,0,0,TRUE,1,2,NA,1,"The answer is fully correct and complete regarding the R implementation. However, it is marked as unsupported because it introduces external information (Analyst's Caveats referencing [S4] and [S5]) that is not present in the provided reference passage."
+code_008,code,Data_visualization_SURV752/assignments/Linares_k_hw2.qmd,How can I create a ggplot line chart that shows all countries in a light gray background while highlighting a few specific countries in color?,"You can achieve this by calling `geom_line()` twice: first with a fixed color (e.g., `color = ""grey80""`) for the entire dataset, and second by passing a filtered dataset to `geom_line()` and mapping the `color` aesthetic to the country variable.",NA,worker,google/gemma-4-31b-it,"To create a line chart that highlights specific countries against a light gray background of all other countries, you should use multiple `geom_line()` layers. The first layer plots all non-selected countries in gray, and the second layer plots the selected countries in a distinct color and thicker line [S1].
+
+Based on the course materials, here is the implementation using `ggplot2`:
+
+```r
+# Example based on [S1]
+# highlight_countries: a vector of countries to emphasize
+highlight_countries <- c(""Laos"", ""Cambodia"") 
+
+pr_long |> 
+  ggplot(aes(x = year, y = pr_score, group = Country)) + 
+  geom_point(size = .5) + 
+  # Layer 1: Non-selected countries in light gray
+  geom_line(
+    data = pr_long |> filter(!Country %in% highlight_countries), 
+    color = ""grey70"", 
+    linewidth = .5
+  ) + 
+  # Layer 2: Selected countries in black (or other colors) and thicker
+  geom_line(
+    data = pr_long |> filter(Country %in% highlight_countries), 
+    color = ""black"", 
+    linewidth = 1.5
+  ) + 
+  scale_x_continuous(breaks = seq(start_year, end_year, 2)) + 
+  labs(
+    title = ""Political Rights Score for 30 Countries"", 
+    subtitle = paste(""Highlighted Countries:"", paste(highlight_countries, collapse = "", "")), 
+    x = """", 
+    y = ""Political Rights""
+  ) + 
+  theme_classic()
+```
+
+**Caveat for the analyst:**
+When using this ""Tukey"" style approach [S1], ensure that the highlighted layer is added *after* the gray layer in the code. Because `ggplot2` renders layers sequentially, placing the highlighted lines last ensures they are drawn on top of the background lines and are not obscured.",15.465337038040161,TRUE,0,0,0,TRUE,NA,NA,NA,NA,"[38;5;255mResponse was truncated because it hit the `max_tokens` limit.
+[36mℹ[38;5;255m Increase `max_tokens` to allow the model to generate the full response.[39m"
+code_009,code,stat_mod_ML_1_SURV615/assignments/SSML_project_1.Rmd,How can I load the hprice dataset from the faraway package and view its summary statistics and documentation in R?,"Use `data(""hprice"")` to load the data, `summary(hprice)` to see the summary statistics, and `?faraway::hprice` to view the variable information.",NA,worker,google/gemma-4-31b-it,"To load the `hprice` dataset from the `faraway` package and view its summary statistics and documentation, follow these steps:
+
+First, load the `faraway` library and the dataset:
+```r
+library(faraway)
+data(""hprice"")
+```
+
+To view the summary statistics:
+```r
+summary(hprice)
+```
+
+To view the documentation (variable definitions and background information):
+```r
+?faraway::hprice
+```
+
+**Caveat for the analyst:**
+The `hprice` dataset contains 324 observations consisting of 36 US metropolitan statistical areas (MSAs) over 9 years (1986-1994) [S1]. If you are performing any statistical inference, note that the data is structured as repeated measures over time for the same MSAs; therefore, treating the observations as independent (i.i.d.) would ignore the clustering by MSA, which typically leads to underestimated standard errors [S1, SURV625, SURV701].",6.123792886734009,TRUE,0,0,0,TRUE,NA,2,NA,1,"The answer is fully correct regarding the R commands. However, it is marked as unsupported because it introduces external statistical concepts (clustering, i.i.d., underestimated standard errors) and references (SURV625, SURV701) that are not present in the reference passage."
+code_024,code,sampling_1_SURV626/assignments/Linares_K_HW1.qmd,How can I calculate the empirical variance of sample means and compare it to the theoretical variance in R?,"```r
+empirical_var <- all_sample |>
+  summarise(mean((y_bar - mean(y_bar))^2)) |>
+  pull()
+
+f <- n/N
+theoretical_var <- ((1-f)/3) * S_sqrd
+```",NA,worker,google/gemma-4-31b-it,"To calculate the empirical variance of sample means and compare it to the theoretical variance, you must generate all possible samples (or a large number of simulated samples) to observe the sampling distribution of the mean.
+
+### Direct Answer
+The **empirical variance** is the actual variance observed across the distribution of sample means calculated from multiple samples [S1, S4]. The **theoretical variance** is the variance predicted by the sampling formula based on the population parameters and the design (e.g., the finite population correction for SRS) [S1].
+
+### Formulas
+Based on the provided materials for Simple Random Sampling (SRS), the theoretical variance of the sample mean $\bar{Y}$ is:
+
+$$\text{Var}(\bar{Y}) = \frac{(1 - f)}{n} S^2$$
+
+Where:
+- $f = n/N$ is the sampling fraction (finite population correction) [S1].
+- $n$ is the sample size [S1].
+- $S^2$ is the population element variance [S1].
+
+### R Code Implementation
+Following the logic in [S1] and [S4], you can use a `tidyverse` approach to simulate the sampling distribution and compare the variances.
+
+```r
+library(dplyr)
+
+# 1. Setup Population
+set.seed(123)
+pop_size <- 5
+pop_values <- c(10, 12, 15, 18, 20) # Example population
+S2 <- var(pop_values) * (pop_size / (pop_size - 1)) # Population variance S^2
+n <- 3
+
+# 2. Generate all possible samples (Empirical)
+# Using combnk to get all combinations for SRS
+all_combos <- combnk(pop_values, n)
+sample_means <- apply(all_combos, 1, mean)
+
+# Calculate Empirical Variance
+emp_var <- var(sample_means)
+
+# 3. Calculate Theoretical Variance
+f <- n / pop_size
+theo_var <- ((1 - f) / n) * S2
+
+# Comparison
+tibble(
+  Empirical_Var = emp_var,
+  Theoretical_Var = theo_var,
+  Difference = emp_var - theo_var
+)
+```
+
+### Analyst's Caveats
+*   **Design-Based Default**: The formula above assumes Simple Random Sampling. If the data comes from a complex design, you must account for strata and PSUs. Ignoring the design (e.g., treating a clustered sample as SRS) typically leads to an underestimation of the standard error [SURV625, SURV701].
+*   **Population vs. Sample Variance**: Be careful with the denominator. The population variance $S^2$ uses $N-1$ (or $N$ depending on the definition in the specific course context), while the standard R `var()` function calculates the sample variance $s^2$ using $n-1$ [S2].
+*   **Finite Population Correction (fpc)**: The theoretical variance is reduced by $(1-f)$. As $N \to \infty$ or $f \to 0$, this term approaches 1, and the formula reverts to the standard $\sigma^2/n$ [S1].",15.840183019638062,TRUE,1,1,0,TRUE,1,1,0,1,"The answer provides a general explanation and a custom R script rather than the specific code provided in the reference passage. While it explains the concepts, it fails to provide the exact R implementation from the text (using `summarise` and `pull`). Additionally, the theoretical variance formula provided in the answer ($rac{(1-f)}{n} S^2$) differs from the specific formula in the reference passage (`((1-f)/3) * S_sqrd`), and the answer introduces external information/caveats not found in the reference passage."
+code_019,code,intro_ML_big_data_SURV751/assignments/SVY751_HW2.qmd,How can I use 10-fold cross-validation in R to find the optimal value of k for a k-nearest neighbors model?,"```r
+# Create fold assignments
+n_fold <- 10
+fold_id <- sample(rep(1:n_fold, length.out = nrow(train_df)))
+
+# Test a range of k values
+k_values <- seq(1, 21, by = 2)
+
+# Loop over k values and compute accuracy for each fold
+cv_results <- map_dfr(k_values, function(k) {
+  fold_acc <- map_dbl(1:n_fold, function(f) {
+    train_idx = fold_id != f
+    val_idx = fold_id == f
+    pred = knn(knntrain.x[train_idx, ], knntrain.x[val_idx, ],
+                knntrain.y[train_idx], k = k)
+    mean(pred == knntrain.y[val_idx])
+  })
+  tibble(k = k, accuracy = mean(fold_acc), sd = sd(fold_acc))
+})
+
+# Identify the k with the maximum accuracy
+best_k <- cv_results |> slice_max(accuracy, n = 1) |> pull(k)
+```",NA,worker,google/gemma-4-31b-it,"To find the optimal value of $k$ for a k-nearest neighbors (KNN) model using 10-fold cross-validation, you can use either the `caret` package or the `class` package, depending on your specific implementation needs.
+
+### Using the `caret` Package
+The `caret` package allows you to specify the cross-validation method within a `trainControl` object and then tune the model over a grid of $k$ values [S2, S8].
+
+**R Code Example:**
+```r
+library(caret)
+
+# 1. Define the 10-fold CV control
+set.seed(2016751) # Example seed from [S1]
+ctrl <- trainControl(
+  method = ""cv"", 
+  number = 10, 
+  returnResamp = ""all""
+)
+
+# 2. Define the grid of odd k values (e.g., 1 to 21)
+knn_grid <- data.frame(.k = seq(1, 21, by = 2))
+
+# 3. Train the model
+# Assuming 'train_data' contains features and 'y' is the target
+knn_model <- train(
+  x = train_data, 
+  y = y, 
+  method = ""knn"", 
+  tuneGrid = knn_grid, 
+  trControl = ctrl
+)
+
+# 4. Identify the optimal k
+knn_model$bestTune
+```
+
+### Using the `class` Package
+Alternatively, the `tune.knn()` function can be used to find the $k$ that minimizes the error [S3].
+
+**R Code Example:**
+```r
+library(class)
+
+set.seed(761) # Example seed from [S3]
+tune_results <- tune.knn(
+  trainX, 
+  trainY, 
+  k = seq(1, 50, 2), 
+  tunecontrol = tune.control(sampling = ""cross""), 
+  cross = 10
+)
+
+# The optimal k is the one with the lowest error
+summary(tune_results)
+plot(tune_results)
+```
+
+### Analyst's Caveats
+*   **Tie-Breaking:** Always use odd values for $k$ to avoid ties in the voting process [S6].
+*   **Overfitting:** The primary goal of tuning $k$ via cross-validation is to minimize overfitting [S6].
+*   **Performance Trade-offs:** As $k$ increases, accuracy may increase and standard errors typically shrink, but choosing a $k$ that is too large may lead to underfitting [S1].
+*   **Robustness:** If the results are unstable, you may consider ""Repeated Cross-Validation,"" where the 10-fold CV is run multiple times and the performance scores are averaged to increase robustness [S4].",13.209090948104858,TRUE,0,0,0,TRUE,1,0,NA,1,"The answer provides general R methods using the `caret` and `class` packages, but it completely ignores the specific implementation provided in the reference passage (which uses `map_dfr`, `map_dbl`, and manual fold indexing). The answer asserts facts and provides code not found in the reference passage."
+code_005,code,fund_comp_data_display_SURV727/code/BigDataTools.Rmd,How can I calculate the median number of arrests for each year and beat using the data.table package in R?,"df[,.(arrest_med = median(arrest)), by = .(year, beat)]",NA,worker,google/gemma-4-31b-it,"To calculate the median number of arrests for each year and beat using a `data.table` approach, you can use the `dtplyr` package to wrap `data.table` functionality within a `dplyr` syntax [S1].
+
+Based on the provided course materials, the implementation is as follows:
+
+```r
+# Using dtplyr to leverage data.table performance with dplyr syntax
+library(dtplyr)
+library(dplyr)
+
+# Assuming dftbl is a lazy_dt object created from the data
+system.time( 
+  dftbl %>% 
+    group_by(year, beat) %>% 
+    summarise(median(arrest)) 
+)
+```
+
+**Caveat for the analyst:**
+The materials highlight that while a standard `tibble` can be used in a `dplyr` pipe for these calculations, using the `dtplyr` approach is specifically recommended for checking and improving CPU time when handling large datasets, such as the Chicago crime data [S1].",4.52125096321106,TRUE,0,0,0,TRUE,NA,1,NA,0,"The answer provides a way to calculate the median using the `dtplyr` approach mentioned in the text, but it fails to provide the primary `data.table` syntax (`df[,.(arrest_med = median(arrest)), by = .(year, beat)]`) which is the direct answer to the question and the reference answer."
+code_022,code,PracTools_SURV745/assignments/SURV745_Assign_12_Linares.qmd,How can I compare the total sum of base weights and GREG weights against the population size in R?,"```r
+cat(""Base weight total "", sum(weights(smho_dsgn)),
+    ""\nGREG weight total "",
+    sum(weights(sam_lin)),
+    ""\nPopulation size "", N)
+```",NA,worker,google/gemma-4-31b-it,"To compare the total sum of base weights and GREG weights against the population size $N$, you can use the `sum()` function on the weights extracted from your design objects.
+
+### R Code Implementation
+Based on the provided course materials [S1], you can use the following approach to compare the sums:
+
+```r
+# Assuming smho_dsgn is the base design and sam_lin is the GREG-calibrated design
+# N is the known population size
+
+cat(""Base weight total "", sum(weights(smho_dsgn)), ""\n"",
+    ""GREG weight total "", sum(weights(sam_lin)), ""\n"",
+    ""Population size "", N)
+```
+
+### Analysis of the Results
+*   **GREG Weights:** Any calibration with an intercept forces the weights to sum exactly to $N$ [S1]. In the provided example, the GREG weights sum exactly to 725 because the intercept is included in the calibration formula [S1].
+*   **Base Weights:** Base weights do not have this constraint; therefore, their sum can differ from $N$ [S1]. While some designs (like SRSWOR) may result in base weights that sum to $N$ [S8], systematic PPS sampling does not guarantee this [S1].
+
+### Caveat for the Analyst
+When evaluating these sums, remember that while GREG calibration ensures the total weight matches the population size $N$, the linear-distance GREG method is unbounded. This means that while the sum is constrained, individual $g_i$ values can pull some weights below zero or above the base-weight maximum [S1]. If you encounter extreme weights or negative weights, you may need to consider bounded GREG or trimming to reduce the variance of your estimates, though this involves a trade-off between precision and potential bias [S2, S7].",9.494009971618652,TRUE,0,0,0,TRUE,1,NA,NA,NA,"[38;5;255mResponse was truncated because it hit the `max_tokens` limit.
+[36mℹ[38;5;255m Increase `max_tokens` to allow the model to generate the full response.[39m"
+code_018,code,applied_sampling_SURV625/assignments/HW5.qmd,How can I use R to calculate the expected number of housing units to be selected and the associated probabilities for the possible achieved subsample sizes when using PPS?,"To find the expected number of units, multiply the sampling fraction $f_h$ by the number of housing units (e.g., 90) using `summarise()` and `pull()`. To determine the probabilities for the two possible achieved subsample sizes (e.g., 5 and 6), calculate the probability for the lower estimate as `(lower * expected_hu) + (upper * (1 - expected_hu))` and the upper estimate as `1 - lower_expected`.",NA,worker,google/gemma-4-31b-it,"To calculate the expected number of housing units to be selected in a PPS design when the actual cluster size (field count) differs from the Measure of Size (MOS), you multiply the second-stage selection probability by the actual number of housing units found [S1, S2].
+
+### Calculation Method
+The expected number of units is calculated as:
+$$\text{expected\_hu} = f_2 \times \text{housing\_units}$$
+where $f_2$ is the second-stage selection probability (often defined as $m/MOS_i$ to achieve an overall epsem rate $f$ and a constant subsample size $m$) [S2, S3].
+
+Because the actual number of units selected must be an integer, the expected value typically falls between two integers (e.g., between 5 and 6). The probabilities for these two possible achieved sizes are calculated based on the decimal portion of the expected value [S1].
+
+### R Implementation
+Based on the course materials, you can use the following `tidyverse` approach to calculate the expected size and the probabilities of the two nearest integers [S1, S2]:
+
+```r
+library(tidyverse)
+library(knitr)
+
+# Setup example data
+# f_2: second stage selection probability
+# housing_units: actual count from field canvassing
+f_2 <- 0.061 # Example probability
+housing_units <- 90 
+
+# 1. Calculate expected number of units
+expected_hu <- f_2 * housing_units
+# expected_hu is 5.49 in this example
+
+# 2. Determine the two possible integer outcomes
+lower <- floor(expected_hu) # 5
+upper <- ceiling(expected_hu) # 6
+
+# 3. Calculate probabilities for the achieved sizes
+# The probability of the upper bound is the decimal remainder
+# The probability of the lower bound is 1 minus that remainder
+prob_upper <- expected_hu - lower
+prob_lower <- 1 - prob_upper
+
+# Create a summary table
+tibble(
+  expected_values = c(lower, upper), 
+  expected_prob = c(prob_lower, prob_upper)
+) |> 
+  mutate(expected_prob = round(expected_prob, 2)) |> 
+  kable()
+```
+
+### Analyst's Caveat
+When the actual field count differs from the MOS used to determine $f_2$, the expected subsample size shifts [S2]. This creates a trade-off in the **Total Survey Error** framework [SURV720, SURV721]: using a fixed $f_2$ maintains the design's intended inclusion probabilities (reducing selection bias), but it leads to variable workloads for field staff because the actual number of units to be sampled per cluster will vary based on the actual cluster size [S7].",37.81085705757141,TRUE,1,1,0,TRUE,0.8571428571428571,1,NA,1,"The answer is partially correct in terms of the logic, but it provides a different formula for calculating the probabilities than what is explicitly written in the reference passage. The reference passage uses a specific (and mathematically unusual) formula: `(lower * expected_hu) + (upper * (1-expected_hu))`. The graded answer uses the standard linear interpolation method (`expected_hu - lower`). Additionally, the answer introduces external concepts and citations (e.g., 'Total Survey Error', 'SURV720', 'S1, S2') not present in the reference passage, making it unsupported."
+code_003,code,stat_mod_ML_2_SURV616/assignments/HW_2.qmd,What is the formula for calculating the confidence interval of the relative risk?,$$CI_{RR} = 1.96 	imes 	ext{sqrt}(V\{\ln(\hat\theta)\})$$,NA,worker,google/gemma-4-31b-it,"To calculate the confidence interval for the relative risk (RR), the calculation must be performed on the logarithmic scale and then exponentiated back to the original scale [S3, S5].
+
+The formula for the 95% confidence interval is:
+$$ CI_{RR} = 1.96 \times \sqrt{V\{\ln(\hat\theta)\}} $$ [S1]
+
+Where the variance of the log relative risk is defined as:
+$$ V\{\ln \hat{R}\} = \frac{b}{a(a+b)} + \frac{c}{d(c+d)} $$ [S7]
+*(Note: Based on the provided materials, $\hat{R}$ is the relative risk, and $a, b, c, d$ represent the cells of a 2x2 table)*.
+
+**Steps for calculation:**
+1. Calculate the point estimate $\hat{R}$ and its variance on the log scale [S3, S5].
+2. Determine the interval on the logarithmic scale: $\ln(\hat{R}) \pm 1.96 \times \sqrt{V\{\ln \hat{R}\}}$ [S3, S5].
+3. Exponentiate the lower and upper bounds to return to the scale of $\theta$ [S3, S5].
+
+**R Implementation**
+The `epiR` package can be used to automate these calculations [S3, S5].
+
+```r
+library(epiR)
+# Example 2x2 table: Outcome+ / Outcome- 
+# Exposed+ / Exposed-
+bandage <- matrix(data = c(35, 19, 30, 48), nrow = 2)
+bandage <- as.table(bandage)
+epi.2by2(bandage)
+```
+
+**Caveat for the Analyst**
+The materials specify that these are ""approximate confidence intervals"" [S7]. When working with retrospective designs or small samples, an unbiased relative risk cannot be easily estimated; in such cases, the odds ratio is often used as an approximation of the relative risk under the ""rare disease assumption"" [S2].",10.58831787109375,TRUE,2,1,0,TRUE,1,NA,NA,NA,"[38;5;255mResponse was truncated because it hit the `max_tokens` limit.
+[36mℹ[38;5;255m Increase `max_tokens` to allow the model to generate the full response.[39m"
+code_010,code,stat_mod_ML_2_SURV616/class_code/hypothetical_mean.r,How do I perform a Hotelling's $T^2$ test to compare a sample mean vector to a hypothetical mean vector using the DescTools package in R?,"You can use the `HotellingsT2Test()` function from the `DescTools` library, specifying the dataset and the null hypothesis mean vector as the `mu` argument: `HotellingsT2Test(nutrient, mu=mu0)`.",NA,worker,google/gemma-4-31b-it,"To perform a Hotelling's $T^2$ test comparing a sample mean vector to a hypothetical mean vector using the `DescTools` package, use the `HotellingsT2Test()` function, passing the dataset and the hypothetical mean vector as arguments [S2].
+
+### R Code Implementation
+Based on the provided course code, the implementation follows this structure:
+
+```r
+library(DescTools)
+
+# 1. Prepare the data (numeric matrix or data frame)
+# Example: nutrient data with 5 variables [S2]
+nutrient <- read.table(""nutrient.txt"", quote=""\"""", comment.char="""")
+nutrient <- nutrient[,-1] # Remove ID column
+
+# 2. Define the hypothetical mean vector (mu0) as a matrix [S2]
+mu0 <- matrix(c(1000, 15, 60, 800, 75))
+
+# 3. Execute the Hotelling's T^2 Test [S2]
+T2_result <- HotellingsT2Test(nutrient, mu = mu0)
+
+# View results
+T2_result
+T2_result$statistic
+```
+
+### Mathematical Context
+While the `DescTools` package automates the calculation, the underlying manual calculation for $T^2$ when comparing a sample mean vector $\bar{x}$ to a hypothetical vector $\mu_0$ is:
+
+$$T^2 = n(\bar{x} - \mu_0)' S^{-1} (\bar{x} - \mu_0)$$
+
+Where:
+- $n$ is the sample size [S2].
+- $\bar{x}$ is the vector of sample means [S2].
+- $\mu_0$ is the hypothetical mean vector [S2].
+- $S^{-1}$ is the inverse of the sample covariance matrix [S2].
+
+### Analyst's Caveat
+When performing this test, ensure that the dimensions of your hypothetical mean vector $\mu_0$ exactly match the number of columns in your data matrix. If you are comparing two different samples (rather than one sample to a hypothetical mean), the function usage changes—you would pass two datasets (`x` and `y`) instead of a `mu` argument [S1, S3]. Additionally, as noted in the course materials, it is a best practice to test for equality of variances before proceeding with multivariate tests [S1].",12.843164920806885,TRUE,1,1,0,TRUE,1,2,NA,1,"The answer is fully correct and complete regarding the use of the DescTools package. However, it is marked as unsupported because it includes an 'Analyst's Caveat' mentioning the need to test for equality of variances and the usage for comparing two samples, neither of which are mentioned in the provided reference passage."
