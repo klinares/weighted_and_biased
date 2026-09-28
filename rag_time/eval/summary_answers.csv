@@ -1,9 +1,0 @@
-model,kind,n,score,fully_correct,equation_correct,eq_flagged_by_audit,bad_citations,gold_in_context,unsupported,cites,math_render_ok,median_secs
-anthropic/claude-sonnet-4.5,code,10,0.75,0.625,NA,8,0,1,0.75,1,1,11.389
-anthropic/claude-sonnet-4.5,concept,14,0.875,0.833,0.5,3,0,0.929,0.917,1,1,9.167
-anthropic/claude-sonnet-4.5,equation,16,0.923,0.846,0.923,21,0,0.875,0.692,1,1,8.443
-google/gemma-4-31b-it,code,10,0.643,0.429,0,4,0,1,0.857,1,0.98,13.026
-google/gemma-4-31b-it,concept,14,0.75,0.7,0,2,0,0.929,1,1,1,11.228
-google/gemma-4-31b-it,equation,16,0.654,0.615,0.692,11,0,0.875,0.692,1,1,15.261
-anthropic/claude-sonnet-4.5,ALL,40,0.864,0.788,0.867,32,0,0.925,0.788,1,1,9.058
-google/gemma-4-31b-it,ALL,40,0.683,0.6,0.562,17,0,0.925,0.833,1,0.995,12.667

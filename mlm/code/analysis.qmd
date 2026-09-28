@@ -26,7 +26,7 @@ execute:
 #| include: false
 
 # ---- Packages (tidyverse last so dplyr verbs win) ---------------------------
-pacman::p_load(lme4, survey, marginaleffects, broom.mixed, lwgeom, patchwork,
+pacman::p_load(lme4, survey, marginaleffects, broom.mixed, patchwork,
                viridis, glue, knitr, tidyverse)
 
 has_pkg <- function(p) requireNamespace(p, quietly = TRUE)
@@ -40,6 +40,8 @@ cfg <- list(
   n_cores        = 32,         # CPU cores available for brms
   brms_chains    = 4,
   run_map        = TRUE,
+  fav_map        = "direct",   # "direct" = weighted commune-wave point estimate,
+                               # "model"  = shrunken estimate from the main model
   boundary_files = list(adm1 = NULL, adm3 = NULL), # local .gpkg/.shp; else geobounds
   map_name_col   = "shapeName",# unit name column in the boundary files
   run_loo_region = TRUE        # leave-one-region-out sensitivity (8 extra fits)
@@ -670,15 +672,26 @@ if (map_ok) {
     paste(if (is.null(mali_adm1)) "" else norm_name(region), norm_name(commune))
   }
 
-  # Favorability: model-based commune estimate from M3 (fixed effects plus the
-  # commune and PSU intercepts, averaged over sampled respondents). Raw commune
-  # means from a few respondents are mostly sampling noise; these are shrunk.
-  fav_cw <- ad |>
-    dplyr::mutate(p_hat = fitted(main)) |>
-    dplyr::summarise(value = mean(p_hat), n = dplyr::n(),
-                     .by = c(region, commune_name, wave)) |>
-    dplyr::mutate(map_key = key_of(as.character(region), commune_name),
-                  measure = "Favorable (model-based)")
+  # Favorability by commune and wave.
+  # direct: weighted proportion within each commune-wave, using that wave's
+  #   final weights (the Hajek ratio estimator, the same point estimate
+  #   survey::svyby(~fav, ~commune_id, design) returns). All respondents with
+  #   a valid outcome are used, not only the model's complete cases.
+  # model: M3 fitted probabilities averaged within commune-wave (shrunken).
+  fav_cw <- if (cfg$fav_map == "model") {
+    ad |>
+      dplyr::mutate(p_hat = fitted(main)) |>
+      dplyr::summarise(value = mean(p_hat), n = dplyr::n(),
+                       .by = c(region, commune_name, wave))
+  } else {
+    dat |>
+      dplyr::filter(!is.na(fav), !is.na(wt)) |>
+      dplyr::summarise(value = stats::weighted.mean(fav, wt), n = dplyr::n(),
+                       .by = c(region, commune_name, wave))
+  }
+  fav_cw <- fav_cw |>
+    dplyr::mutate(map_key = key_of(as.character(region), commune_name))
+  fav_n <- stats::quantile(fav_cw$n, c(0, .5, 1))
 
   # Violence: every commune in the boundary file, zero where ACLED is silent
   ev_cw <- violence_raw |>
@@ -724,11 +737,11 @@ if (map_ok) {
 }
 ```
 
-@fig-map puts both quantities at the commune level. Violence is mapped for all `r if (map_ok) n_adm3 else "admin-3"` communes, because ACLED covers the whole country. Favorability can only be mapped where the survey sampled, `r if (map_ok) n_fav_communes else "the sampled"` communes across the three waves, and unsampled communes are left gray. Favorability is the model-based estimate from the main model rather than the raw commune mean: with a handful of respondents per commune, raw means would mostly display sampling noise, while the model estimate shrinks small communes toward their region-wave expectation. Commune-level design-based estimates are not shown because most communes contain only one or two PSUs, too few for a stable design-based variance.
+@fig-map puts both quantities at the commune level. Violence is mapped for all `r if (map_ok) n_adm3 else "admin-3"` communes, because ACLED covers the whole country. Favorability can only be mapped where the survey sampled, `r if (map_ok) n_fav_communes else "the sampled"` communes across the three waves, and communes not sampled in a wave are left gray. Each shaded commune shows the weighted percent favorable among that commune's respondents in that wave. These point estimates rest on few respondents (median `r if (map_ok) fav_n[[2]] else "NA"`, range `r if (map_ok) fav_n[[1]] else "NA"` to `r if (map_ok) fav_n[[3]] else "NA"` per commune-wave) and usually one or two PSUs, so single communes swing widely by chance; read the map for broad spatial patterns rather than individual communes. Standard errors are not reported at this level because one or two PSUs cannot support a stable design-based variance. Setting `cfg$fav_map = "model"` maps the main model's shrunken estimates instead. Violence is shaded on the model's exposure scale, $\log(1 + E_{cw})$, with darker red for more events.
 
 ```{r}
 #| label: fig-map
-#| fig-cap: "Commune-level (admin-3) favorability from the main model (top, sampled communes only) and ACLED violent events (bottom, all communes) by wave. Region boundaries in black."
+#| fig-cap: "Commune-level (admin-3) weighted percent favorable (top, sampled communes only) and ACLED violent events on the log(1 + events) scale (bottom, all communes) by wave. Gray: commune not sampled that wave. Region boundaries in black."
 #| fig-height: 6.2
 if (map_ok) {
   outline <- if (!is.null(mali_adm1)) {
@@ -744,11 +757,20 @@ if (map_ok) {
       theme_void(base_size = 9) +
       theme(legend.position = "right", strip.text = element_text(face = "bold"))
   }
+  fav_lab <- if (cfg$fav_map == "model") "Favorable\n(model)" else "Favorable\n(weighted)"
   p_fav <- base_map(map_fav) +
-    scale_fill_viridis_c(option = "D", labels = scales::percent, name = "Favorable")
-  p_ev <- base_map(map_ev |> dplyr::rename(value = events)) +
-    scale_fill_viridis_c(option = "B", end = 0.9, trans = "log1p",
-                         breaks = c(0, 1, 5, 20, 60), name = "Events")
+    scale_fill_viridis_c(option = "D", labels = scales::percent, limits = c(0, 1),
+                         name = fav_lab)
+  # Violence on the model's exposure scale, log(1 + events); darker red = more.
+  # Legend labels are back-transformed to event counts for readability.
+  ev_breaks <- c(0, 1, 3, 10, 30, 100)
+  ev_max <- max(map_ev$events)
+  p_ev <- base_map(map_ev |> dplyr::mutate(value = log1p(events))) +
+    scale_fill_gradient(low = "#fff5f0", high = "#67000d",
+                        limits = c(0, log1p(ev_max)),
+                        breaks = log1p(ev_breaks[ev_breaks <= ev_max]),
+                        labels = ev_breaks[ev_breaks <= ev_max],
+                        name = "Events\n(log scale)")
   p_fav / p_ev
 } else {
   ggplot() +
