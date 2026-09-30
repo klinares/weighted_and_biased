@@ -20,6 +20,10 @@
 #   SSU      = fixed take of households per PSU, one adult per household
 #   Weights  = 1 / (pi_psu * pi_hh * pi_adult), nonresponse-adjusted in PSU
 # Because PSUs are re-drawn every wave, communes appear in 1, 2, or 3 waves.
+#
+# Uses the real Mali regions, cercles and communes from
+# boundaries/mali_admin_dictionary.csv, so run make_boundaries.R first (or copy
+# the boundaries/ folder).
 # =============================================================================
 
 pacman::p_load(sampling, glue, tidyverse)
@@ -49,32 +53,34 @@ regions <- tibble::tibble(
   region      = c("Kayes", "Koulikoro", "Sikasso", "Segou",
                   "Mopti", "Tombouctou", "Gao", "Bamako"),
   region_risk = c(0.3, 0.5, 0.2, 0.8, 1.6, 1.4, 1.5, 0.2),
-  n_communes  = c(50, 50, 50, 45, 45, 30, 25, 6),
   m_psu       = c(36, 36, 36, 36, 36, 32, 32, 40), # PSUs drawn per wave
   region_fav  = c(0.10, 0.05, 0.20, 0.00, -0.35, -0.25, -0.30, 0.15),
   p_urban     = c(0.10, 0.10, 0.12, 0.10, 0.08, 0.10, 0.12, 1.00),
   north       = c(0, 0, 0, 0, 1, 1, 1, 0)
 )
 
-communes <- regions |>
-  dplyr::mutate(commune_n = purrr::map(n_communes, seq_len)) |>
-  tidyr::unnest(commune_n) |>
+# Real Mali communes and cercles from the admin dictionary (make_boundaries.R).
+# Kidal is not surveyed here, as in many national surveys.
+source("R/boundaries.R")
+communes <- read_mali_dictionary() |>
+  dplyr::mutate(region = dplyr::recode(adm1_name, !!!region_alias)) |>
+  dplyr::inner_join(regions, by = "region") |>
   dplyr::mutate(
-    commune_id   = glue("{toupper(substr(region, 1, 3))}_{sprintf('%02d', commune_n)}"),
-    commune_name = glue("{region} Commune {sprintf('%02d', commune_n)}"),
+    commune_id   = adm3_id,
+    commune_name = adm3_name,
+    cercle_id    = adm2_id,
+    cercle_name  = adm2_name,
     commune_type = dplyr::if_else(stats::runif(dplyr::n()) < p_urban,
                                   "Urban", "Rural"),
-    commune_pop  = round(exp(stats::rnorm(dplyr::n(),
-                                          dplyr::if_else(commune_type == "Urban", 11.5, 10), 0.5))),
     commune_hot  = stats::rnorm(dplyr::n(), 0, 0.8),  # latent local conflict risk
     commune_re   = stats::rnorm(dplyr::n(), 0, truth$sd_commune)
   ) |>
-  dplyr::select(region, region_risk, region_fav, north, commune_id, commune_name,
-                commune_type, commune_pop, commune_hot, commune_re)
+  dplyr::select(region, region_risk, region_fav, north, cercle_id, cercle_name,
+                commune_id, commune_name, commune_type, commune_hot, commune_re)
 
 # PSUs: villages (rural) or quartiers (urban); measure of size = households
 psus <- communes |>
-  dplyr::mutate(n_psu = sample(8:22, dplyr::n(), replace = TRUE)) |>
+  dplyr::mutate(n_psu = sample(3:10, dplyr::n(), replace = TRUE)) |>
   dplyr::mutate(psu_n = purrr::map(n_psu, seq_len)) |>
   tidyr::unnest(psu_n) |>
   dplyr::mutate(
@@ -90,7 +96,7 @@ violence_full <- tidyr::expand_grid(communes, wave = waves) |>
     mu     = exp(-1.2 + region_risk + wave_shift_violence[wave] + commune_hot),
     events = stats::rnbinom(dplyr::n(), size = 0.5, mu = mu)
   ) |>
-  dplyr::select(region, commune_id, commune_name, wave, events)
+  dplyr::select(region, cercle_id, cercle_name, commune_id, commune_name, wave, events)
 
 # ACLED only records events, so zero-event commune-waves are absent
 violence_acled <- violence_full |>
@@ -205,7 +211,8 @@ survey_sim <- sample_df |>
     strata             = region
   ) |>
   dplyr::select(
-    resp_id, wave, strata, region, psu_id, commune_id, commune_name, commune_type,
+    resp_id, wave, strata, region, psu_id, cercle_id, cercle_name,
+    commune_id, commune_name, commune_type,
     wt, fav, female, age, ethnicity, education, urban,
     local_gov_approve, democracy_support, perceived_violence, stress
   )
@@ -214,10 +221,7 @@ attr(survey_sim, "truth") <- truth
 
 saveRDS(survey_sim, file.path(out_dir, "survey_sim.rds"))
 saveRDS(violence_acled, file.path(out_dir, "violence_commune_wave.rds"))
-# Full commune frame (every admin-3 unit, sampled or not): only used to build
-# test boundaries. Real work uses geoBoundaries admin-3 polygons instead.
-saveRDS(communes |> dplyr::select(region, commune_id, commune_name),
-        file.path(out_dir, "commune_frame.rds"))
+
 
 # ---- 7. Quick report ---------------------------------------------------------
 survey_sim |>
@@ -246,6 +250,7 @@ glue("Wrote {nrow(survey_sim)} respondents and {nrow(violence_acled)} commune-wa
 #   psu_id             PSU code, stable across waves if the same village
 #   commune_id         admin-3 commune code, the key to the ACLED file
 #   commune_name       admin-3 commune name, the key to the boundary file
+#   cercle_id, cercle_name  admin-2 cercle code and name (for aggregating up)
 #   commune_type       Urban / Rural (official commune classification)
 #   wt                 final respondent weight for that wave
 #   fav                1 = favorable view of leader, 0 = not
@@ -259,5 +264,6 @@ glue("Wrote {nrow(survey_sim)} respondents and {nrow(violence_acled)} commune-wa
 #   perceived_violence 1 to 5 (mediator)
 #   stress             0 to 10 (mediator)
 # violence file (ACLED aggregate)
-#   commune_id, wave, events  (zero-event commune-waves may be absent)
+#   region, cercle_id, cercle_name, commune_id, commune_name, wave, events
+#   (zero-event commune-waves may be absent)
 # =============================================================================
