@@ -1,6 +1,6 @@
 ---
-title: "Local Violence and Leader Favorability in Mali"
-subtitle: "Four models compared: region versus commune exposure, and three ways to handle clustering"
+title: "Violence Against Civilians and Leader Favorability in Mali"
+subtitle: "Commune-level ACLED events and a three-wave, two-stage household survey"
 author: "Kevin Linares"
 date: today
 format:
@@ -23,56 +23,62 @@ execute:
 
 ```{r setup}
 #| include: false
-# Everything is computed in plain R scripts; this report only presents it.
-#   R/prep_data.R   edit this for real data
-#   diagnostics.R   name checks and K, A, P, W
-#   models.R        the four models and their violence effects
-#   maps.R          map data
+# This report only presents results. Everything is computed in plain R scripts:
+#   R/prep_data.R   edit for real data (file path, column names)
+#   diagnostics.R   checks K, A, P, W
+#   models.R        models M1 to M4 and every number below
+#   maps.R          maps (also saved to output/maps/)
 source("models.R")
 source("maps.R")
 
-pacman::p_load(patchwork, viridis, knitr)
+pacman::p_load(patchwork, knitr)
 theme_set(theme_minimal(base_size = 10) + theme(panel.grid.minor = element_blank()))
-pal <- viridis::viridis(4, end = 0.85)
-pp  <- function(x) sprintf("%.1f", 100 * x)   # proportion -> percentage points
+pal <- viridis::viridis(3, end = 0.8)
+pp  <- function(x) sprintf("%.1f", 100 * x)        # proportion -> percentage points
+pct <- function(x) sprintf("%.0f%%", 100 * x)      # proportion -> percent
 ```
 
-# Question and approach
+# Question
 
-Is violence in a respondent's commune associated with how favorably they view the national leader? Violence is the number of ACLED events per commune and survey wave. Favorability comes from three survey waves, each with its own stratified, clustered sample and weights.
+Is violence against civilians in a respondent's commune associated with how favorably they view the national leader? Violence is the number of ACLED events of violence against civilians in the commune in the period before each survey wave. Favorability comes from three survey waves.
 
-The report compares four models. Each step changes **one thing**, so any difference between neighbouring models has a single explanation:
-
-| Model | Violence | Clustering | Weights | Shows |
-|---|---|---|---|---|
-| M1 | Region-wave | PSU (design) | Yes | Original specification |
-| M2 | Commune-wave | None | No | Gain from finer exposure |
-| M3 | Commune-wave | Random intercept | No | Multilevel alternative |
-| M4 | Commune-wave | Commune (design) | Yes | **Main model** |
-
-All four models share region and wave dummies and the same respondent covariates.
-
-# Data checks
-
-The analysis file has `r format(nrow(ad), big.mark = ",")` respondents (`r format(nrow(dat) - nrow(ad), big.mark = ",")` dropped for missing data) in `r dplyr::n_distinct(ad$commune_key)` communes across `r dplyr::n_distinct(ad$region)` regions and `r nlevels(ad$wave)` waves.
+# Data and design
 
 ```{r}
-#| label: tbl-names
-#| tbl-cap: "Commune name matching. Communes are matched by name within region. A sampled commune missing from the violence file is assigned 0 events, so spelling mismatches would silently become zeros."
-kable(name_checks, format = "pipe")
+#| include: false
+wave_table <- survey::svyby(~fav, ~wave, des, survey::svymean) |>
+  tibble::as_tibble() |>
+  dplyr::left_join(ad |> dplyr::summarise(n = dplyr::n(),
+                                          communes = dplyr::n_distinct(commune_w),
+                                          villages = dplyr::n_distinct(village_w),
+                                          .by = wave),
+                   by = "wave")
 ```
+
+The analysis file has `r format(nrow(ad), big.mark = ",")` respondents (`r format(nrow(dat) - nrow(ad), big.mark = ",")` dropped for missing data). Each wave is an independent two-stage sample within regions: communes are the primary sampling units and villages are sampled within communes. Because each wave is its own design, region, commune, and village codes are made wave-specific, and weights are rescaled to sum to each wave's sample size, $w^*_i = w_i \, n_w / \sum_{i \in w} w_i$, so no wave dominates.
+
+```{r}
+#| label: tbl-waves
+#| tbl-cap: "Sample by wave, with the design-weighted percent favorable and its design-based standard error."
+wave_table |>
+  dplyr::transmute(Wave = wave, Respondents = n, Communes = communes, Villages = villages,
+                   `% favorable` = 100 * fav, SE = 100 * se) |>
+  kable(format = "pipe", digits = 1)
+```
+
+## Diagnostics before modeling
 
 ```{r}
 #| label: tbl-diag
-#| tbl-cap: "Diagnostics computed before any model is fit. K: exposure units. A: share of violence variation absorbed by region and wave dummies; whatever is absorbed cannot inform the violence estimate. P: PSUs per commune-wave. W: within-commune share of violence variation."
+#| tbl-cap: "Computed before any model is fit. K: commune-wave cells. A: share of violence variation that region and wave dummies absorb; absorbed variation cannot inform the violence estimate. P: villages per commune-wave. W: within-commune share of violence variation."
 kable(diag_table, format = "pipe")
 ```
 
-**Why Model 1 cannot work.** Region and wave dummies explain `r sprintf("%.0f", 100 * A_region)`% of the variation in region-wave violence. Model 1 must estimate the violence effect from the remaining `r sprintf("%.0f", 100 * (1 - A_region))`%, spread over only 24 region-wave values. Measured at the commune level, the same dummies explain only `r sprintf("%.0f", 100 * A_commune)`% of the variation, leaving most of it to inform the estimate. @fig-spread shows why: communes within the same region and wave experience very different levels of violence, and Model 1 gives all of them one number.
+Region and wave dummies absorb `r pct(A_region)` of the variation in region-wave violence, so a model using region-wave violence (Model 1) must estimate the violence effect from what is left, spread over at most 24 region-wave values. Commune-wave violence is a different story: the same dummies absorb only `r pct(A_commune)` of it, because communes in the same region and wave experience very different levels of violence (@fig-spread).
 
 ```{r}
 #| label: fig-spread
-#| fig-cap: "Commune violence within each region and wave. Each dot is a sampled commune; the bar is the region-wave average. Model 1 replaces every dot with one value per region-wave."
+#| fig-cap: "Commune violence within each region and wave. Each dot is a surveyed commune; the bar is the region-wave average. A region-wave measure gives every commune in a column the same value."
 #| fig-height: 3.6
 ggplot(cells, aes(region, v_commune, color = wave)) +
   geom_point(position = position_jitterdodge(jitter.width = 0.25, dodge.width = 0.75),
@@ -86,167 +92,153 @@ ggplot(cells, aes(region, v_commune, color = wave)) +
 
 # Models
 
-## Exposure
+## Violence measure
 
-For commune $c$ in wave $w$, $E_{cw}$ is the ACLED event count and $V_{cw} = \log(1 + E_{cw})$. The log compresses a skewed count in which most commune-waves have few or no events. For Model 1, events are summed over all communes in the region: $V_{rw} = \log\left(1 + \sum_{c \in r} E_{cw}\right)$.
-
-Models 2 to 4 split commune violence into two parts (Mundlak, 1978; Bell & Jones, 2015):
+For commune $c$ in wave $w$, $E_{cw}$ is the number of events and
 
 $$
-\bar V_c = \frac{1}{T_c} \sum_{w \in S_c} V_{cw}, \qquad V^{\text{within}}_{cw} = V_{cw} - \bar V_c
+V_{cw} = \log(1 + E_{cw}).
 $$
 
-where $S_c$ is the set of waves in which commune $c$ was surveyed and $T_c$ is how many there are. $\bar V_c$ is the commune's usual level of violence; $V^{\text{within}}_{cw}$ is how much more or less violent that wave was than usual. A commune surveyed only once has $V^{\text{within}}_{cw} = 0$ and contributes nothing to the within estimate.
+The log compresses a count that is zero for many communes and very large for a few; adding 1 keeps zero defined. On this scale, adding 1 multiplies $(1 + E_{cw})$ by $e \approx 2.72$, and adding $\log 2 \approx 0.69$ doubles it. Because these steps are hard to picture, results are also shown as predicted favorability at 0, 1, 5, and 20 events.
 
 ## Equations
 
-All models share the same base, with region and wave dummies and respondent covariates $\mathbf{x}_i$ (female, age per decade, ethnicity, education, urban):
+Respondent $i$ lives in village $v$ of commune $c$ in region $r$ and was interviewed in wave $w$. All models share the same base, with separate region and wave dummies and respondent covariates $\mathbf{x}_i$ (female, age per decade, ethnicity, education, urban):
 
 $$
-\eta_i = \beta_0 + \sum_{r \neq \text{Bamako}} \alpha_r \text{Region}_r + \sum_{w=2}^{3} \gamma_w \text{Wave}_w + \mathbf{x}_i' \boldsymbol\beta
+\eta_i = \beta_0 + \sum_{r \neq \text{Bamako}} \alpha_r \,\text{Region}_r + \sum_{w=2}^{3} \gamma_w \,\text{Wave}_w + \mathbf{x}_i'\boldsymbol{\beta}
 $$
 
-**Model 1** (region exposure):
-$$
-\operatorname{logit} \Pr(y_i = 1) = \eta_i + \beta_R V_{rw}
-$$
+| Model | Linear predictor for $\operatorname{logit} \Pr(y_i = 1)$ | Clustering | Weights |
+|---|---|---|---|
+| M1 | $\eta_i + \beta_R V_{rw}$ | Survey design | Yes |
+| M2 | $\eta_i + \beta_V V_{cw}$ | None | No |
+| M3 | $\eta_i + \beta_V V_{cw} + u_c$, with $u_c \sim N(0, \tau^2)$ | Commune random intercept | No |
+| M4 | $\eta_i + \beta_V V_{cw}$ | Survey design | Yes |
 
-**Models 2 and 4** (commune exposure, within and between):
-$$
-\operatorname{logit} \Pr(y_i = 1) = \eta_i + \beta_W V^{\text{within}}_{cw} + \beta_B \bar V_c
-$$
-
-**Model 3** (same, plus a commune random intercept):
-$$
-\operatorname{logit} \Pr(y_i = 1) = \eta_i + \beta_W V^{\text{within}}_{cw} + \beta_B \bar V_c + u_c, \qquad u_c \sim N(0, \tau^2)
-$$
-
-- $\beta_W$ (**within**): when a commune is more violent than its own usual level, is favorability lower? Stable features of the commune (ethnic make-up, remoteness, history) cannot drive this estimate. This is the main quantity.
-- $\beta_B$ (**between**): are people in usually more violent communes less favorable? This compares different communes, so it is more exposed to confounding.
+Here $V_{rw} = \log\left(1 + \sum_{c \in S_{rw}} E_{cw}\right)$, where $S_{rw}$ is the set of communes **surveyed** in region $r$ and wave $w$ (only surveyed communes have event counts). **M4 is the main model.** Each step changes one thing: M1 to M2 the violence measure, M2 to M3 the handling of clustering, M3 to M4 the move from a random effect to the survey design.
 
 ## Estimation
 
-- **M1 and M4** are survey-weighted logistic regressions (`survey::svyglm`). Weights are rescaled within each wave, $w^*_i = w_i \, n_w / \sum_{i \in w} w_i$, so no wave dominates. Strata are wave-specific. Standard errors use Taylor linearization, clustering on wave-specific **PSUs in M1** and wave-specific **communes in M4**. M4 clusters at the commune because that is where violence is assigned: everyone in a commune-wave shares one violence value.
-- **M2** is an ordinary logistic regression (`glm`) that ignores weights and clustering, included only to show how much the clustering correction matters.
-- **M3** is a multilevel logistic regression (`lme4::glmer`, Laplace approximation) with a commune random intercept and no weights.
+**M1 and M4** are survey-weighted logistic regressions (`survey::svyglm`). The coefficients solve the weighted score equations $\sum_i w^*_i \mathbf{x}_i (y_i - \mu_i) = 0$. Standard errors come from Taylor linearization using the first stage of the design (Binder, 1983):
 
-**Reported effect.** All models report the **average marginal effect** (AME): the average change in the probability of a favorable view, in percentage points, per one-unit increase in log events. Because $\log(1 + E)$ rises by about 0.69 when events double, the table also gives the effect of a **doubling of events**. M3's AME is evaluated at $u_c = 0$ (a typical commune), so it is close to, but not exactly comparable with, the population-averaged AMEs of the other models.
+$$
+\widehat{\operatorname{Var}}(\hat{\boldsymbol\beta}) = \hat{\mathbf J}^{-1}\left[\sum_h \frac{n_h}{n_h - 1}\sum_{j=1}^{n_h} (\mathbf z_{hj} - \bar{\mathbf z}_h)(\mathbf z_{hj} - \bar{\mathbf z}_h)'\right]\hat{\mathbf J}^{-1}, \qquad \mathbf z_{hj} = \sum_{i \in (h, j)} w^*_i \mathbf x_i (y_i - \hat\mu_i)
+$$
+
+where $h$ indexes strata (region by wave), $j$ communes, $n_h$ the communes in stratum $h$, and $\hat{\mathbf J}$ the weighted information matrix. Commune totals $\mathbf z_{hj}$ include every village and respondent in the commune, so this also covers clustering within villages. Because violence is measured at the commune, the level where standard errors are computed is also the level where violence varies.
+
+**M2** is an ordinary logistic regression, included only to show what ignoring clustering does. **M3** is a multilevel logistic regression (`lme4::glmer`, Laplace approximation) without weights.
+
+**Reported effects.** The average marginal effect (AME) is the design-weighted average change in the probability of a favorable view per one-unit increase in the violence measure:
+
+$$
+\text{AME} = \frac{\sum_i w^*_i \; \partial \hat\mu_i / \partial V}{\sum_i w^*_i}
+$$
+
+Predicted favorability at $e$ events sets every respondent's commune to $e$ events, keeps everything else as observed, and averages with the weights: $P(e) = \sum_i w^*_i \hat\mu_i(V = \log(1 + e)) / \sum_i w^*_i$. M3's AME is for a typical commune ($u_c = 0$), so it is close to, but not exactly comparable with, the population-averaged AMEs of the other models.
 
 # Results
 
 ```{r}
+#| label: tbl-predicted
+#| tbl-cap: "Main model (M4): predicted percent with a favorable view if every commune had the given number of events, other characteristics as observed (design-weighted, 95% CI)."
+predicted |>
+  dplyr::transmute(`Events in commune` = events,
+                   `Predicted % favorable` = pp(estimate),
+                   `95% CI` = sprintf("%s to %s", pp(conf.low), pp(conf.high))) |>
+  kable(format = "pipe", align = "rrr")
+```
+
+```{r}
+#| include: false
+p0  <- predicted$estimate[predicted$events == 0]
+p5  <- predicted$estimate[predicted$events == 5]
+```
+
+**Main result.** If every commune had no events, `r pp(p0)`% of respondents would be predicted to view the leader favorably; with 5 events, `r pp(p5)`%. On the model scale, a one-unit increase in $\log(1 + E)$ changes the probability of a favorable view by **`r pp(main$estimate)` percentage points** (95% CI `r pp(main$conf.low)` to `r pp(main$conf.high)`), or about `r pp(main$estimate * log(2))` points each time $(1 + E)$ doubles.
+
+```{r}
+#| label: fig-predicted
+#| fig-cap: "Main model (M4): predicted percent favorable at 0, 1, 5, and 20 events of violence against civilians in the commune (95% CI)."
+#| fig-height: 2.8
+ggplot(predicted, aes(factor(events), estimate)) +
+  geom_pointrange(aes(ymin = conf.low, ymax = conf.high), color = pal[1], size = 0.5) +
+  scale_y_continuous(labels = scales::percent) +
+  labs(x = "Events of violence against civilians in the commune", y = "Predicted % favorable")
+```
+
+```{r}
 #| label: tbl-ame
-#| tbl-cap: "Violence AMEs in percentage points, with 95% CIs. 'Per doubling' multiplies the AME by log(2), the approximate change in log(1 + events) when events double. The binary rows compare any event with none, so their doubling column is blank."
+#| tbl-cap: "Violence AME in percentage points per one-unit increase in the log violence measure, with 95% CI and standard error."
 results |>
-  dplyr::transmute(
-    Model = model,
-    Part  = part,
-    `AME [95% CI]` = sprintf("%s [%s, %s]", pp(estimate), pp(conf.low), pp(conf.high)),
-    SE = pp(std.error),
-    `Per doubling` = dplyr::if_else(stringr::str_starts(term, "any"), "",
-                                    pp(estimate * log(2)))) |>
+  dplyr::transmute(Model = model,
+                   `AME [95% CI]` = sprintf("%s [%s, %s]", pp(estimate), pp(conf.low), pp(conf.high)),
+                   SE = pp(std.error)) |>
   kable(format = "pipe")
 ```
 
-**Main result (M4).** When a commune experiences more violence than its usual level, favorability changes by **`r pp(main_within$estimate)` points** per unit of log events (95% CI `r pp(main_within$conf.low)` to `r pp(main_within$conf.high)`), or about **`r pp(main_within$estimate * log(2))` points per doubling** of events. Comparing communes with each other, the between-commune AME is `r pp(main_between$estimate)` points (95% CI `r pp(main_between$conf.low)` to `r pp(main_between$conf.high)`).
-
-**Model 1 for comparison.** The region-wave model gives `r pp(m1_effect$estimate)` points (95% CI `r pp(m1_effect$conf.low)` to `r pp(m1_effect$conf.high)`). Its interval is wide because, as @tbl-diag shows, almost all of its exposure variation is absorbed by the dummies.
-
-**Effect of handling clustering.** M2 ignores clustering. The M4 standard error for the within effect is `r sprintf("%.1f", se_ratio)` times larger than in M2. The wider M4 interval is the honest one.
-
-**Attitudes.** Adding local government approval, support for democracy, perceived violence, and stress (M4 + attitudes) shows whether the association runs partly through these attitudes. Because violence may itself change them, this row is descriptive, not the main estimate.
+- **Model 1** gives `r pp(m1_row$estimate)` points (95% CI `r pp(m1_row$conf.low)` to `r pp(m1_row$conf.high)`). With so little region-wave variation left after the dummies (@tbl-diag), it cannot distinguish an effect from no effect.
+- **Clustering.** M2 ignores clustering; the M4 standard error is `r sprintf("%.1f", se_ratio)` times as large. The wider M4 interval is the honest one.
+- **Attitudes.** Adding local government approval, support for democracy, perceived violence, and stress (M4 + attitudes) shows how much of the association overlaps with these attitudes. Violence may itself change them, so this row is descriptive, not the main estimate.
 
 ```{r}
 #| label: fig-ame
-#| fig-cap: "Violence AMEs across models (percentage points, 95% CI). M1 has a single region-wave effect; the commune models split it into within and between."
-#| fig-height: 3.8
-ggplot(results, aes(100 * estimate, forcats::fct_rev(model), color = part)) +
+#| fig-cap: "Violence AME across models (percentage points, 95% CI)."
+#| fig-height: 2.6
+ggplot(results, aes(100 * estimate, forcats::fct_rev(model))) +
   geom_vline(xintercept = 0, color = "gray60") +
-  geom_pointrange(aes(xmin = 100 * conf.low, xmax = 100 * conf.high),
-                  position = position_dodge(width = 0.5), size = 0.3) +
-  scale_color_viridis_d(end = 0.8) +
-  labs(x = "AME (percentage points per unit of log events)", y = NULL, color = NULL) +
-  theme(legend.position = "bottom")
-```
-
-```{r}
-#| label: fig-curve
-#| fig-cap: "Main model (M4): weighted average predicted probability of a favorable view as a commune's violence moves above or below its own usual level. +0.69 on the x-axis is roughly a doubling of events."
-#| fig-height: 3
-curve_m4 <- marginaleffects::avg_predictions(
-  m4,
-  variables = list(v_within = seq(-1.5, 1.5, by = 0.25)),
-  newdata = ad, wts = "wt_scaled")
-
-ggplot(curve_m4, aes(v_within, estimate)) +
-  geom_vline(xintercept = 0, color = "gray80") +
-  geom_ribbon(aes(ymin = conf.low, ymax = conf.high), fill = pal[2], alpha = 0.2) +
-  geom_line(color = pal[2], linewidth = 1.1) +
-  scale_y_continuous(labels = scales::percent) +
-  labs(x = "Violence relative to the commune's usual level (log events)", y = "Pr(favorable)")
+  geom_pointrange(aes(xmin = 100 * conf.low, xmax = 100 * conf.high), color = pal[2]) +
+  labs(x = "AME (percentage points per unit of log(1 + events))", y = NULL)
 ```
 
 # Maps
 
+Commune values rest on few respondents each, so read the maps for broad patterns. Gray communes were not surveyed in that wave; this is missing data, not zero. Region names are shown on the Model 3 map.
+
 ```{r}
 #| label: fig-map-violence
-#| fig-cap: "Exposure used by Models 2 to 4: ACLED events by commune and wave. Darker red means more events."
-#| fig-height: 2.8
-draw_map(map_violence) +
-  facet_wrap(~ paste("Wave", wave)) +
-  scale_fill_gradient(low = "#fff5f0", high = "#67000d",
-                      breaks = log1p(c(0, 1, 3, 10, 30)), labels = c(0, 1, 3, 10, 30),
-                      name = "Events")
+#| fig-cap: "Events of violence against civilians by commune and wave (surveyed communes only)."
+#| fig-height: 3.9
+map_violence
 ```
 
 ```{r}
-#| label: fig-map-m4
-#| fig-cap: "Model 4 view: design-weighted percent favorable by commune and wave (sampled communes only; gray = not sampled that wave). Each value rests on few respondents, so read the map for broad patterns."
-#| fig-height: 2.8
-draw_map(map_fav) +
-  facet_wrap(~ paste("Wave", wave)) +
-  scale_fill_viridis_c(labels = scales::percent, limits = c(0, 1), name = "Favorable")
+#| label: fig-map-fav
+#| fig-cap: "Design-weighted percent favorable by commune and wave."
+#| fig-height: 4.1
+map_favorability
 ```
-
-Median respondents per commune-wave on the map: `r stats::median(fav_commune_wave$n)`.
 
 ```{r}
 #| label: fig-map-m3
-#| fig-cap: "Model 3 view: commune random intercepts. Green communes are more favorable than the model predicts from region, wave, violence, and respondent characteristics; purple are less. Same-colour clusters spanning many communes would suggest a geographic factor the model is missing."
-#| fig-height: 3.4
-draw_map(map_u) +
-  scale_fill_gradient2(low = "#440154", mid = "white", high = "#21918c", midpoint = 0,
-                       name = "Commune\nintercept")
+#| fig-cap: "Model 3 commune effects: communes more (green) or less (purple) favorable than the model predicts from region, wave, violence, and respondent characteristics. Large same-colored areas would suggest a geographic factor the model misses."
+#| fig-height: 4.5
+map_intercepts
 ```
 
-# Model diagnostics
+# Model checks
 
-Model 3 `r if (m3_singular) "is singular (commune variance near zero)" else if (is.null(m3_messages)) "converged without warnings" else paste("returned:", toString(m3_messages))`. Its commune variance is $\hat\tau^2 =$ `r sprintf("%.3f", tau2)` (ICC `r sprintf("%.3f", icc)` on the latent scale).
+Model 3 `r if (m3_singular) "has a singular fit (commune variance near zero)" else if (is.null(m3_messages)) "converged without warnings" else paste("returned:", toString(m3_messages))`; its commune variance is $\hat\tau^2 =$ `r sprintf("%.3f", tau2)` (latent-scale ICC `r sprintf("%.3f", icc)`).
 
 ```{r}
-#| label: fig-diagnostics
-#| fig-cap: "(A) M4 within AME with each region dropped in turn; dashed line = full sample. (B) M4 weighted binned residuals; points should fall inside the dashed bounds with no pattern. (C) M4 calibration by decile. (D) M3 commune intercepts against a normal distribution."
-#| fig-height: 5.6
-
-# Fitted values from the main model, used by panels B and C
+#| label: fig-checks
+#| fig-cap: "(A) M4 AME with each region dropped in turn; dashed line = full sample. (B) M4 weighted binned residuals; points should fall inside the dashed bounds with no pattern. (C) M4 calibration by decile. (D) M3 commune effects against a normal distribution."
+#| fig-height: 5.4
 fit_m4 <- tibble::tibble(p = fitted(m4), y = ad$fav, w = ad$wt_scaled)
 
-# A. Leave one region out
 p_a <- ggplot(loo, aes(100 * estimate, dropped)) +
-  geom_vline(xintercept = 100 * main_within$estimate, linetype = "dashed", color = "gray40") +
+  geom_vline(xintercept = 100 * main$estimate, linetype = "dashed", color = "gray40") +
   geom_vline(xintercept = 0, color = "gray80") +
   geom_pointrange(aes(xmin = 100 * conf.low, xmax = 100 * conf.high), color = pal[1], size = 0.3) +
-  labs(title = "A. Leave one region out", x = "Within AME (pp)", y = NULL)
+  labs(title = "A. Leave one region out", x = "AME (pp)", y = NULL)
 
-# B. Binned residuals: 30 bins of fitted probability
 binned <- fit_m4 |>
   dplyr::mutate(bin = dplyr::ntile(p, 30)) |>
-  dplyr::summarise(fitted   = stats::weighted.mean(p, w),
-                   residual = stats::weighted.mean(y - p, w),
-                   n        = dplyr::n(),
-                   .by = bin) |>
+  dplyr::summarise(fitted = stats::weighted.mean(p, w), residual = stats::weighted.mean(y - p, w),
+                   n = dplyr::n(), .by = bin) |>
   dplyr::mutate(bound = 2 * sqrt(fitted * (1 - fitted) / n))
-
 p_b <- ggplot(binned, aes(fitted, residual)) +
   geom_hline(yintercept = 0, color = "gray70") +
   geom_line(aes(y =  bound), linetype = "dashed", color = "gray50") +
@@ -254,13 +246,10 @@ p_b <- ggplot(binned, aes(fitted, residual)) +
   geom_point(color = pal[2]) +
   labs(title = "B. Binned residuals (M4)", x = "Fitted", y = "Residual")
 
-# C. Calibration by decile
 calib <- fit_m4 |>
   dplyr::mutate(decile = dplyr::ntile(p, 10)) |>
-  dplyr::summarise(predicted = stats::weighted.mean(p, w),
-                   observed  = stats::weighted.mean(y, w),
+  dplyr::summarise(predicted = stats::weighted.mean(p, w), observed = stats::weighted.mean(y, w),
                    .by = decile)
-
 p_c <- ggplot(calib, aes(predicted, observed)) +
   geom_abline(linetype = "dashed", color = "gray50") +
   geom_point(color = pal[3], size = 2) +
@@ -268,38 +257,51 @@ p_c <- ggplot(calib, aes(predicted, observed)) +
   scale_y_continuous(labels = scales::percent) +
   labs(title = "C. Calibration (M4)", x = "Predicted", y = "Observed")
 
-# D. Normal Q-Q plot of commune intercepts
 p_d <- ggplot(u_hat, aes(sample = u)) +
-  stat_qq(color = pal[1], size = 0.7) +
-  stat_qq_line(color = pal[3]) +
-  labs(title = "D. Commune intercepts (M3)", x = "Normal quantiles", y = "u_c")
+  stat_qq(color = pal[1], size = 0.7) + stat_qq_line(color = pal[3]) +
+  labs(title = "D. Commune effects (M3)", x = "Normal quantiles", y = "u_c")
 
 (p_a | p_b) / (p_c | p_d)
 ```
 
-# Explaining the result
+# How to explain the result
 
-A plain-language version for non-technical audiences:
-
-> We compared the same communes across survey rounds. When a commune saw more violent events than it usually does, residents were about `r pp(abs(main_within$estimate * log(2)))` percentage points `r if (main_within$estimate < 0) "less" else "more"` likely to view the leader favorably for each doubling of events, after accounting for region, survey round, and who was interviewed. The range of plausible values is `r pp(main_within$conf.low * log(2))` to `r pp(main_within$conf.high * log(2))` points.
+> Among people surveyed in the same region and survey round, those living in communes with more violence against civilians were less likely to view the leader favorably. If every commune had experienced no such events, about `r pp(p0)`% would be expected to hold a favorable view; with 5 events, about `r pp(p5)`%. This compares different communes, so it shows an association, not proof that violence caused the change.
 
 # Limitations
 
-- **Name matching.** Communes are linked by name. A misspelled name silently becomes "0 events". @tbl-names reports names missing from the official commune list; fix those before interpreting results.
-- **Communes surveyed once** add nothing to the within estimate (W in @tbl-diag).
-- **Serial correlation.** Strata and clusters are wave-specific, so correlation within the same commune across waves is not reflected in M4's standard errors. A conservative check clusters on commune across waves with region as the stratum (see MODELING_NOTES.md).
-- **Exposure measurement.** ACLED undercounts events in remote areas, which likely weakens the association. The event window must end before each wave's fieldwork.
-- **Confounding.** The within estimate removes stable commune differences but not changes over time that coincide with violence (displacement, military operations, local economic shocks).
-- **Coverage.** Insecure areas may be harder to survey, so estimates describe the reachable population.
+- **Comparison between communes.** Most communes were surveyed once, so the estimate mainly compares different communes, not the same commune over time (W in @tbl-diag). Stable differences between communes that the covariates miss (remoteness, local history) could drive part of it. The within-commune estimate is in the appendix.
+- **Region-wide shocks.** Region and wave enter separately, so a shock that hit one region in one wave is not absorbed.
+- **Violence measure.** Only surveyed communes have event counts. ACLED undercounts events in remote areas, which most likely weakens the association. The event window should end before fieldwork.
+- **Coverage.** Insecure areas are harder to survey, so estimates describe the population that could be reached.
+- **Design assumption.** The design is specified as communes (first stage) then villages. If communes were not a sampling stage, clustering at the commune is still appropriate because violence is measured there.
+- **Map placement.** Communes are placed on the map through a reviewed name crosswalk. Names that could not be placed are counted in each map caption.
+
+# Appendix: within and between communes
+
+```{r}
+#| label: tbl-within
+#| tbl-cap: "M4 with violence split into the commune's average across its surveyed waves (between) and that wave's deviation from it (within). AME in percentage points, 95% CI."
+within_between |>
+  dplyr::transmute(Part = dplyr::recode(term, v_within = "Within commune (change over time)",
+                                        v_between = "Between communes (usual level)"),
+                   `AME [95% CI]` = sprintf("%s [%s, %s]", pp(estimate), pp(conf.low), pp(conf.high)),
+                   SE = pp(std.error)) |>
+  kable(format = "pipe")
+```
+
+The within part uses only communes surveyed in more than one wave whose violence changed; a commune surveyed once has a within value of 0. With little within-commune variation (`r sprintf("%.0f%%", 100 * W_share)` here), the within estimate is imprecise and serves as a check, not a headline.
 
 # References
 
 Bell, A., & Jones, K. (2015). Explaining fixed effects: Random effects modeling of time-series cross-sectional and panel data. *Political Science Research and Methods, 3*(1), 133-153.
 
+Binder, D. A. (1983). On the variances of asymptotically normal estimators from complex surveys. *International Statistical Review, 51*(3), 279-292.
+
 Lumley, T. (2010). *Complex surveys: A guide to analysis using R*. Wiley.
 
 Mundlak, Y. (1978). On the pooling of time series and cross section data. *Econometrica, 46*(1), 69-85.
 
-Raleigh, C., Linke, A., Hegre, H., & Karlsen, J. (2010). Introducing ACLED: An armed conflict location and event dataset. *Journal of Peace Research, 47*(5), 651-660.
+OCHA (United Nations Office for the Coordination of Humanitarian Affairs). Mali administrative boundaries, levels 0 to 3 (COD-AB). Source: Direction Nationale des Collectivités Territoriales (DNCT), release of 10 November 2021. Humanitarian Data Exchange.
 
-Runfola, D., et al. (2020). geoBoundaries: A global database of political administrative boundaries. *PLoS ONE, 15*(4), e0231866. https://doi.org/10.1371/journal.pone.0231866
+Raleigh, C., Linke, A., Hegre, H., & Karlsen, J. (2010). Introducing ACLED: An armed conflict location and event dataset. *Journal of Peace Research, 47*(5), 651-660.

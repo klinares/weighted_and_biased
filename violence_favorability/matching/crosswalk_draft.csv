@@ -1,0 +1,275 @@
+region,commune,status,adm3_code,adm3_name,adm2_name,candidates
+Bamako,Coommune VI,review,,,,Commune VI (Bamako) [ML090106] d=0.10; Commune I (Bamako) [ML090101] d=0.20; Commune II (Bamako) [ML090102] d=0.20
+Gao,Annsongo,review,,,,Ansongo (Ansongo) [ML070101] d=0.12; Anchawadi (Gao) [ML070301] d=0.78; Andéramboukane (Anderamboukane) [ML100201] d=0.79
+Gao,Innékar,review,,,,Inékar (Inekar) [ML100301] d=0.14; Ménaka (Ménaka) [ML100101] d=0.57; Tin Hama (Ansongo) [ML070107] d=0.71
+Kayes,Diiakon,review,,,,Diakon (Bafoulabe) [ML010103] d=0.14; Diamou (Kayes) [ML010303] d=0.43; Dindanko (Kita) [ML010506] d=0.50
+Kayes,Diinlin Oualia,review,,,,Dinlin Oualia (Bafoulabe) [ML010111] d=0.08; Diokeli (Bafoulabe) [ML010105] d=0.62; Diéoura (Diéma) [ML010205] d=0.62
+Kayes,Faaléa,review,,,,Faléa (Kéniéba) [ML010405] d=0.17; Falémé (Kayes) [ML010305] d=0.50; Faraba (Kéniéba) [ML010406] d=0.50
+Kayes,Faatao,review,,,,Fatao (Diéma) [ML010208] d=0.17; Faléa (Kéniéba) [ML010405] d=0.50; Faraba (Kéniéba) [ML010406] d=0.50
+Kayes,Gadwgou I,review,,,,Gadougou I (Kita) [ML010509] d=0.22; Gadougou II (Kita) [ML010510] d=0.30; Gogui (Nioro) [ML010606] d=0.50
+Kayes,Guuidimakan Keri Kaff,review,,,,Guidimakan Keri Kaff (Kayes) [ML010309] d=0.05; Guidime (Yélimané) [ML010705] d=0.63; Dioumara Koussata (Diéma) [ML010206] d=0.68
+Kayes,Guuémoukouraba,review,,,,Guémoukouraba (Kita) [ML010511] d=0.07; Bendougouba (Kita) [ML010502] d=0.57; Nioro Tougouné Rangaba (Nioro) [ML010611] d=0.60
+Kayes,Kasaro,review,,,,Kassaro (Kita) [ML010512] d=0.14; Karakoro (Kayes) [ML010311] d=0.38; Kassama (Kéniéba) [ML010408] d=0.43
+Kayes,Naamala Guimba,review,,,,Namala Guimba (Kita) [ML010523] d=0.08; Niambia (Bafoulabe) [ML010110] d=0.62; Tambaga (Kita) [ML010532] d=0.62
+Kayes,Niioro,review,,,,Nioro (Nioro) [ML010610] d=0.17; Sirakoro (Kita) [ML010530] d=0.50; Diéoura (Diéma) [ML010205] d=0.57
+Kayes,Siidibela,review,,,,Sidibela (Bafoulabe) [ML010112] d=0.11; Sadiola (Kayes) [ML010321] d=0.44; Diema (Diéma) [ML010204] d=0.56
+Kayes,Sér Siamanou,review,,,,Séro Siamanou (Kayes) [ML010325] d=0.08; Diamou (Kayes) [ML010303] d=0.55; Lakamané (Diéma) [ML010212] d=0.64
+Koulikoro,Alllahina,review,,,,Allahina (Nara) [ML020701] d=0.11; Niagadina (Kati) [ML020425] d=0.56; Nyamina (Koulikoro) [ML020606] d=0.56
+Koulikoro,Baancoumana,review,,,,Bancoumana (Kati) [ML020402] d=0.09; Banamba (Banamba) [ML020101] d=0.55; Banco (Dioila) [ML020201] d=0.55
+Koulikoro,Ben Kadi,ambiguous,,,,Ben Kadi (Banamba) [ML020102]; Benkadi (Dioila) [ML020202]; Benkadi (Kangaba) [ML020302]
+Koulikoro,Benkadi,ambiguous,,,,Ben Kadi (Banamba) [ML020102]; Benkadi (Dioila) [ML020202]; Benkadi (Kangaba) [ML020302]
+Koulikoro,Boossofala,review,,,,Bossofala (Kati) [ML020403] d=0.10; Bougoula (Kati) [ML020404] d=0.50; Tienfala (Koulikoro) [ML020608] d=0.60
+Koulikoro,Bwgoula,review,,,,Bougoula (Kati) [ML020404] d=0.25; Koula (Koulikoro) [ML020603] d=0.43; Bossofala (Kati) [ML020403] d=0.56
+Koulikoro,Dogodwman,review,,,,Dogodouman (Kati) [ML020411] d=0.20; Diouman (Dioila) [ML020207] d=0.44; Dogofry (Nara) [ML020704] d=0.56
+Koulikoro,Kaaran,review,,,,Karan (Kangaba) [ML020304] d=0.17; Kiban (Banamba) [ML020105] d=0.50; Daban (Kati) [ML020405] d=0.50
+Koulikoro,N'gbacoro Droit,review,,,,N'gabacoro Droit (Kati) [ML020423] d=0.07; Sébécoro I (Kolokani) [ML020509] d=0.54; Toubacoro (Banamba) [ML020108] d=0.62
+Koulikoro,Saanankoroba,review,,,,Sanankoroba (Kati) [ML020431] d=0.08; Dialakoroba (Kati) [ML020407] d=0.33; Sirakorola (Koulikoro) [ML020607] d=0.42
+Mopti,Basirou,review,,,,Bassirou (Mopti) [ML050601] d=0.12; Dourou (Bandiagara) [ML050108] d=0.57; Hairé (Douentza) [ML050408] d=0.57
+Mopti,Daandoli,review,,,,Dandoli (Bandiagara) [ML050104] d=0.12; Diondiori (Ténenkou) [ML050703] d=0.44; Pondori (Djenné) [ML050311] d=0.50
+Mopti,Haairé,review,,,,Hairé (Douentza) [ML050408] d=0.17; Barapireli (Koro) [ML050502] d=0.50; Sasalbe (Mopti) [ML050612] d=0.57
+Mopti,Korrou,review,,,,Korarou (Douentza) [ML050411] d=0.14; Dourou (Bandiagara) [ML050108] d=0.33; Koro (Koro) [ML050512] d=0.33
+Mopti,Kwnari,review,,,,Kounari (Mopti) [ML050608] d=0.29; Pignari (Bandiagara) [ML050115] d=0.43; Kareri (Ténenkou) [ML050704] d=0.50
+Mopti,Niiansanari,review,,,,Niansanari (Djenné) [ML050309] d=0.09; Diamnati (Bandiagara) [ML050105] d=0.55; Pignari (Bandiagara) [ML050115] d=0.55
+Mopti,Sooroly,review,,,,Soroly (Bandiagara) [ML050119] d=0.14; Koporo Pen (Koro) [ML050510] d=0.56; Sougoulbe (Ténenkou) [ML050707] d=0.56
+Mopti,Toori,review,,,,Tori (Bankass) [ML050212] d=0.20; Pondori (Djenné) [ML050311] d=0.43; Hombori (Douentza) [ML050409] d=0.43
+Segou,Baaguindabougou,review,,,,Baguindabougou (Ségou) [ML040601] d=0.07; Baramandougou (San) [ML040501] d=0.40; Diganibougou (Ségou) [ML040606] d=0.47
+Segou,Katéna,review,,,,Katiéna (Ségou) [ML040614] d=0.14; Diena (Bla) [ML040204] d=0.50; Kemeni (Bla) [ML040209] d=0.50
+Segou,Laanfiala,review,,,,Lanfiala (Tominian) [ML040705] d=0.11; Niala (Bla) [ML040212] d=0.44; Sama Foulala (Ségou) [ML040622] d=0.55
+Segou,Poogo,review,,,,Pogo (Niono) [ML040407] d=0.20; Kolongo (Macina) [ML040304] d=0.43; Sokolo (Niono) [ML040410] d=0.50
+Segou,Saansanding,review,,,,Sansanding (Ségou) [ML040624] d=0.09; Sanando (Baraouéli) [ML040108] d=0.45; Baramandougou (San) [ML040501] d=0.62
+Segou,Siiadougou,review,,,,Siadougou (San) [ML040518] d=0.10; Diédougou (Ségou) [ML040605] d=0.30; Kamiandougou (Ségou) [ML040613] d=0.33
+Sikasso,Deembela,review,,,,Dembela (Sikasso) [ML030504] d=0.12; Domba (Bougouni) [ML030107] d=0.50; Débélin (Bougouni) [ML030104] d=0.50
+Sikasso,Déblin,review,,,,Débélin (Bougouni) [ML030104] d=0.14; Défina (Bougouni) [ML030105] d=0.50; Dembela (Sikasso) [ML030504] d=0.57
+Sikasso,Faama,review,,,,Fama (Sikasso) [ML030509] d=0.20; Fakola (Kolondieba) [ML030302] d=0.50; Farako (Kolondieba) [ML030303] d=0.50
+Sikasso,Kapala,ambiguous,,,,Kapala (Koutiala) [ML030408]; Kapala (Sikasso) [ML030517]
+Sikasso,Miiena,review,,,,Miena (Koutiala) [ML030418] d=0.17; Ména (Kolondieba) [ML030308] d=0.33; Niéna (Sikasso) [ML030531] d=0.33
+Sikasso,Sibrila,review,,,,Sibirila (Bougouni) [ML030119] d=0.12; Kébila (Kolondieba) [ML030305] d=0.43; Sincina (Koutiala) [ML030426] d=0.43
+Sikasso,Tiiémala Banimonitié,review,,,,Tiémala Banimonitié (Bougouni) [ML030122] d=0.05; Sere Moussa Ani Samo de Siékorolé (Yanfolila) [ML030609] d=0.68; Kouroulamini (Bougouni) [ML030115] d=0.74
+Sikasso,Yinindwgou,review,,,,Yinindougou (Bougouni) [ML030124] d=0.18; Yiridougou (Bougouni) [ML030125] d=0.40; Tagandougou (Yanfolila) [ML030610] d=0.55
+Tombouctou,Haamzakoma,review,,,,Hamzakoma (Gourma-Rharous) [ML060304] d=0.10; Garbakoira (Diré) [ML060106] d=0.60; Razelma (Goundam) [ML060212] d=0.60
+Tombouctou,Iss Béry,review,,,,Issa Béry (Goundam) [ML060209] d=0.12; Sérere (Gourma-Rharous) [ML060309] d=0.57; Ber (Tombouctou) [ML060502] d=0.57
+Tombouctou,N'grkou,review,,,,N'gorkou (Niafunké) [ML060406] d=0.14; Tienkour (Diré) [ML060111] d=0.62; Sareyamou (Diré) [ML060110] d=0.67
+Tombouctou,Soouboundou,review,,,,Souboundou (Niafunké) [ML060407] d=0.09; Tombouctou (Tombouctou) [ML060506] d=0.45; Bintagoungou (Goundam) [ML060203] d=0.58
+Tombouctou,Tiin Aicha,review,,,,Tin Aicha (Goundam) [ML060215] d=0.11; Tindirma (Diré) [ML060112] d=0.44; Binga (Diré) [ML060102] d=0.67
+Tombouctou,Toonka,review,,,,Tonka (Goundam) [ML060216] d=0.17; Goundam (Goundam) [ML060208] d=0.57; Tienkour (Diré) [ML060111] d=0.62
+Bamako,Commune I,exact,ML090101,Commune I,Bamako,
+Bamako,Commune II,exact,ML090102,Commune II,Bamako,
+Bamako,Commune III,exact,ML090103,Commune III,Bamako,
+Bamako,Commune IV,exact,ML090104,Commune IV,Bamako,
+Bamako,Commune V,exact,ML090105,Commune V,Bamako,
+Gao,Anchawadi,exact,ML070301,Anchawadi,Gao,
+Gao,Andéramboukane,exact,ML100201,Andéramboukane,Anderamboukane,
+Gao,Bamba,exact,ML070201,Bamba,Bourem,
+Gao,Bourem,exact,ML070202,Bourem,Bourem,
+Gao,Gabéro,exact,ML070302,Gabéro,Gao,
+Gao,Gounzoureye,exact,ML070304,Gounzoureye,Gao,
+Gao,Ménaka,exact,ML100101,Ménaka,Ménaka,
+Gao,Ouattagouna,exact,ML070104,Ouattagouna,Ansongo,
+Gao,Sony Aliber,exact,ML070306,Sony Aliber,Gao,
+Gao,Taboye,exact,ML070203,Taboye,Bourem,
+Gao,Tessit,exact,ML070106,Tessit,Ansongo,
+Gao,Tin Hama,exact,ML070107,Tin Hama,Ansongo,
+Gao,Téméra,exact,ML070205,Téméra,Bourem,
+Kayes,Bafoulabe,exact,ML010101,Bafoulabe,Bafoulabe,
+Kayes,Baye,exact,ML010401,Baye,Kéniéba,
+Kayes,Bendougouba,exact,ML010502,Bendougouba,Kita,
+Kayes,Benkadi Founia,exact,ML010503,Benkadi Founia,Kita,
+Kayes,Boudofo,exact,ML010504,Boudofo,Kita,
+Kayes,Diabigué,exact,ML010602,Diabigué,Nioro,
+Kayes,Diaye Coura,exact,ML010604,Diaye Coura,Nioro,
+Kayes,Diokeli,exact,ML010105,Diokeli,Bafoulabe,
+Kayes,Diéoura,exact,ML010205,Diéoura,Diéma,
+Kayes,Fassoudebé,exact,ML010207,Fassoudebé,Diéma,
+Kayes,Gavinané,exact,ML010605,Gavinané,Nioro,
+Kayes,Gory,exact,ML010704,Gory,Yélimané,
+Kayes,Hawa Dembaya,exact,ML010310,Hawa Dembaya,Kayes,
+Kayes,Kirané Kaniaga,exact,ML010706,Kirané Kaniaga,Yélimané,
+Kayes,Kokofata,exact,ML010517,Kokofata,Kita,
+Kayes,Koulou,exact,ML010519,Koulou,Kita,
+Kayes,Liberté Dembaya,exact,ML010317,Liberté Dembaya,Kayes,
+Kayes,Logo,exact,ML010318,Logo,Kayes,
+Kayes,Madiga Sacko,exact,ML010214,Madiga Sacko,Diéma,
+Kayes,Niantanso,exact,ML010524,Niantanso,Kita,
+Kayes,Sandaré,exact,ML010612,Sandaré,Nioro,
+Kayes,Sansankidé,exact,ML010215,Sansankidé,Diéma,
+Kayes,Souransan Tomoto,exact,ML010531,Souransan Tomoto,Kita,
+Kayes,Sébékoro,exact,ML010526,Sébékoro,Kita,
+Kayes,Séféto Nord,exact,ML010527,Séféto Nord,Kita,
+Kayes,Ségala,exact,ML010324,Ségala,Kayes,
+Kayes,Tomora,exact,ML010113,Tomora,Bafoulabe,
+Koulikoro,Banco,exact,ML020201,Banco,Dioila,
+Koulikoro,Binko,exact,ML020203,Binko,Dioila,
+Koulikoro,Boron,exact,ML020103,Boron,Banamba,
+Koulikoro,Dialakoroba,exact,ML020407,Dialakoroba,Kati,
+Koulikoro,Didiéni,exact,ML020501,Didiéni,Kolokani,
+Koulikoro,Dogofry,exact,ML020704,Dogofry,Nara,
+Koulikoro,Dombila,exact,ML020412,Dombila,Kati,
+Koulikoro,Doumba,exact,ML020602,Doumba,Koulikoro,
+Koulikoro,Fallou,exact,ML020705,Fallou,Nara,
+Koulikoro,Guégnéka,exact,ML020209,Guégnéka,Dioila,
+Koulikoro,Kambila,exact,ML020417,Kambila,Kati,
+Koulikoro,Kerela,exact,ML020213,Kerela,Dioila,
+Koulikoro,Kilidougou,exact,ML020214,Kilidougou,Dioila,
+Koulikoro,Koula,exact,ML020603,Koula,Koulikoro,
+Koulikoro,Maramandougou,exact,ML020305,Maramandougou,Kangaba,
+Koulikoro,Mountougoula,exact,ML020422,Mountougoula,Kati,
+Koulikoro,Nossombougou,exact,ML020506,Nossombougou,Kolokani,
+Koulikoro,Ouolodo,exact,ML020507,Ouolodo,Kolokani,
+Koulikoro,Sanankoro Djitoumou,exact,ML020430,Sanankoro Djitoumou,Kati,
+Koulikoro,Sebete,exact,ML020107,Sebete,Banamba,
+Koulikoro,Tiélé,exact,ML020436,Tiélé,Kati,
+Koulikoro,Toubacoro,exact,ML020108,Toubacoro,Banamba,
+Koulikoro,Ténindougou,exact,ML020221,Ténindougou,Dioila,
+Koulikoro,Zan Coulibaly,exact,ML020223,Zan Coulibaly,Dioila,
+Mopti,Bamba,exact,ML050501,Bamba,Koro,
+Mopti,Dandougou Fakala,exact,ML050301,Dandougou Fakala,Djenné,
+Mopti,Dangol Boré,exact,ML050402,Dangol Boré,Douentza,
+Mopti,Diafarabé,exact,ML050701,Diafarabé,Ténenkou,
+Mopti,Diallassagou,exact,ML050203,Diallassagou,Bankass,
+Mopti,Dialloube,exact,ML050603,Dialloube,Mopti,
+Mopti,Dinangourou,exact,ML050505,Dinangourou,Koro,
+Mopti,Diougani,exact,ML050506,Diougani,Koro,
+Mopti,Dongo,exact,ML050804,Dongo,Youwarou,
+Mopti,Doucoumbo,exact,ML050107,Doucoumbo,Bandiagara,
+Mopti,Dougouténé I,exact,ML050507,Dougouténé I,Koro,
+Mopti,Déboye,exact,ML050802,Déboye,Youwarou,
+Mopti,Farimaké,exact,ML050805,Farimaké,Youwarou,
+Mopti,Femaye,exact,ML050305,Femaye,Djenné,
+Mopti,Kani Bozon,exact,ML050205,Kani Bozon,Bankass,
+Mopti,Kareri,exact,ML050704,Kareri,Ténenkou,
+Mopti,Kendé,exact,ML050109,Kendé,Bandiagara,
+Mopti,Koporokendie Na,exact,ML050511,Koporokendie Na,Koro,
+Mopti,Koubaye,exact,ML050607,Koubaye,Mopti,
+Mopti,Lessagou Habé,exact,ML050207,Lessagou Habé,Bankass,
+Mopti,Madougou,exact,ML050513,Madougou,Koro,
+Mopti,Ondougou,exact,ML050113,Ondougou,Bandiagara,
+Mopti,Ouonkoro,exact,ML050208,Ouonkoro,Bankass,
+Mopti,Sangha,exact,ML050117,Sangha,Bandiagara,
+Mopti,Sasalbe,exact,ML050612,Sasalbe,Mopti,
+Mopti,Socoura,exact,ML050614,Socoura,Mopti,
+Mopti,Sougoulbe,exact,ML050707,Sougoulbe,Ténenkou,
+Mopti,Ségué,exact,ML050209,Ségué,Bankass,
+Mopti,Tedie,exact,ML050415,Tedie,Douentza,
+Mopti,Timiri,exact,ML050120,Timiri,Bandiagara,
+Mopti,Togué Mourari,exact,ML050312,Togué Mourari,Djenné,
+Segou,Baraouéli,exact,ML040101,Baraouéli,Baraouéli,
+Segou,Beguene,exact,ML040201,Beguene,Bla,
+Segou,Cinzana,exact,ML040604,Cinzana,Ségou,
+Segou,Dah,exact,ML040502,Dah,San,
+Segou,Diabaly,exact,ML040401,Diabaly,Niono,
+Segou,Diora,exact,ML040702,Diora,Tominian,
+Segou,Diouna,exact,ML040608,Diouna,Ségou,
+Segou,Diéli,exact,ML040504,Diéli,San,
+Segou,Djéguena,exact,ML040505,Djéguena,San,
+Segou,Dougabougou,exact,ML040609,Dougabougou,Ségou,
+Segou,Dougouolo,exact,ML040205,Dougouolo,Bla,
+Segou,Fani,exact,ML040207,Fani,Bla,
+Segou,Fatine,exact,ML040612,Fatine,Ségou,
+Segou,Gouendo,exact,ML040104,Gouendo,Baraouéli,
+Segou,Kassorola,exact,ML040509,Kassorola,San,
+Segou,Kemeni,exact,ML040209,Kemeni,Bla,
+Segou,Kokry Centre,exact,ML040303,Kokry Centre,Macina,
+Segou,Konodimini,exact,ML040615,Konodimini,Ségou,
+Segou,Massala,exact,ML040617,Massala,Ségou,
+Segou,Matomo,exact,ML040306,Matomo,Macina,
+Segou,Monimpébougou,exact,ML040307,Monimpébougou,Macina,
+Segou,Moribila,exact,ML040511,Moribila,San,
+Segou,N'gara,exact,ML040618,N'gara,Ségou,
+Segou,N'gassola,exact,ML040107,N'gassola,Baraouéli,
+Segou,N'goa,exact,ML040512,N'goa,San,
+Segou,N'koumandougou,exact,ML040619,N'koumandougou,Ségou,
+Segou,Nampalari,exact,ML040405,Nampalari,Niono,
+Segou,Niala,exact,ML040212,Niala,Bla,
+Segou,Niamana,exact,ML040513,Niamana,San,
+Segou,Niono,exact,ML040406,Niono,Niono,
+Segou,Ouolon,exact,ML040516,Ouolon,San,
+Segou,Sakoiba,exact,ML040621,Sakoiba,Ségou,
+Segou,Saloba,exact,ML040308,Saloba,Macina,
+Segou,Saminé,exact,ML040623,Saminé,Ségou,
+Segou,Sanékuy,exact,ML040709,Sanékuy,Tominian,
+Segou,Sokolo,exact,ML040410,Sokolo,Niono,
+Segou,Souba,exact,ML040629,Souba,Ségou,
+Segou,Tamani,exact,ML040110,Tamani,Baraouéli,
+Segou,Teneni,exact,ML040523,Teneni,San,
+Segou,Tiemena,exact,ML040215,Tiemena,Bla,
+Segou,Timissa,exact,ML040710,Timissa,Tominian,
+Segou,Togou,exact,ML040630,Togou,Ségou,
+Segou,Tongué,exact,ML040311,Tongué,Macina,
+Segou,Toridaga Ko,exact,ML040411,Toridaga Ko,Niono,
+Segou,Touna,exact,ML040216,Touna,Bla,
+Segou,Waki,exact,ML040525,Waki,San,
+Sikasso,Benkadi,exact,ML030501,Benkadi,Sikasso,
+Sikasso,Boura,exact,ML030701,Boura,Yorosso,
+Sikasso,Danou,exact,ML030103,Danou,Bougouni,
+Sikasso,Djiguiya De Koloni,exact,ML030604,Djiguiya De Koloni,Yanfolila,
+Sikasso,Dogoni,exact,ML030507,Dogoni,Sikasso,
+Sikasso,Fakola,exact,ML030302,Fakola,Kolondieba,
+Sikasso,Fakolo,exact,ML030404,Fakolo,Koutiala,
+Sikasso,Farédiélé,exact,ML030108,Farédiélé,Bougouni,
+Sikasso,Finkolo,exact,ML030511,Finkolo,Sikasso,
+Sikasso,Gongasso,exact,ML030513,Gongasso,Sikasso,
+Sikasso,Gouadji Kao,exact,ML030406,Gouadji Kao,Koutiala,
+Sikasso,Kadiolo,exact,ML030204,Kadiolo,Kadiolo,
+Sikasso,Kignan,exact,ML030519,Kignan,Sikasso,
+Sikasso,Kofan,exact,ML030521,Kofan,Sikasso,
+Sikasso,Kolonigué,exact,ML030410,Kolonigué,Koutiala,
+Sikasso,Konina,exact,ML030411,Konina,Koutiala,
+Sikasso,Koumantou,exact,ML030114,Koumantou,Bougouni,
+Sikasso,Kouniana,exact,ML030415,Kouniana,Koutiala,
+Sikasso,Koury,exact,ML030705,Koury,Yorosso,
+Sikasso,Koussan,exact,ML030607,Koussan,Yanfolila,
+Sikasso,Kébila,exact,ML030305,Kébila,Kolondieba,
+Sikasso,Lobougoula,exact,ML030526,Lobougoula,Sikasso,
+Sikasso,Loulouni,exact,ML030206,Loulouni,Kadiolo,
+Sikasso,M'pessoba,exact,ML030419,M'pessoba,Koutiala,
+Sikasso,Méridiéla,exact,ML030116,Méridiéla,Bougouni,
+Sikasso,N'golodiana,exact,ML030310,N'golodiana,Kolondieba,
+Sikasso,N'tjikouna,exact,ML030533,N'tjikouna,Sikasso,
+Sikasso,Nafanga,exact,ML030420,Nafanga,Koutiala,
+Sikasso,Natien,exact,ML030530,Natien,Sikasso,
+Sikasso,Nongo-Souala,exact,ML030532,Nongo-Souala,Sikasso,
+Sikasso,Ouroun,exact,ML030117,Ouroun,Bougouni,
+Sikasso,Sikasso,exact,ML030536,Sikasso,Sikasso,
+Sikasso,Sincina,exact,ML030426,Sincina,Koutiala,
+Sikasso,Songoua,exact,ML030429,Songoua,Koutiala,
+Sikasso,Tagandougou,exact,ML030610,Tagandougou,Yanfolila,
+Sikasso,Tiankadi,exact,ML030539,Tiankadi,Sikasso,
+Sikasso,Tousseguela,exact,ML030312,Tousseguela,Kolondieba,
+Sikasso,Waténi,exact,ML030540,Waténi,Sikasso,
+Sikasso,Yognogo,exact,ML030432,Yognogo,Koutiala,
+Sikasso,Yorosso,exact,ML030709,Yorosso,Yorosso,
+Sikasso,Zaniena,exact,ML030543,Zaniena,Sikasso,
+Sikasso,Zanina,exact,ML030435,Zanina,Koutiala,
+Sikasso,Zantiébougou,exact,ML030126,Zantiébougou,Bougouni,
+Sikasso,Zégoua,exact,ML030209,Zégoua,Kadiolo,
+Tombouctou,Adarmalane,exact,ML060201,Adarmalane,Goundam,
+Tombouctou,Alzounoub,exact,ML060202,Alzounoub,Goundam,
+Tombouctou,Arham,exact,ML060101,Arham,Diré,
+Tombouctou,Bambara Maoudé,exact,ML060301,Bambara Maoudé,Gourma-Rharous,
+Tombouctou,Banikane Narhawa,exact,ML060401,Banikane Narhawa,Niafunké,
+Tombouctou,Ber,exact,ML060502,Ber,Tombouctou,
+Tombouctou,Bintagoungou,exact,ML060203,Bintagoungou,Goundam,
+Tombouctou,Bourem Inaly,exact,ML060503,Bourem Inaly,Tombouctou,
+Tombouctou,Bourem Sidi Amar,exact,ML060103,Bourem Sidi Amar,Diré,
+Tombouctou,Dianké,exact,ML060402,Dianké,Niafunké,
+Tombouctou,Diré,exact,ML060105,Diré,Diré,
+Tombouctou,Douékire,exact,ML060204,Douékire,Goundam,
+Tombouctou,Essakane,exact,ML060206,Essakane,Goundam,
+Tombouctou,Fittouga,exact,ML060403,Fittouga,Niafunké,
+Tombouctou,Garbakoira,exact,ML060106,Garbakoira,Diré,
+Tombouctou,Gargando,exact,ML060207,Gargando,Goundam,
+Tombouctou,Inadiatafane,exact,ML060306,Inadiatafane,Gourma-Rharous,
+Tombouctou,Kaneye,exact,ML060210,Kaneye,Goundam,
+Tombouctou,Kirchamba,exact,ML060108,Kirchamba,Diré,
+Tombouctou,Léré,exact,ML060405,Léré,Niafunké,
+Tombouctou,Ouinerden,exact,ML060307,Ouinerden,Gourma-Rharous,
+Tombouctou,Razelma,exact,ML060212,Razelma,Goundam,
+Tombouctou,Rharous,exact,ML060308,Rharous,Gourma-Rharous,
+Tombouctou,Salam,exact,ML060505,Salam,Tombouctou,
+Tombouctou,Sareyamou,exact,ML060110,Sareyamou,Diré,
+Tombouctou,Soumpi,exact,ML060408,Soumpi,Niafunké,
+Tombouctou,Tienkour,exact,ML060111,Tienkour,Diré,
+Tombouctou,Tilemsi,exact,ML060214,Tilemsi,Goundam,
+Tombouctou,Tindirma,exact,ML060112,Tindirma,Diré,
+Tombouctou,Tombouctou,exact,ML060506,Tombouctou,Tombouctou,
+Tombouctou,Télé,exact,ML060213,Télé,Goundam,

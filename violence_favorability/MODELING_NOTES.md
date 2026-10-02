@@ -1,339 +1,277 @@
-# Modeling Notes: Local Violence and Leader Favorability (Mali)
+# Modeling Notes: Violence Against Civilians and Leader Favorability (Mali)
 
-Reference for analysts and AI coding assistants working on this project. It records what the code does, why each modeling decision was made, how to read the results, and how to troubleshoot. Give this file to an AI tool as context before asking it to modify or debug the code.
+**Purpose of this file.** A complete reference for this project: the study, the design, every modeling decision and why it was made, how to read the results, how the code is organized, and how to troubleshoot it. Give it to an AI assistant as context before asking for help. Section 15 tells the assistant how to behave.
 
----
+------------------------------------------------------------------------
 
-## 1. Research question
+## 1. The study
 
-Is violence in a respondent's commune associated with how favorably they view the national leader, after accounting for region, survey wave, and respondent characteristics?
+**Question.** Is violence against civilians in a respondent's commune associated with how favorably they view the national leader, after accounting for region, survey wave, and who was interviewed?
 
-- **Outcome:** `fav`, binary (1 = favorable view of the leader).
-- **Exposure:** ACLED violent events per commune (admin-3) per survey wave.
-- **Data:** three survey waves, each an independent stratified, clustered sample with its own weights.
-- **Audience:** results must be explainable to non-technical customers, so effects are reported in percentage points.
+**Audience.** The client must explain results to policymakers and other non-technical customers. Results are therefore reported as percentages and percentage points, and maps must be correct and unambiguous.
 
----
+**Data** - Three survey waves, a few months apart, each an independent sample. - Outcome `fav`: 1 = favorable view of the leader, 0 = not. - Exposure: ACLED events of **violence against civilians** (events, not fatalities) counted for each surveyed commune and wave on fixed dates. The counts were attached to the survey file by the project team; only surveyed communes have counts. - Geography: region (stratum), commune, village. There is no cercle column in the survey. - No external data (population, coordinates, or other sources) can be added.
 
-## 2. Files and run order
+**What "explainable" means here.** One main model, one sentence of interpretation, and predicted percentages at a few event counts.
 
-| File | Role | Edit it? |
-|---|---|---|
-| `R/prep_data.R` | Reads both files, maps column names, matches communes by name, builds exposures and design columns | **Yes: the only file to edit for new data** |
-| `diagnostics.R` | Name-matching checks and the K, A, P, W diagnostics | Thresholds only |
-| `models.R` | Fits Models 1 to 4 and the sensitivity models, computes every AME, leave-one-region-out, Model 3 checks. Plain top-to-bottom script for line-by-line debugging | To change models |
-| `maps.R` | Builds the map data and the `draw_map()` helper | Rarely |
-| `analysis.qmd` | Presents results only: tables, figures, maps, text; renders to PDF (Typst) | Wording and figures |
-| `R/boundaries.R` | Map helpers: `clean_name()`, `region_key()`, `region_alias`, readers for the boundary files | Add region spellings to `region_alias` |
-| `make_boundaries.R` | One-time build of the boundary files from raw geoBoundaries GeoJSON | No |
-| `boundaries/mali_boundaries.gpkg` | Map layers adm0 to adm3 | No |
-| `boundaries/mali_admin_dictionary.csv` | One row per commune with its cercle and region | Look up spellings here |
-| `simulate_data.R` | Simulated test data with a known violence effect | Only for testing |
+------------------------------------------------------------------------
 
-**Run order:**
-1. `source("diagnostics.R")` and read both printed tables.
-2. Fix any name problems in `R/prep_data.R` and repeat step 1.
-3. `source("models.R")` (or step through it line by line) and check the printed `results` table.
-4. Render `analysis.qmd`.
+## 2. Survey design
 
-Dependency chain: `analysis.qmd` sources `models.R` and `maps.R`; `models.R` sources `diagnostics.R`, which sources `R/prep_data.R`, which sources `R/boundaries.R`.
+**Working assumption: a two-stage design within each wave.** - Strata: region (8 regions, the pre-2016 structure). - Stage 1 (PSU): communes. - Stage 2 (SSU): villages within communes. - Respondents within villages.
 
-**Debugging tip:** every number in the report is an object created in `models.R` or `maps.R` (`results`, `main_within`, `loo`, `u_hat`, `map_fav`, ...). If the report fails, run those scripts in the console first; the error will point to a specific line instead of a chunk.
+This has not yet been confirmed with the survey team. To check from the data: if the number of communes per region is similar across waves and each commune contains several villages, communes were very likely the PSUs.
 
-**Packages:** `survey`, `lme4`, `marginaleffects`, `sf` (maps), `patchwork`, `viridis`, `knitr`, `glue`, `pacman`, `tidyverse`. No internet access is needed at run time.
+**How the code implements it** (`R/prep_data.R`, `models.R`): 1. Codes are made wave-specific, because each wave is its own design: `strata_w = paste(wave, region)`, `commune_w = paste(wave, commune_id)`, `village_w = paste(wave, commune_id, village)`. 2. Weights are rescaled within wave, `wt_scaled = weight * n_w / sum(weight)`, so the wave with the largest population total does not dominate the pooled models. 3. One design object: `svydesign(ids = ~commune_w + village_w, strata = ~strata_w, weights = ~wt_scaled, nest = TRUE)`. 4. `options(survey.lonely.psu = "adjust")` handles strata left with one commune after subsetting.
 
----
+**Why standard errors come from communes.** Taylor linearization (without finite population corrections) computes variance from the first-stage units, the communes. Commune totals include all villages and respondents in the commune, so village-level clustering is covered too. This matters here because violence is measured at the commune: everyone in a commune-wave shares one value.
 
-## 3. Data contract
+**If villages turn out to be the PSUs** (single-stage design): keep `ids = ~commune_w + village_w` anyway, or use `ids = ~commune_w`. Clustering at the commune, the level where violence is assigned, is the conservative and correct choice for a commune-level exposure. Using villages as clusters would understate the standard error of the violence effect.
 
-### Survey file (one row per respondent)
+**Never add a random effect for PSUs to a model that uses the survey design.** The design already handles that clustering through the standard errors; a random effect would count it twice.
+
+------------------------------------------------------------------------
+
+## 3. Files and run order
+
+| File | Role | Edit? |
+|------------------------|------------------------|------------------------|
+| `R/prep_data.R` | Reads the survey, maps column names, builds violence variables and design columns | **Yes: the only file to edit for new data** |
+| `R/boundaries.R` | Name-cleaning helpers, region spelling table, boundary readers | Add region spellings to `region_alias` |
+| `match_communes.R` | Proposes matches from survey commune names to the official list | No |
+| `matching/crosswalk.csv` | Reviewed matches (made by a person) | Yes, by hand |
+| `diagnostics.R` | Data checks and K, A, P, W | Thresholds only |
+| `models.R` | Models M1 to M4, effects, predictions, leave-one-region-out | To change models |
+| `maps.R` | Builds maps and saves PDF and PNG copies to `output/maps/` | Rarely |
+| `analysis.qmd` | Report (Typst PDF); presentation only | Wording and figures |
+| `testing/` | Simulation and a stand-in for manual review | Testing only |
+| `setup_done_do_not_rerun/` | One-time boundary build (already run) | No |
+
+Run order: edit `R/prep_data.R`, then `match_communes.R`, review the draft, `diagnostics.R`, `models.R`, then render `analysis.qmd`. Each script sources the one before it: `analysis.qmd` sources `models.R` and `maps.R`; `models.R` sources `diagnostics.R`; `diagnostics.R` sources `R/prep_data.R`; which sources `R/boundaries.R`.
+
+**Debugging:** every number in the report is an object created in `models.R` or `maps.R` (`results`, `main`, `predicted`, `loo`, `u_hat`, `map_data`). If rendering fails, run those scripts in the console first; errors will point to a line rather than a report chunk.
+
+**Packages:** `survey`, `lme4`, `marginaleffects`, `sf`, `ggplot2` (via `tidyverse`), `viridis`, `patchwork`, `knitr`, `glue`, `stringi`, `pacman`. Nothing connects to the internet. `sampling` is used only by the simulation.
+
+------------------------------------------------------------------------
+
+## 4. Data contract (`R/prep_data.R`, section 2)
+
+Standard names on the left are used everywhere; the right-hand side is the real column name.
 
 | Standard name | Meaning |
-|---|---|
+|------------------------------------|------------------------------------|
 | `wave` | 1, 2, 3 |
-| `strata` | design stratum for that wave (region) |
-| `psu` | PSU code for that wave |
-| `wt` | final respondent weight for that wave |
-| `region`, `commune` | names; `cercle` optional (see section 6) |
+| `region` | stratum; one of the 8 survey regions |
+| `commune` | commune name as typed in the survey |
+| `village` | village name or code |
+| `weight` | final weight for that wave |
 | `fav` | outcome, 0/1 |
-| `female`, `age`, `ethnicity`, `education`, `urban` | respondent covariates |
-| `local_gov`, `democracy` | attitudes (sensitivity model only) |
-| `perceived`, `stress` | possible mediators (sensitivity model only) |
+| `events` | ACLED violence-against-civilians events in the commune that wave |
+| `female`, `age`, `ethnicity`, `education`, `urban` | respondent covariates (main models) |
+| `local_gov`, `democracy`, `perceived`, `stress` | attitudes (sensitivity model only) |
 
-### Violence file (one row per commune and wave, or per event)
+`prep_data.R` also creates `commune_id`: the official P-code when the reviewed crosswalk exists (so a commune spelled differently across waves is one commune), otherwise the cleaned `region|commune` name.
 
-| Standard name | Meaning |
-|---|---|
-| `wave`, `region`, `commune` | names; `cercle` optional |
-| `events` | event count (set to 1 if the file has one row per event) |
+------------------------------------------------------------------------
 
-Column mapping happens in `dplyr::transmute()` blocks in `R/prep_data.R`. The left side is the standard name used everywhere else; the right side is the real column name.
+## 5. Commune name matching (maps, and a stable commune ID)
 
----
+The models only need commune names to group respondents. Matching to the official list is needed for the maps and to unify spellings.
 
-## 4. Survey design
+**Workflow** 1. Export distinct `region, commune` from the merged survey to `matching/communes_from_survey.csv`. 2. `source("match_communes.R")` writes `matching/crosswalk_draft.csv`: - `exact`: cleaned name matches exactly one official commune in that region. Done. - `ambiguous`: the name exists more than once in that region; all options are listed with their cercle. - `review`: no exact match; the 3 closest names in the region are listed, with codes and a distance (0 = identical; about 0.2 = one letter in five differs). 3. A person fills `adm3_code` for every non-exact row (or leaves it blank if the commune cannot be placed) and saves the file as `matching/crosswalk.csv`. The script never overwrites this file.
 
-**Each wave is its own design.** Strata and PSUs are drawn separately in each wave, and weights sum to each wave's own population total. The code therefore:
+**Rules** - Never accept a suggested match without review. A wrong commune on a map given to a policymaker is a real harm. - Names are cleaned before comparing: accents, case, spaces and punctuation removed ("Ségou" and "SEGOU" both become `segou`). - Ménaka is searched under Gao, because the OCHA 2021 boundaries separate Ménaka while the survey's 8 regions do not. - **One name, one commune.** Some names repeat within a region (Benkadi in Koulikoro; Kapala in Sikasso; Somo in Ségou). If two same-named communes were both surveyed, the survey name alone cannot separate them. `prep_data.R` stops if the crosswalk has two rows for one `region + commune`, because joining would duplicate respondents. Resolve such names with the survey team (for example from village lists) before analysis. - Unplaced communes are never dropped silently: each map caption states how many survey communes could not be placed.
 
-1. Makes design codes wave-specific: `strata_w = paste(wave, strata)`, `psu_w = paste(wave, psu)`, `commune_w = paste(wave, commune_key)`. Codes never repeat across waves.
-2. Rescales weights within wave so each sums to that wave's sample size: `wt_scaled = wt * n_w / sum(wt)`. Without this, the wave with the largest population total dominates.
-3. Builds one pooled `svydesign(..., nest = TRUE)`, which is the three designs stacked side by side.
-4. Sets `options(survey.lonely.psu = "adjust")` for strata left with a single cluster after subsetting.
+**Tested on simulated data** (275 communes, 50 deliberately misspelled): all 221 exact matches were correct; for every name needing review the correct commune was among the suggestions, and it was the first suggestion in 52 of 54 rows.
 
-**Two clustering levels, same data:**
+------------------------------------------------------------------------
 
-| Design object | `ids =` | Used by | Why |
-|---|---|---|---|
-| `des_psu` | `~psu_w` | Model 1 | The original specification |
-| `des_commune` | `~commune_w` | Model 4 | Violence is assigned at the commune, so everyone in a commune-wave shares one value. Cluster at the level where exposure is assigned. |
+## 6. Violence measure
 
-Clustering at the commune is conservative relative to the PSU: if a commune contains several PSUs, commune clustering treats them as one cluster. Diagnostic P (section 7) reports how often this happens.
+For commune $c$ in wave $w$, with $E_{cw}$ events:
 
-**Do not add a PSU random effect to a model that already uses the survey design.** The design already accounts for PSU clustering through the standard errors; adding a random effect counts that clustering twice.
+$$V_{cw} = \log(1 + E_{cw})$$
 
----
+- Many communes have zero events and a few have many; the log compresses the long tail, and adding 1 keeps zero defined.
+- **Exact meaning of a one-unit change:** $V$ rising by 1 means $(1 + E)$ is multiplied by $e \approx 2.72$. $V$ rising by $\log 2 \approx 0.69$ means $(1 + E)$ doubles. For counts well above zero, doubling $(1 + E)$ is close to doubling $E$; for small counts it is not (0 to 1 event is a doubling of $1 + E$).
+- Because these steps are hard to picture, the headline is **predicted favorability at 0, 1, 5, and 20 events**.
 
-## 5. Exposure construction
+**Region-wave measure (Model 1 only):** $V_{rw} = \log(1 + \sum_{c \in S_{rw}} E_{cw})$, summing over the communes **surveyed** in region $r$ and wave $w$. Only surveyed communes have counts, so this is not a complete regional total.
 
-| Variable | Formula | Used by |
-|---|---|---|
-| `events` | sum of commune events in that wave; **0 if the commune has no row in the violence file** | all |
-| `v_region` | `log1p(sum of events over ALL communes in the region, that wave)` | Model 1 |
-| `v_commune` | `log1p(events)` | building blocks |
-| `v_between` | mean of `v_commune` over the waves in which the commune was **surveyed**, each wave counted once | Models 2 to 4 |
-| `v_within` | `v_commune - v_between` | Models 2 to 4 (main quantity) |
-| `any_event`, `any_between`, `any_within` | same construction for "any event versus none" | binary sensitivity |
+**Within/between split (appendix only):** $\bar V_c$ = mean of $V_{cw}$ over the waves in which commune $c$ was surveyed (each wave counted once); within = $V_{cw} - \bar V_c$. A commune surveyed once has within = 0.
 
-**Why `log1p`:** event counts are heavily right-skewed with many zeros. The log compresses large counts; `+1` keeps zeros defined. One unit of `log1p` is about a 2.7-fold change in events; about 0.69 units is a doubling.
+------------------------------------------------------------------------
 
-**Why within/between (Mundlak):** violence was requested to be mean-centered at the commune level. Centering alone would discard the between-commune comparison, so both parts are kept:
-- `v_within` asks: when a commune is more violent than its own usual level, is favorability lower? Stable commune features cannot drive this.
-- `v_between` asks: are people in usually more violent communes less favorable? This compares different communes and is more exposed to confounding.
+## 7. Diagnostics: K, A, P, W (`diagnostics.R`)
 
-**A commune surveyed in only one wave has `v_within = 0`** and contributes nothing to the within estimate. Diagnostic W reports how much within variation exists.
+Computed before any model, so the specification follows from the data structure rather than from results.
 
-The commune mean uses only waves in which the commune was surveyed, not all three waves of violence data. Using unsurveyed waves would make `v_within` nonzero for single-wave communes without any repeated favorability measurement, which is not a within-commune comparison.
+|   | Definition | Flag |
+|------------------------|------------------------|------------------------|
+| Check | Commune-waves with more than one event count | Must be 0 (one commune-wave shares one count) |
+| **K** | Commune-wave cells (share with at least one event) |  |
+| **A, region** | $R^2$ of $V_{rw}$ on region + wave dummies, across region-wave cells | Above 90%: Model 1 cannot inform the violence effect |
+| **A, commune** | $R^2$ of $V_{cw}$ on region + wave dummies, across commune-wave cells | Above 90%: commune exposure is also collinear with the dummies |
+| **P** | Median villages per commune-wave | Shows the second stage |
+| **W** | $\operatorname{var}(V^{\text{within}}) / \operatorname{var}(V_{cw})$, and communes surveyed in 2+ waves | Below 10%: within estimate is appendix only |
 
----
+**Why A matters.** Variation in the exposure that the dummies explain cannot inform its coefficient. An earlier region-level version of the real data had A, region of about 98%.
 
-## 6. Commune name matching
+**Real data so far.** The within-commune share was about 6% (stated by Kevin), with ample between-commune variation. The main estimate is therefore a comparison between communes in the same region, adjusted for wave.
 
-Communes are identified by **name**, not ID. The key is built by `make_key()` in `R/prep_data.R`:
+------------------------------------------------------------------------
 
-- Each part is normalized with `clean_name()`: accents removed, lower case, spaces and punctuation stripped. "Ségou" and "SEGOU" both become `segou`.
-- Region names first pass through `region_alias` in `R/boundaries.R` (for example, the boundary file spells "Koulikouro"; it is mapped to "Koulikoro").
-- Parts are joined with `|`, for example `segou|markala`.
-- `key_cols` sets which parts are used. Default: `c("region", "commune")`.
+## 8. Models (`models.R`)
 
-**Why region is included:** commune names repeat across Mali (13 distinct names are shared by two or more communes in the official list). Within a region, four still repeat (Benkadi three times in Koulikoro; Diedougou in Koulikoro; Somo in Segou; Kapala in Sikasso). All names are unique within region plus cercle.
+Shared base (separate region and wave dummies, kept separate at Kevin's request so other coefficients stay interpretable; references Bamako and wave 1):
 
-**If diagnostics report ambiguous names** and both files have a cercle column, set `key_cols <- c("region", "cercle", "commune")`. In the simulation this resolved all four, and two communes that had been picking up their namesakes' events were corrected.
+$$\eta_i = \beta_0 + \sum_{r \neq \text{Bamako}} \alpha_r \,\text{Region}_r + \sum_{w=2}^{3} \gamma_w \,\text{Wave}_w + \mathbf{x}_i'\boldsymbol{\beta}$$
 
-**Silent failure to watch for:** a sampled commune with no match in the violence file is assigned 0 events. A misspelling therefore looks like a peaceful commune. `diagnostics.R` compares both files against the official commune list (`boundaries/mali_admin_dictionary.csv`) to separate spelling problems from true zeros.
+with $\mathbf{x}_i$ = female, age per decade (centered), ethnicity (most common group as reference), education, urban.
 
-**Dictionary caveat:** the commune-cercle-region links in the dictionary are not an official code list. `make_boundaries.R` assigned each unit to the parent polygon it overlaps most. Counts match Mali's known structure (701 communes, 50 cercles including Bamako, 9 regions under the older regional structure). Newer regions (Ménaka, Taoudénit, and the later reorganization) are not represented.
+| Model | $\operatorname{logit}\Pr(y_i=1)$ | Clustering | Weights | Role |
+|---------------|---------------|---------------|---------------|---------------|
+| M1 | $\eta_i + \beta_R V_{rw}$ | Survey design | Yes | Original specification; shows the region-level problem |
+| M2 | $\eta_i + \beta_V V_{cw}$ | None | No | Naive comparison |
+| M3 | $\eta_i + \beta_V V_{cw} + u_c$, $u_c \sim N(0,\tau^2)$ | Commune random intercept | No | Multilevel alternative |
+| **M4** | $\eta_i + \beta_V V_{cw}$ | Survey design | Yes | **Main model** |
+| M4 + attitudes | M4 + `local_gov`, `democracy_c`, `perceived_c`, `stress_c` | Survey design | Yes | Descriptive: attitudes may themselves respond to violence |
+| M4 within/between | $\eta_i + \beta_W (V_{cw} - \bar V_c) + \beta_B \bar V_c$ | Survey design | Yes | Appendix |
 
----
+Each step changes one thing: M1 to M2 the exposure, M2 to M3 clustering by random effect, M3 to M4 survey design instead of random effect.
 
-## 7. Diagnostics: K, A, P, W
+**Estimation** - M1 and M4: `survey::svyglm(..., family = quasibinomial())`. Pseudo-maximum likelihood solving $\sum_i w^*_i \mathbf{x}_i (y_i - \mu_i) = 0$. `quasibinomial` gives the same estimates as `binomial` and avoids warnings about non-integer weighted counts. - Variance (Binder, 1983), strata $h$, communes $j$, $n_h$ communes in stratum $h$: $$\widehat{\operatorname{Var}}(\hat{\boldsymbol\beta}) = \hat{\mathbf J}^{-1}\left[\sum_h \frac{n_h}{n_h-1}\sum_{j}(\mathbf z_{hj}-\bar{\mathbf z}_h)(\mathbf z_{hj}-\bar{\mathbf z}_h)'\right]\hat{\mathbf J}^{-1},\quad \mathbf z_{hj}=\sum_{i\in(h,j)} w^*_i\mathbf x_i(y_i-\hat\mu_i)$$ - M2: `glm`, model-based standard errors (too small; shown for contrast). - M3: `lme4::glmer`, Laplace approximation, `optimizer = "bobyqa"`, unweighted. - AIC, BIC, and likelihood ratio tests **cannot** compare `svyglm` with `glm` or `glmer` (pseudo-likelihood). Compare AMEs and standard errors only.
 
-Computed in `diagnostics.R` before any model is fit, so the specification is chosen from the design rather than from the results.
+**Reported effects** - AME: design-weighted average of $\partial\hat\mu_i/\partial V$, in percentage points per one-unit change in $V$. Calls: survey models `avg_slopes(m, variables = "v_commune", newdata = ad, wts = "wt_scaled")`; M2 `avg_slopes(m2, variables = "v_commune", newdata = ad)`; M3 adds `re.form = NA`. - Predicted favorability: `avg_predictions(m4, variables = list(v_commune = log1p(c(0, 1, 5, 20))), newdata = ad, wts = "wt_scaled")`. Meaning: if every respondent's commune had that many events, other characteristics as observed, design-weighted. - M3's effect is for a typical commune ($u_c = 0$), a conditional effect. M1, M2 and M4 give population-averaged effects. Under a logit link these differ slightly, by more when $\tau^2$ is larger (approximate attenuation factor $\sqrt{1 + 0.346\,\tau^2}$; Zeger, Liang & Albert, 1988). Do not read small M3 versus M4 differences as substantive. - Leave one region out: M4 refit 8 times, each without one region.
 
-| | Definition | Threshold (editable) | If it fails |
-|---|---|---|---|
-| **K** | Commune-wave cells in the analysis sample (share with at least one event) | at least 100 | Little gain over region-wave exposure |
-| **A, region** | R-squared of `v_region ~ region + wave` across region-wave cells | above 90% = problem | Expected to fail: this is the evidence that Model 1 cannot answer the question |
-| **A, commune** | R-squared of `v_commune ~ region + wave` across commune-wave cells | above 90% = problem | Commune exposure is still collinear with the dummies; report descriptively only |
-| **P** | Median PSUs per commune-wave cell (share of cells with more than one) | above 1 | Confirms commune-level clustering in Model 4 is needed |
-| **W** | `var(v_within) / var(v_commune)` across cells; plus communes surveyed 2+ waves and their share of respondents | at least 10% | Within estimate will be very wide; lead with the between estimate and describe it as cross-sectional |
-
-**Why A matters:** whatever share of exposure variation the region and wave dummies explain cannot inform the violence coefficient. With A = 98%, Model 1 estimates the violence effect from 2% of the variation spread over 24 values (about 14 residual degrees of freedom).
-
-**Simulation results** (for reference): K = 687 cells (41% with an event); A, region = 98%; A, commune = 9%; P = 1 (10% of cells have more than one PSU); W = 27% (205 communes surveyed more than once, 74% of respondents).
-
----
-
-## 8. The four models
-
-Each step changes **one** thing, so any difference between neighbouring models has a single explanation.
-
-| Model | Exposure | Clustering | Weights | Estimator | Purpose |
-|---|---|---|---|---|---|
-| M1 | `v_region` | PSU (design) | Yes | `survey::svyglm` | Original specification; shows the identification problem |
-| M2 | `v_within` + `v_between` | None | No | `glm` | Gain from finer exposure, before handling clustering |
-| M3 | `v_within` + `v_between` | `(1 \| commune_key)` | No | `lme4::glmer` | Multilevel alternative |
-| M4 | `v_within` + `v_between` | Commune (design) | Yes | `survey::svyglm` | **Main model** |
-
-Sensitivity versions of M4: `M4 + attitudes` (adds `local_gov`, `democracy_c`, `perceived_c`, `stress_c`) and `M4, any event` (binary exposure).
-
-### Equations
-
-Shared base (region and wave dummies plus respondent covariates; Bamako and wave 1 are references):
-
-$$
-\eta_i = \beta_0 + \sum_{r \neq \text{Bamako}} \alpha_r \text{Region}_r + \sum_{w=2}^{3} \gamma_w \text{Wave}_w + \mathbf{x}_i'\boldsymbol\beta
-$$
-
-- M1: $\operatorname{logit}\Pr(y_i=1) = \eta_i + \beta_R V_{rw}$, with $V_{rw} = \log(1 + \sum_{c \in r} E_{cw})$
-- M2, M4: $\operatorname{logit}\Pr(y_i=1) = \eta_i + \beta_W V^{\text{within}}_{cw} + \beta_B \bar V_c$
-- M3: same as M2 plus $u_c$, with $u_c \sim N(0, \tau^2)$
-
-with $V_{cw} = \log(1 + E_{cw})$, $\bar V_c = \frac{1}{T_c}\sum_{w \in S_c} V_{cw}$ ($S_c$ = waves in which commune $c$ was surveyed), and $V^{\text{within}}_{cw} = V_{cw} - \bar V_c$.
-
-### Estimation details
-
-- `svyglm` uses `family = quasibinomial()` (avoids warnings about non-integer weighted counts; estimates are identical to binomial). Variance by Taylor linearization.
-- `glmer` uses the Laplace approximation and `optimizer = "bobyqa"`. It is unweighted.
-- AIC, BIC, and likelihood ratio tests **cannot** compare `svyglm` with `glm` or `glmer`, because `svyglm` maximizes a weighted pseudo-likelihood. Compare models by their AMEs and standard errors only.
-
----
+------------------------------------------------------------------------
 
 ## 9. Reading the results
 
-### Average marginal effect (AME)
-
-The AME is the average change in the predicted probability of a favorable view, in **percentage points**, per one-unit increase in the exposure. Computed with `marginaleffects::avg_slopes()`:
-
-| Model | Call |
-|---|---|
-| M1, M4 | `avg_slopes(m, variables = ..., newdata = ad, wts = "wt_scaled")` |
-| M2 | `avg_slopes(m, variables = ...)` |
-| M3 | `avg_slopes(m, variables = ..., re.form = NA)` |
-
-"Per doubling" = AME times log(2), about 0.69. This is approximate because `log1p` is not exactly `log` at small counts.
-
-### Conditional versus marginal (M3 versus M4)
-
-`glmer` coefficients are commune-specific (conditional); `svyglm` coefficients are population-averaged (marginal). Under a logit link the marginal coefficient is attenuated relative to the conditional, roughly by a factor of $\sqrt{1 + 0.346\,\tau^2}$ (Zeger, Liang & Albert, 1988; approximate). The M3 AME with `re.form = NA` is evaluated at $u_c = 0$, a typical commune, not averaged over communes. With small $\tau^2$ (0.07 in the simulation) the difference is negligible, but **do not interpret small differences between M3 and M4 as substantive**.
-
-### What each table and figure shows
-
-| Item | Read it as |
-|---|---|
-| Name-matching table | Fix any nonzero "not in official list" rows before interpreting anything |
-| Diagnostics table | A, region near 100% means Model 1 is uninformative; A, commune low means Models 2 to 4 have variation to work with |
-| Spread figure | Communes within a region-wave differ widely; Model 1 gives them all one value |
-| AME table and figure | Main result is M4 "Within commune". M2 vs M4 standard errors show the clustering correction |
-| Prediction curve | Predicted favorability as a commune's violence moves above or below its own usual level |
-| Violence map | Exposure by commune and wave (darker red = more events) |
-| Model 4 map | Design-weighted percent favorable per commune-wave; few respondents each (median about 7), so read broad patterns only |
-| Model 3 map | Commune random intercepts: green more favorable than predicted, purple less. Large same-colour clusters suggest a missing geographic factor |
-| Leave one region out | If dropping one region moves the estimate a lot, that region drives the result |
+| Output | What it says |
+|------------------------------------|------------------------------------|
+| Predicted favorability table | **Headline.** Percent favorable if every commune had 0, 1, 5, or 20 events |
+| AME table | M1 wide and uninformative; M2 to M4 similar estimates; M4's wider interval is the honest one |
+| Diagnostics table | A, region high and A, commune low is the argument for commune exposure |
+| Spread figure | Communes within one region-wave differ widely; a region measure erases this |
+| Violence map | Events per surveyed commune and wave; gray = not surveyed (missing, not zero) |
+| Favorability map | Design-weighted percent favorable per commune-wave; few respondents each, read broad patterns only |
+| Model 3 map | Commune effects; large same-colored areas suggest a missing geographic factor |
+| Leave one region out | If one region moves the estimate a lot, that region drives the result |
 | Binned residuals, calibration | Points outside bounds or a curve suggest a missing nonlinearity |
+| Appendix within/between | Within uses only repeat communes with changing violence; imprecise when W is small |
 
-### Plain-language template for customers
+**Plain-language template**
 
-> We compared the same communes across survey rounds. When a commune saw more violent events than it usually does, residents were about X percentage points less likely to view the leader favorably for each doubling of events, after accounting for region, survey round, and who was interviewed. The range of plausible values is L to U points.
+> Among people surveyed in the same region and survey round, those living in communes with more violence against civilians were less likely to view the leader favorably. If every commune had experienced no such events, about X% would be expected to hold a favorable view; with 5 events, about Y%. This compares different communes, so it shows an association, not proof that violence caused the change.
 
-### What not to say
+**Do not** - call the result causal; - show odds ratios to customers (they are read as probabilities); - interpret a single commune on the favorability map; - present M4 + attitudes as the main estimate; - describe Model 1 as "wrong" on real data: it is **unable to distinguish an effect from no effect**, which diagnostic A shows before any outcome is examined.
 
-- Do not call the result causal. Say "associated with."
-- Do not present odds ratios to customers; they are routinely misread as probabilities.
-- Do not interpret a single commune's map value; each rests on a handful of respondents.
-- Do not present the M4 + attitudes row as the main estimate; violence may change those attitudes.
-- Do not describe Model 1 as "wrong" on real data; describe it as **unable to distinguish an effect from no effect**, which is shown by diagnostic A before any outcome is examined.
+------------------------------------------------------------------------
 
-### Simulation check
+## 10. Maps (`maps.R`)
 
-The simulated data set a true within effect of -0.30 on the logit scale. M2, M3, and M4 recover about -8 to -9 percentage points per unit of log events; M1 returns +6.0 (95% CI -4.0 to 16.0), the wrong sign with an interval spanning zero. M4's within-effect standard error is about 1.4 times M2's.
+- Boundaries: OCHA COD-AB for Mali, DNCT release of 10 November 2021 (701 communes, 53 cercles, 10 regions, official P-codes). Full citation in `boundaries/SOURCE.md`; the credit line is printed on every map.
+- Communes are placed **only** through the reviewed crosswalk.
+- Classed colors keep three states distinct: **Not surveyed** (gray), **zero events** (palest red), **fewer than `min_n` respondents** (white, outlined). `min_n` is 5.
+- Violence classes: 0, 1-2, 3-9, 10-29, 30 or more. Favorability classes: under 40%, 40-50%, 50-60%, 60-70%, 70% or more.
+- Publication copies: `output/maps/*.pdf` (vector) and `*.png` (300 dpi).
+- Region labels use OCHA's own names, accents included; overlapping labels are skipped automatically.
 
----
+------------------------------------------------------------------------
 
-## 10. Decisions log
+## 11. Decisions log
 
 | Considered | Decision | Reason |
-|---|---|---|
-| Random effects for region or wave | Rejected | 8 regions and 3 waves are too few to estimate a variance; regions are the full set of strata, not a sample |
-| Region-wave violence only (client's first specification) | Kept as M1 for comparison | Region and wave dummies absorb about 98% of its variation |
-| PSU random effect plus survey design | Rejected | Counts PSU clustering twice |
+|------------------------|------------------------|------------------------|
+| Region-wave violence only (client's first idea) | Kept as M1 for contrast | Region and wave dummies absorb most of its variation |
+| Random effects for region or wave | Rejected | 8 regions and 3 waves are too few to estimate a variance; regions are the strata, not a sample of regions |
+| PSU random effect plus survey design | Rejected | Counts clustering twice |
+| Region by wave dummies (24 cells) | Not used | Kevin prefers separate dummies for interpretability; noted as a limitation (region-specific shocks not absorbed) |
+| Within/between (Mundlak) as main | Appendix | Within-commune share about 6% in the real data |
+| Commune fixed effects (dummies) in a logit | Rejected | Few respondents per commune: incidental-parameters bias |
 | Bayesian model (`brms`) | Dropped | No design-based inference; adds complexity without fixing identification |
-| Random forest, XGBoost, neural nets | Rejected as main analysis | Question is an effect, not prediction; no calibrated uncertainty; weights and clustering awkward; poor explainability. Optional bounded use: partial dependence of violence from one boosted model, as a functional-form check only |
-| Double machine learning | Rejected | Defensible estimate but no clean survey-weight handling and hard to explain |
-| Events per capita | Not used | Needs population denominators (external data); census figures are dated and displacement has shifted populations |
-| Multilevel model with weights (`WeMix`) | Not used | Needs level-specific weights, which are not available |
-| Binary versus continuous exposure | Both reported | Continuous is primary; binary is easier to explain and robust to skew |
-| Centering violence at the commune | Done as within/between (Mundlak) | Keeps both the within and between comparisons |
+| Random forest, XGBoost, neural nets | Rejected | Question is an effect, not prediction; no calibrated uncertainty; weights and clustering awkward; poor explainability |
+| Double machine learning | Rejected | No clean handling of survey weights; hard to explain |
+| Gaussian process or spline over interview month | Dropped | Three waves a few months apart: too few time points |
+| Accumulating violence over waves | Not possible | Counts exist only for surveyed commune-waves, and most communes were surveyed once |
+| Interactions (violence by wave, region, urban, ethnicity) | Deferred | Kevin's choice; if added later, pre-specify 2 or 3 and report group-specific effects |
+| Random slopes | Rejected | Violence barely varies within commune; 8 regions too few |
+| Events per capita | Not possible | Needs external population data |
+| Event categories or binary exposure | Not used | `log1p` chosen, with predictions at set counts for interpretation |
+| Aggregating to cercles | Rejected | Only 30 to 40% of communes surveyed: cercle totals would undercount violence and look authoritative |
+| Fuzzy matching at run time | Rejected | Matches proposed once, reviewed by a person, stored in a crosswalk |
+| Boundaries as CSV | Rejected | Polygons do not fit in rows; the GeoPackage is one file read in one line |
+| OCHA versus geoBoundaries boundaries | OCHA 2021 DNCT | Official P-codes and hierarchy; same 701 communes as 2017 with current spellings; OCHA's 2025 release has no commune level |
+| Scale bar (`ggspatial`) | Not used | Its dependencies include tile downloading; not needed for national maps |
 
----
+------------------------------------------------------------------------
 
-## 11. Sensitivity checks and one-line changes
+## 12. Validation performed
 
-**Serial correlation across waves.** M4 clusters on commune within wave, so correlation of the same commune across waves is not reflected. Conservative check: cluster on commune across waves with region as the stratum.
+Simulated data (`testing/simulate_data.R`) mimic the assumed design: real Mali communes, two-stage PPS sample, events attached per commune-wave, misspelled names. True violence coefficient: -0.30 on the logit scale.
 
-```r
-des_serial <- survey::svydesign(ids = ~commune_key, strata = ~region,
-                                weights = ~wt_scaled, nest = TRUE, data = ad)
-```
+|                | Estimate (logit) | SE   |
+|----------------|------------------|------|
+| M1 region-wave | -0.08            | 0.12 |
+| M2             | -0.33            | 0.04 |
+| M3             | -0.33            | 0.04 |
+| M4             | -0.34            | 0.06 |
 
-In the simulation the within-effect standard error barely changed (0.0247 versus 0.0244).
+M2 to M4 recover the true value within about one standard error; M1 does not. M4 AME: -7.9 points (95% CI -10.4 to -5.5); predicted favorability 58% at 0 events and 44% at 5 events. The M3 commune variance was underestimated in this draw (0.03 against a true 0.12); variance components in logistic multilevel models with few respondents per commune are imprecise, and this does not affect the main estimates.
 
-**Use cercle in the match key:** in `R/prep_data.R`, `key_cols <- c("region", "cercle", "commune")`.
+------------------------------------------------------------------------
 
-**Change the reference region:** in `R/prep_data.R`, `forcats::fct_relevel(factor(region), "Bamako")`.
-
-**Add a covariate:** add it to the survey `transmute()` in `R/prep_data.R`, to `tidyr::drop_na()` there, and to every model formula in `models.R` (`f_region`, `f_commune`, and the written-out formulas for `m3`, `m4_attitudes`, `m4_binary`).
-
-**Change the event window:** done upstream when the violence file is built; the code takes counts as given. The window must end before each wave's fieldwork.
-
-**Weighted versus unweighted:** compare M2 (unweighted) with M4 (weighted). If they agree, weighting is not driving the result (DuMouchel & Duncan, 1983).
-
----
-
-## 12. Troubleshooting
+## 13. Troubleshooting
 
 | Symptom | Cause | Fix |
-|---|---|---|
-| `Can't rename variables in this context` in `summarise()` | Renaming inside `.by = c(new = old)` | Create the column with `mutate()` first, then group by it |
-| Many "survey communes with no violence record" | Spelling mismatch, or different region spellings | Check the diagnostics examples; add region spellings to `region_alias`; compare with the dictionary |
-| Ambiguous names reported | Repeated commune names within a region | Add `"cercle"` to `key_cols` (both files need it) |
-| Garbled accents in names | File read with the wrong encoding | `readr::read_csv(path, locale = readr::locale(encoding = "UTF-8"))` |
-| `wts` error from `avg_slopes()` on `svyglm` | No `newdata` supplied | Pass `newdata = ad, wts = "wt_scaled"` |
-| `object 'd' not found` inside `avg_slopes()` (seen with `marginaleffects` 1.0) | `avg_slopes()` re-evaluates its arguments in the calling function's environment; a `newdata` passed through a wrapper's `...` is not visible there | Call `avg_slopes()` directly with named arguments in the function that holds the data (as in `fit_without_region()` in `models.R`). Do not wrap it in a helper that forwards `...` |
-| `object 'record_print' not found` when loading `marginaleffects` | `knitr` older than `marginaleffects` expects | Update `knitr` (and `xfun`) |
-| Design effect of 1,000+ or `NA` from `svymean(deff = TRUE)` | Rescaled weights make the finite population correction collapse | Use `deff = "replace"` |
-| Error about a stratum with one PSU | Subsetting left a lonely PSU | `options(survey.lonely.psu = "adjust")` |
-| `glmer` singular fit | Commune variance near zero | Report it; M4 is the main model and is unaffected |
-| `glmer` convergence warning | Scaling or sparse categories | Check rare ethnicity or education levels; covariates are already centered and scaled |
-| Map communes all gray | Name key mismatch between data and boundaries, or name is ambiguous | Same fixes as name matching; ambiguous names are deliberately left gray |
-| Real strata are not regions (for example region by urban) | A commune can span strata | `nest = TRUE` splits it into separate clusters; acceptable |
+|------------------------|------------------------|------------------------|
+| `crosswalk.csv has more than one row for ...` | One survey name points to two communes | Keep one row per region + commune; resolve the name with the survey team |
+| `Detected an unexpected many-to-many relationship` | Same as above (older code) | Same as above |
+| `Commune-waves with conflicting event counts` above 0 | Two communes share one name, or a merge error | Check those communes in the source file |
+| Many `review` rows in the draft | Spelling differences or region names | Review candidates; add region spellings to `region_alias` |
+| `object 'd' not found` inside `avg_slopes()` | Arguments forwarded through `...` in a wrapper | Call `marginaleffects` functions directly with named arguments |
+| Warning "training data could not be extracted reliably" | `marginaleffects` 1.0 cannot find the survey model's data; results unaffected because `newdata` is supplied | Ignore, or in version 1.0+ attach data with `marginaleffects::set_modeldata(m, ad)` |
+| `object 'record_print' not found` loading `marginaleffects` | Old `knitr` | Update `knitr` and `xfun` |
+| `Can't rename variables in this context` | Renaming inside `.by =` | Create the column with `mutate()` first |
+| Design effect of 1,000+ or `NA` | Rescaled weights collapse the finite population correction | Use `deff = "replace"` |
+| Error about a stratum with one PSU | Subsetting left one commune in a stratum | `options(survey.lonely.psu = "adjust")` |
+| `glmer` singular fit | Commune variance near zero | Report it; M4 is unaffected |
+| Theme error about `legend.title.position` | Older `ggplot2` | Use `guide_legend(title.position = "top")` (as the code does) |
+| Map communes all gray | Crosswalk missing or codes not matching the boundaries | Rerun matching; codes must be OCHA P-codes from the dictionary |
 
----
+------------------------------------------------------------------------
 
-## 13. R coding conventions
+## 14. R conventions
 
-- Native pipe `|>`, never `%>%`.
-- No `for` or `while` loops: use `purrr::map()`, `map2()`, `imap()`, `reduce()`, `walk()`.
-- Namespace-qualify functions: `dplyr::filter()`, `survey::svyglm()`.
-- `=` for assignment inside function bodies, `<-` outside.
-- Load packages with `pacman::p_load()`, with `tidyverse` last.
-- `viridis` palettes; the violence map uses a white-to-dark-red scale.
-- No em-dashes in prose or output.
-- Reports render to PDF via Quarto with Typst.
+Native pipe `|>`; no `for` or `while` loops (use `purrr`); namespace-qualified calls (`dplyr::filter()`); `=` inside function bodies, `<-` outside; `pacman::p_load()` with `tidyverse` last; `viridis` palettes (red scale for violence maps); no em-dashes in prose; reports render to PDF with Quarto and Typst.
 
----
+------------------------------------------------------------------------
 
-## 14. Instructions for AI assistants
+## 15. Instructions for AI assistants
 
-When modifying or debugging this project:
+You are assisting a survey methodologist trained in the Total Survey Error and Total Error Framework traditions. When working on this project:
 
-1. **Keep the estimand.** The main quantity is the M4 within-commune AME. Do not change the exposure, centering, or clustering level without saying so explicitly.
-2. **Keep the design in the survey object.** Strata, PSUs or communes, and weights go in `svydesign()`. Do not replace the design with random effects in M4, and do not add a PSU random effect to a design-based model.
-3. **Each wave is its own design.** Design codes must stay wave-specific and weights rescaled within wave.
-4. **Report AMEs in percentage points.** Do not compare `svyglm` with `glmer` using AIC, BIC, or likelihood ratio tests.
-5. **Check names before models.** Any change to data inputs must be followed by `source("diagnostics.R")`.
-6. **Keep the code readable.** Prefer explicit model calls over generated formulas; one step per line; comment the why, not the what. Keep computation in `models.R` and `maps.R`, and presentation in `analysis.qmd`.
-7. **Call `marginaleffects` functions directly** with named `newdata` and `wts` arguments. Never forward them through `...` in a wrapper function (see troubleshooting).
-8. **State uncertainty.** Distinguish settled practice, defensible choices, and guesses. Do not invent function arguments or citations; flag anything unverified.
-9. **Follow the conventions in section 13.**
+1.  **Keep the estimand.** The main quantity is the M4 violence effect (commune exposure, survey design). Do not change the exposure, the design, the clustering level, or the dummies without saying so explicitly and explaining the consequence.
+2.  **Keep the design in the survey object.** Strata, communes, villages and weights go in `svydesign()`. Do not add random effects to design-based models.
+3.  **Each wave is its own design:** wave-specific codes and within-wave weight rescaling stay.
+4.  **Report in percentage points and predicted percentages.** Never compare `svyglm` with `glm`/`glmer` by AIC, BIC or likelihood ratio tests.
+5.  **Protect the maps.** Never auto-accept fuzzy matches; never let unmatched communes disappear silently; keep "not surveyed" visually distinct from zero.
+6.  **Keep the code simple and readable:** explicit model calls, one step per line, comments that explain why. Computation in `models.R` and `maps.R`; presentation in `analysis.qmd`.
+7.  **Call `marginaleffects` directly** with named `newdata` and `wts`; never forward them through `...`.
+8.  **Be honest about uncertainty.** Separate settled practice, defensible choices, and your own guesses. Never invent function arguments, package behavior, citations, or results; say when something is unverified. Check numbers by running code, not by assumption.
+9.  **Think in total error.** For any change, consider coverage (insecure areas), sampling (two-stage design), nonresponse, measurement (ACLED undercounting, sensitive outcome), and processing (name matching, merges).
+10. **Follow section 14.**
 
----
+------------------------------------------------------------------------
 
-## 15. References
+## 16. References
 
 - Bell, A., & Jones, K. (2015). Explaining fixed effects: Random effects modeling of time-series cross-sectional and panel data. *Political Science Research and Methods, 3*(1), 133-153.
-- DuMouchel, W. H., & Duncan, G. J. (1983). Using sample survey weights in multiple regression analyses of stratified samples. *Journal of the American Statistical Association, 78*(383), 535-543.
+- Binder, D. A. (1983). On the variances of asymptotically normal estimators from complex surveys. *International Statistical Review, 51*(3), 279-292.
 - Lumley, T. (2010). *Complex surveys: A guide to analysis using R*. Wiley.
 - Mundlak, Y. (1978). On the pooling of time series and cross section data. *Econometrica, 46*(1), 69-85.
+- OCHA. Mali: Subnational administrative boundaries (COD-AB), levels 0 to 3. Source: Direction Nationale des Collectivités Territoriales (DNCT), 2021. Humanitarian Data Exchange.
 - Raleigh, C., Linke, A., Hegre, H., & Karlsen, J. (2010). Introducing ACLED: An armed conflict location and event dataset. *Journal of Peace Research, 47*(5), 651-660.
-- Runfola, D., et al. (2020). geoBoundaries: A global database of political administrative boundaries. *PLoS ONE, 15*(4), e0231866. https://doi.org/10.1371/journal.pone.0231866 (Mali files: gbOpen ADM1 to ADM3, CC BY 4.0, from https://github.com/wmgeolab/geoBoundaries/tree/main/releaseData/gbOpen/MLI)
 - Zeger, S. L., Liang, K.-Y., & Albert, P. S. (1988). Models for longitudinal data: A generalized estimating equation approach. *Biometrics, 44*(4), 1049-1060.
