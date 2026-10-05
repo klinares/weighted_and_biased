@@ -1,0 +1,4 @@
+flowchart TD
+    A["R/prep_data.R\nread survey + ACLED counts,\nbuild violence and design variables"] --> B["R/models.R\nM1 ICC, M2 slope test, M3a vs M3b\nregion-wave test, M4 with design"]
+    B --> C["R/maps.R\nviolence and predicted\nfavorability by commune"]
+    C --> D["analysis.qmd\nload packages, render\nthe report (PDF)"]

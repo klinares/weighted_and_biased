@@ -1,17 +1,22 @@
-Test run: 2026-10-01 22:13:36 
+Test run: 2026-10-03 09:31:44 
 R: R version 4.6.1 (2026-06-24 ucrt) 
-Matching: exact 221 | exact but wrong 0 | needing review 53 
-Rows: survey 5201 | dat 5201 | analysis 5036 (survey and dat must match) 
-Conflicting event counts: 0 (must be 0) 
-Diagnostics: A_region 0.763 | A_commune 0.082 | P 3 | W 0.181 
-TRUE violence coefficient: -0.30 
-M1 region-wave coef: -0.071 
-M2 coef, SE: -0.324 0.041 
-M3 coef: -0.329 | singular: FALSE 
-M4 coef, SE: -0.34 0.056 
-AMEs (pp): M1 region-wave -1.7; M2 naive -7.6; M3 multilevel -7.7; M4 survey (main) -7.9; M4 + attitudes -6.6 
-Predicted % favorable at 0,1,5,20 events: 58.3, 52.7, 43.8, 34.1 
-Leave-one-region-out AME range (pp): -9.8 to -7.3 
-Maps: survey communes not placed 0 | files: favorability_by_commune_wave.pdf, favorability_by_commune_wave.png, model3_commune_effects.pdf, model3_commune_effects.png, violence_by_commune_wave.pdf, violence_by_commune_wave.png 
-Packages: survey 4.5; lme4 2.0.6; marginaleffects 1.0.0; sf 1.1.2; ggplot2 4.0.3; dplyr 1.2.1; knitr 1.52; sampling 2.11 
+Rows: survey 5959 | analysis 5892 
+Communes per wave: 137, 137, 137 | distinct: 174 | percent favorable: 75.5 
+Within-commune share of violence variance: 0.099 
+TRUE: violence -0.25 | commune var 0.25 | slope SD 0 | village var 0.04 | region-wave var 0.09 
+M1: tau00 0.453 | ICC 0.121 
+M2 slope test: LRT 0.02 | p 0.931 | M2b singular TRUE | keep slope FALSE 
+M3 region-wave test: LRT 10.06 | p 0.000759 | AIC a/b 6231.3 / 6223.3 | M3b singular FALSE | keep M3b TRUE 
+M3 winner: residual commune ICC 0.07 
+M4: village var 0.046 | log-weight coef -0.001 p 0.973 
+Violence: M2a -0.342 (0.045); M3b -0.3 (0.047); M4 (final) -0.303 (0.047); Design-based (svyglm) -0.254 (0.053) 
+Design terms: SE ratio M4/M3 1.01 | coefficient ratio 1.01 
+M3-MW: within -0.246 | between -0.316 
+AME M4 (pp): -5.2 
+Predicted % favorable (M4) at 0, 1, 5, 20 events: 82.3, 79.1, 73.2, 65.4 
+Truth inside M4 95% CI: TRUE 
+performance::icc(m1) adjusted: 0.121 (must equal the ICC above) 
+Singular fits: M1 FALSE | M3 FALSE | M4 FALSE 
+Maps: survey communes not placed 0 | files: predicted_favorability_commune_wave.pdf, predicted_favorability_commune_wave.png, violence_by_commune_wave.pdf, violence_by_commune_wave.png 
+Packages: lme4 2.0.6; survey 4.5; marginaleffects 1.0.0; performance 0.18.2; sf 1.1.2; ggplot2 4.0.3; dplyr 1.2.1; sampling 2.11 
 DONE 
