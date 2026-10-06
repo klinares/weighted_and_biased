@@ -22,72 +22,57 @@ Two things make this harder than it looks:
 ## How the pipeline is organized
 
 <p align="center">
-  <img src="output/pipeline.png" width="380" alt="Pipeline: prep_data.R to models.R to maps.R to analysis.qmd" />
+  <img src="output/pipeline.png" width="380" alt="Pipeline: analysis.qmd config, prep_data.R, models.R, maps.R, report" />
 </p>
 
-*(Diagram source: `output/pipeline.mmd`.)*
+All settings live in one **config list (`cfg`) at the top of `analysis.qmd`**: the data file, violence count, covariates, whether to keep the cercle level and use strata, and whether to refit models. The data file is prepared upstream with fixed column names (see `R/prep_data.R`). Rendering `analysis.qmd` runs everything. Nothing else needs editing to swap a covariate or the violence measure.
 
-Rendering `analysis.qmd` runs everything: it loads the packages, then sources `R/models.R` (which sources `R/prep_data.R`) and `R/maps.R`. You only edit `R/prep_data.R` to point it at your data.
+| Script | What it does |
+|---|---|
+| `R/prep_data.R` | Builds the analysis file: commune and cercle IDs, violence as log(1 + events), wave-specific design codes and weights |
+| `R/models.R` | Fits the model sequence, runs the tests, computes effects and predictions; each model is saved in `models/` and reloaded (set `refit = TRUE` after changes) |
+| `R/maps.R` | Violence by commune, and predicted favorability by cercle and by commune, built offline from the OCHA boundaries |
+| `analysis.qmd` | Config, packages, and the report (PDF) |
 
-### 1. Prepare the data: `R/prep_data.R`
+### The models
 
-Reads the survey, renames columns to a standard set, and builds:
-- the violence measure, `log(1 + events)`, plus its split into a commune's usual level and its change from that level;
-- the design variables, made wave-specific because each wave is its own sample, with weights rescaled within wave.
-
-### 2. Fit the models: `R/models.R`
-
-Each model adds one thing, so the reasoning is visible:
-
-| Model | What it adds | What it answers |
+| Model | Adds | Compared by |
 |---|---|---|
-| M1 | Commune random intercept only | How much of favorability lies between communes (the ICC)? |
-| M2a / M2b | Violence; then a random violence slope | Does the violence effect differ across communes? (likelihood ratio test) |
-| M3a | Region dummies (Bamako reference), wave dummies (wave 1 reference), covariates | Violence, comparing communes in the same region and wave |
-| M3b | + region-by-wave random intercept | Are there region-wave shocks? (likelihood ratio test and AIC pick M3a or M3b) |
-| **M4** | + village random intercept and the log survey weight | **Final model**: the design inside the multilevel model |
+| M1a | commune random intercept | |
+| M1b | cercle random intercept | likelihood ratio test (boundary-corrected), AIC, BIC |
+| M2a | violence, wave, region, urban, covariates | |
+| M2b | the 15 strata in place of region and urban | `anova()` likelihood ratio test, AIC, BIC |
+| M3 | log survey weight | final model; design-based check with `svyglm` |
 
-A survey-weighted `svyglm` fit is kept as a design-based check. A sensitivity version of M3 separates a commune's usual level of violence from its wave-to-wave change. Effects are reported as log-odds, odds ratios, percentage points, and **predicted favorability at 0, 1, 5, and 20 events**, which is the number a non-technical reader can act on.
-
-### 3. Map it: `R/maps.R`
-
-Commune maps for each wave, built entirely offline from the OCHA boundary file (no map service or internet access). Survey communes join to the boundaries by their region and commune keys. Communes that weren't surveyed are gray, visually distinct from a commune that *was* surveyed and had zero events.
+Effects are reported as log-odds, odds ratios, percentage points, and predicted favorability at a few event counts, with a minimum detectable effect so that a non-significant result can be explained honestly. A sensitivity model splits violence into the cercle average and the within-cercle difference.
 
 <p float="left">
-  <img src="output/maps/violence_by_commune_wave.png" width="100%" alt="Violence against civilians by commune and survey wave" />
+  <img src="output/maps/violence_by_commune_wave.png" width="100%" alt="Violence by commune and survey wave" />
 </p>
 
 <p float="left">
-  <img src="output/maps/predicted_favorability_commune_wave.png" width="100%" alt="Predicted leader favorability by commune and survey wave" />
+  <img src="output/maps/predicted_favorability_commune_wave.png" width="100%" alt="Predicted favorability by commune and survey wave" />
 </p>
-
-### 4. Render the report: `analysis.qmd`
-
-A single PDF with the question, the design, every model equation, jtools coefficient tables, the random slope test, the design cost, predicted favorability, `performance` diagnostics (ICC, AIC/BIC, collinearity, binned residuals, convergence), the maps, a plain-language summary, and limitations.
-
----
 
 ## Run order
 
 | Step | Action |
 |---|---|
 | 1 | Open `violence_favorability.Rproj` in RStudio |
-| 2 | Edit `R/prep_data.R`: file path and column names (section 1 and 2) |
-| 3 | Render `analysis.qmd` (or `source("R/models.R")` to work in the console) |
-
----
+| 2 | Edit the `cfg` list at the top of `analysis.qmd` |
+| 3 | Render `analysis.qmd`; after changing data, covariates, or switches set `refit = TRUE` |
 
 ## Folders
 
 | Folder | Contents |
 |---|---|
-| `R/` | `prep_data.R` (edit for new data), `models.R`, `maps.R`, `boundaries.R` (helpers) |
-| `boundaries/` | OCHA map layers and admin dictionary. Do not edit; see [`boundaries/SOURCE.md`](boundaries/SOURCE.md) |
+| `R/` | `prep_data.R`, `models.R`, `maps.R`, `boundaries.R` |
+| `boundaries/` | OCHA layers and admin dictionary (do not edit) |
 | `data/` | The survey file |
-| `output/` | Maps (PDF and PNG) and the pipeline diagram |
-| `testing/` | Simulated data with known answers and a full test run. Delete when no longer needed |
+| `models/` | Saved model fits (safe to delete; they are rebuilt) |
+| `output/` | Maps and the pipeline diagram |
 
----
+`MODELING_NOTES.md` explains every decision, how to read each result, and how an AI assistant should help with this code.
 
 ## References
 
@@ -95,5 +80,6 @@ A single PDF with the question, the design, every model equation, jtools coeffic
 - **Violence events:** Raleigh, C., Linke, A., Hegre, H., & Karlsen, J. (2010). Introducing ACLED: An armed conflict location and event dataset. *Journal of Peace Research, 47*(5), 651-660.
 - **Survey variance estimation:** Binder, D. A. (1983). On the variances of asymptotically normal estimators from complex surveys. *International Statistical Review, 51*(3), 279-292.
 - **Complex survey analysis in R:** Lumley, T. (2010). *Complex surveys: A guide to analysis using R*. Wiley.
+- **Weighting in multilevel models:** Pfeffermann, D., Skinner, C. J., Holmes, D. J., Goldstein, H., & Rasbash, J. (1998). *JRSS-B, 60*(1), 23-40; Gelman, A. (2007). *Statistical Science, 22*(2), 153-164.
 - **Within/between decomposition:** Mundlak, Y. (1978). On the pooling of time series and cross section data. *Econometrica, 46*(1), 69-85; Bell, A., & Jones, K. (2015). Explaining fixed effects. *Political Science Research and Methods, 3*(1), 133-153.
 - **Conditional vs. population-averaged effects:** Zeger, S. L., Liang, K.-Y., & Albert, P. S. (1988). Models for longitudinal data: A generalized estimating equation approach. *Biometrics, 44*(4), 1049-1060.
