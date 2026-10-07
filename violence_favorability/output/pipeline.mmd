@@ -1,5 +1,5 @@
 flowchart TD
-    A["analysis.qmd\nconfig list (cfg)"] --> B["R/prep_data.R\nIDs, log(1 + events),\ndesign codes, weights"]
-    B --> C["R/models.R\nM1a/M1b, M2a/M2b, M3,\nsvyglm check, cercle split\n(saved in models/)"]
-    C --> D["R/maps.R\nviolence and predicted\nfavorability by commune"]
+    A["analysis.qmd\nconfig list (cfg)"] --> B["R/prep_data.R\nIDs, log(1 + events per\nsurveyed commune),\ndesign codes, weights"]
+    B --> C["R/models.R\nM1a/M1b, M2a/M2b, M3,\nsvyglm check, sensitivity split\n(saved in models/)"]
+    C --> D["R/maps.R\nviolence by cercle,\npredicted favorability\nby cercle and wave"]
     D --> E["analysis.qmd\nreport (PDF)"]

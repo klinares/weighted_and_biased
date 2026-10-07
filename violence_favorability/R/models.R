@@ -1,19 +1,20 @@
 # R/models.R
 # Fits the models and computes the numbers the report uses.
 #
-#   M1a  commune random intercept
-#   M1b  + cercle random intercept
-#   M2a  violence, wave, region, urban, covariates
-#   M2b  M2a with the strata in place of region and urban
-#   M3   final model: the chosen structure (cfg$cercle, cfg$strata) + log weight
+#   M1a  cercle random intercept                         how much favorability clusters
+#   M1b  + cercle-by-wave random intercept               do cercles shift from wave to wave?
+#   M2a  M1 winner + violence, wave, region, urban, cfg$covariates
+#   M2b  the same with cfg$covariates_m2b
+#   M3   final model: the covariates of cfg$final ("M2a" or "M2b") + log weight
 #
-# All are logistic multilevel models, unweighted, fit by maximum likelihood on the
-# same respondents. cfg$cercle and cfg$strata are set by reading the M1 and M2 tests.
+# Violence is measured per cercle and wave, so the cercle is the grouping level.
+# Communes stay in the design-based check as the sampling units (PSUs).
+# All models are logistic, unweighted, fit by maximum likelihood on the same respondents.
 
 source("R/prep_data.R")
 options(survey.lonely.psu = "adjust")   # a stratum left with one commune
 
-# nloptwrap with tight tolerances: about 10x faster than bobyqa here, same likelihood
+# nloptwrap with tight tolerances: fast, same likelihood as bobyqa
 ctrl <- lme4::glmerControl(optimizer = "nloptwrap", optCtrl = list(xtol_abs = 1e-10, ftol_abs = 1e-10, maxeval = 1e5))
 
 # Load a saved model, or fit and save it.
@@ -29,34 +30,40 @@ fit_glmer <- function(name, formula) {
 
 # Builds "fav ~ a + b + ..." from pieces
 f <- function(...) stats::as.formula(paste("fav ~", paste(c(...), collapse = " + ")))
-covs <- cfg$covariates
-re <- if (cfg$cercle) c("(1 | commune_id)", "(1 | cercle_id)") else "(1 | commune_id)"
-place <- if (cfg$strata) "strata" else c("region", "urban")
+stopifnot("cfg$final must be \"M2a\" or \"M2b\"" = cfg$final %in% c("M2a", "M2b"))
+design_fixed <- c("wave", "region", "urban")
+covs_final <- if (cfg$final == "M2b") cfg$covariates_m2b else cfg$covariates
+fixed <- c(design_fixed, covs_final)   # used by M3, the sensitivity model, and svyglm
+re <- if (cfg$cercle_wave) c("(1 | cercle_id)", "(1 | cercle_wave)") else "(1 | cercle_id)"
 
 # ---- 1. Models ---------------------------------------------------------------------
-m1a <- fit_glmer("m1a", f("1", "(1 | commune_id)"))
-m1b <- fit_glmer("m1b", f("1", "(1 | commune_id)", "(1 | cercle_id)"))
-m2a <- fit_glmer("m2a", f("v", "wave", "region", "urban", covs, re))
-m2b <- fit_glmer("m2b", f("v", "wave", "strata", covs, re))
-m3 <- fit_glmer("m3", f("v", "wave", place, covs, "log_wt_c", re))
+m_commune <- fit_glmer("m_commune", f("1", "(1 | commune_id)"))   # reference only: commune ICC
+m1a <- fit_glmer("m1a", f("1", "(1 | cercle_id)"))
+m1b <- fit_glmer("m1b", f("1", "(1 | cercle_id)", "(1 | cercle_wave)"))
+m2a <- fit_glmer("m2a", f("v", design_fixed, cfg$covariates, re))
+m2b <- fit_glmer("m2b", f("v", design_fixed, cfg$covariates_m2b, re))
+m3 <- fit_glmer("m3", f("v", fixed, "log_wt_c", re))
 
-# Sensitivity: violence split into the cercle average and the commune's distance from it
-m_cercle <- fit_glmer("m_cercle", f("v_cercle", "v_within_cercle", "wave", place, covs, "log_wt_c", re))
+# Sensitivity: violence split into the cercle's usual level and its wave-to-wave change
+m_split <- fit_glmer("m_split", f("v_cercle", "v_change", fixed, "log_wt_c", re))
 
 # Design-based check: same fixed effects, survey weights, strata, communes as PSUs.
 # Its coefficients are population-averaged, so compare it by z, not by size.
 des <- survey::svydesign(ids = ~psu_w, strata = ~strata_w, weights = ~wt, nest = TRUE, data = ad)
-m_svy <- survey::svyglm(f("v", "wave", place, covs), design = des, family = quasibinomial())
+m_svy <- survey::svyglm(f("v", fixed), design = des, family = quasibinomial())
 
-# ---- 2. Tests and fit --------------------------------------------------------------
-# Adding the cercle variance: anova() gives a chi-square(1) p-value; a variance
+# ---- 2. Test, fit, and ICCs --------------------------------------------------------
+# Adding the cercle-by-wave variance: anova() gives a chi-square(1) p-value; a variance
 # cannot be negative, so the correct p-value is half of it.
 test_m1 <- stats::anova(m1a, m1b)
 p_m1 <- test_m1$`Pr(>Chisq)`[2] / 2
 
-# M2a is nested in M2b (the strata contain region and urban): ordinary anova() test
-test_m2 <- stats::anova(m2a, m2b)
-p_m2 <- test_m2$`Pr(>Chisq)`[2]
+# M2a vs M2b: a likelihood ratio test only when one covariate set contains the other;
+# otherwise compare AIC and BIC (same respondents either way)
+nested_m2 <- all(cfg$covariates %in% cfg$covariates_m2b) || all(cfg$covariates_m2b %in% cfg$covariates)
+same_m2 <- setequal(cfg$covariates, cfg$covariates_m2b)
+test_m2 <- if (nested_m2 && !same_m2) stats::anova(m2a, m2b) else NULL
+p_m2 <- if (is.null(test_m2)) NA_real_ else test_m2$`Pr(>Chisq)`[2]
 
 models <- list(M1a = m1a, M1b = m1b, M2a = m2a, M2b = m2b, M3 = m3)
 comparison <- tibble::tibble(
@@ -69,33 +76,38 @@ comparison <- tibble::tibble(
 )
 
 # Latent-scale ICCs; pi^2/3 stands in for the individual-level variance of a logit model
-vc <- as.data.frame(lme4::VarCorr(m1b))
-tau_commune <- vc$vcov[vc$grp == "commune_id"]
-tau_cercle <- vc$vcov[vc$grp == "cercle_id"]
-total <- tau_commune + tau_cercle + pi^2 / 3
+var_of <- function(m, group) {
+  v = as.data.frame(lme4::VarCorr(m))
+  v$vcov[v$grp == group]
+}
+tau_cercle <- var_of(m1b, "cercle_id")
+tau_cw <- var_of(m1b, "cercle_wave")
+total <- tau_cercle + tau_cw + pi^2 / 3
 icc <- tibble::tibble(
-  model = c("M1a", "M1b", "M1b"),
-  level = c("Commune", "Cercle (same cercle, different commune)", "Commune (same commune, includes cercle)"),
-  icc = c(performance::icc(m1a)$ICC_adjusted, tau_cercle / total, (tau_cercle + tau_commune) / total)
+  model = c("Commune only (reference)", "M1a", "M1b", "M1b"),
+  level = c("Commune", "Cercle", "Cercle, across waves", "Cercle and wave (same cercle, same wave)"),
+  icc = c(performance::icc(m_commune)$ICC_adjusted, performance::icc(m1a)$ICC_adjusted,
+          tau_cercle / total, (tau_cercle + tau_cw) / total)
 )
 
 # ---- 3. The violence effect ----------------------------------------------------------
-coef_v <- function(m, label) {
+coef_row <- function(m, label) {
   s = summary(m)$coefficients
   tibble::tibble(model = label, estimate = s["v", 1], std.error = s["v", 2], z = s["v", 3])
 }
-violence_rows <- dplyr::bind_rows(coef_v(m2a, "M2a"), coef_v(m2b, "M2b"), coef_v(m3, "M3 (final)"),
-                                  coef_v(m_svy, "Design-based (svyglm)"))
-b3 <- violence_rows[3, ]
+violence_rows <- dplyr::bind_rows(coef_row(m2a, "M2a"), coef_row(m2b, "M2b"), coef_row(m3, "M3 (final)"),
+                                  coef_row(m_svy, "Design-based (svyglm)"))
+b3 <- dplyr::filter(violence_rows, model == "M3 (final)")
+z_svy <- dplyr::filter(violence_rows, model == "Design-based (svyglm)")$z
 p_v <- 2 * stats::pnorm(-abs(b3$z))
 
-# Predicted favorability if every commune had 0, 1, 5, or 20 events (typical commune and cercle)
+# Predicted favorability at set numbers of events per surveyed commune (typical cercle)
 predicted <- marginaleffects::avg_predictions(
   m3, variables = list(v = log1p(cfg$event_levels)), newdata = ad, re.form = NA) |>
   tibble::as_tibble() |>
   dplyr::mutate(events = expm1(v))
 
-# Change from 0 to 5 events, with its 95% CI
+# Change from 0 to 5 events per commune, with its 95% CI
 diff_0_5 <- marginaleffects::avg_comparisons(
   m3, variables = list(v = c(0, log1p(5))), newdata = ad, re.form = NA) |>
   tibble::as_tibble()
@@ -107,24 +119,19 @@ p_hat <- stats::predict(m3, type = "response", re.form = NA)
 mde_0_5 <- 2.8 * b3$std.error * mean(p_hat * (1 - p_hat)) * log1p(5)
 
 # ---- 4. Predicted favorability by variable ---------------------------------------------
-# Factor variables: everyone set to each level, everything else as observed.
-# Strata: average prediction for the people in each stratum, so no prediction is
-# made for a stratum that does not exist (such as rural Bamako).
+# Everyone set to each level of the variable, everything else as observed.
 by_level <- function(var) {
   marginaleffects::avg_predictions(m3, variables = var, newdata = ad, re.form = NA) |>
     tibble::as_tibble() |>
     dplyr::transmute(variable = var, level = as.character(.data[[var]]), estimate, conf.low, conf.high)
 }
-factor_vars <- c("wave", purrr::keep(covs, \(x) is.factor(ad[[x]])))
-by_strata <- marginaleffects::avg_predictions(m3, by = "strata", newdata = ad, re.form = NA) |>
-  tibble::as_tibble() |>
-  dplyr::transmute(variable = "strata", level = as.character(strata), estimate, conf.low, conf.high)
-predicted_by_var <- dplyr::bind_rows(purrr::map(factor_vars, by_level), by_strata)
+predicted_by_var <- purrr::keep(fixed, \(x) is.factor(ad[[x]])) |>
+  purrr::map(by_level) |>
+  purrr::list_rbind()
 
 # ---- 5. Calibration ---------------------------------------------------------------------
-# With 8 people per commune, residuals built on fitted random effects show a false
-# slope. Instead, simulate 200 data sets from M3 with new commune and cercle effects
-# and check that observed favorability falls inside the simulated range.
+# Simulate 200 data sets from M3 with new cercle effects and check that observed
+# favorability, in bins of expected probability, falls inside the simulated range.
 sims <- stats::simulate(m3, nsim = 200, re.form = NA, seed = 1)
 calibration <- ad |>
   dplyr::mutate(expected = rowMeans(sims), bin = dplyr::ntile(expected, 20)) |>

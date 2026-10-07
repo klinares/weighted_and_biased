@@ -1,6 +1,6 @@
 # Violence against civilians and leader favorability (Mali)
 
-A reproducible R pipeline that asks one question: **in communes that experienced more violence against civilians, were people less likely to view the national leader favorably?** It combines a three-wave household survey with commune-level event counts from ACLED, fits a short ladder of multilevel models, checks what the survey design costs, and produces a policymaker-ready report with maps.
+A reproducible R pipeline that asks one question: **in cercles that experienced more violence against civilians, were people less likely to view the national leader favorably?** It combines a three-wave household survey with cercle-level event counts from ACLED, fits a short ladder of multilevel models, checks what the survey design costs, and produces a policymaker-ready report with maps.
 
 This README explains what the project does and how the pieces fit together. For every modeling decision, the exact equations, and how to read the results, see **[`MODELING_NOTES.md`](MODELING_NOTES.md)**. It is written to be handed to an AI assistant (or a colleague) as full context.
 
@@ -8,14 +8,14 @@ This README explains what the project does and how the pieces fit together. For 
 
 ## The question, in plain terms
 
-A household survey asked people in Mali whether they view the national leader favorably. ACLED (the Armed Conflict Location & Event Data project) records political violence, including events of **violence against civilians**. The project team counted those events for each surveyed commune (the third administrative level, below region and cercle) during each wave's fieldwork window.
+A household survey asked people in Mali whether they view the national leader favorably. ACLED (the Armed Conflict Location & Event Data project) records political violence, including events of **violence against civilians**. The project team counted those events for each surveyed cercle (the second administrative level, below region) during each wave's fieldwork window, summed over the communes surveyed there. Because a cercle with more surveyed communes would collect more events, the pipeline divides each count by the number of surveyed communes.
 
-The analysis asks whether people in communes with more of these events were less favorable than people in communes with fewer, comparing people surveyed in the *same region and wave*.
+The analysis asks whether people in cercles with more of these events were less favorable than people in communes with fewer, comparing people surveyed in the *same region and wave*.
 
 Two things make this harder than it looks:
 
 1. **The effect is subtle.** About 80% of respondents view the leader favorably in every wave. Near a ceiling, even a real association moves the percentage only a few points, so the analysis is built to estimate it carefully and fixes its choices in advance rather than searching for a significant result.
-2. **People are clustered.** Respondents in the same commune share the same violence count and resemble each other. The models handle this either with a commune random effect (multilevel models) or with the survey design (strata, communes, villages, weights). The analysis does both and compares them.
+2. **People are clustered.** Respondents in the same cercle and wave share the same violence count and resemble each other. The multilevel models use cercle and cercle-by-wave random intercepts; the design-based check uses the survey design (strata, communes as sampling units, weights). The analysis does both and compares them.
 
 ---
 
@@ -25,33 +25,33 @@ Two things make this harder than it looks:
   <img src="output/pipeline.png" width="380" alt="Pipeline: analysis.qmd config, prep_data.R, models.R, maps.R, report" />
 </p>
 
-All settings live in one **config list (`cfg`) at the top of `analysis.qmd`**: the data file, violence count, covariates, whether to keep the cercle level and use strata, and whether to refit models. The data file is prepared upstream with fixed column names (see `R/prep_data.R`). Rendering `analysis.qmd` runs everything. Nothing else needs editing to swap a covariate or the violence measure.
+All settings live in one **config list (`cfg`) at the top of `analysis.qmd`**: the data file, violence count, two covariate sets (M2a and M2b) and which one carries into the final model, whether to keep the cercle-by-wave intercept, and whether to refit models. The data file is prepared upstream with fixed column names (see `R/prep_data.R`). Rendering `analysis.qmd` runs everything. Nothing else needs editing to swap a covariate or the violence measure.
 
 | Script | What it does |
 |---|---|
-| `R/prep_data.R` | Builds the analysis file: commune and cercle IDs, violence as log(1 + events), wave-specific design codes and weights |
+| `R/prep_data.R` | Builds the analysis file: IDs, violence as log(1 + events per surveyed commune), wave-specific design codes and weights |
 | `R/models.R` | Fits the model sequence, runs the tests, computes effects and predictions; each model is saved in `models/` and reloaded (set `refit = TRUE` after changes) |
-| `R/maps.R` | Violence by commune, and predicted favorability by cercle and by commune, built offline from the OCHA boundaries |
+| `R/maps.R` | Violence by cercle, and predicted favorability by cercle and wave, built offline from the OCHA boundaries |
 | `analysis.qmd` | Config, packages, and the report (PDF) |
 
 ### The models
 
 | Model | Adds | Compared by |
 |---|---|---|
-| M1a | commune random intercept | |
-| M1b | cercle random intercept | likelihood ratio test (boundary-corrected), AIC, BIC |
-| M2a | violence, wave, region, urban, covariates | |
-| M2b | the 15 strata in place of region and urban | `anova()` likelihood ratio test, AIC, BIC |
-| M3 | log survey weight | final model; design-based check with `svyglm` |
+| M1a | cercle random intercept | |
+| M1b | cercle-by-wave random intercept | likelihood ratio test (boundary-corrected), AIC, BIC |
+| M2a | violence, wave, region, urban, covariate set A | |
+| M2b | the same with covariate set B | AIC, BIC; likelihood ratio test when one set contains the other |
+| M3 | the chosen M2 + log survey weight | final model; design-based check with `svyglm` |
 
-Effects are reported as log-odds, odds ratios, percentage points, and predicted favorability at a few event counts, with a minimum detectable effect so that a non-significant result can be explained honestly. A sensitivity model splits violence into the cercle average and the within-cercle difference.
+Effects are reported as log-odds, odds ratios, percentage points, and predicted favorability at a few event counts, with a minimum detectable effect so that a non-significant result can be explained honestly. A sensitivity model splits violence into the cercle's usual level and its change from wave to wave.
 
 <p float="left">
-  <img src="output/maps/violence_by_commune_wave.png" width="100%" alt="Violence by commune and survey wave" />
+  <img src="output/maps/violence_by_cercle.png" width="70%" alt="Violence per surveyed commune by cercle" />
 </p>
 
 <p float="left">
-  <img src="output/maps/predicted_favorability_commune_wave.png" width="100%" alt="Predicted favorability by commune and survey wave" />
+  <img src="output/maps/predicted_favorability_cercle_wave.png" width="100%" alt="Predicted favorability by cercle and survey wave" />
 </p>
 
 ## Run order
@@ -60,7 +60,7 @@ Effects are reported as log-odds, odds ratios, percentage points, and predicted 
 |---|---|
 | 1 | Open `violence_favorability.Rproj` in RStudio |
 | 2 | Edit the `cfg` list at the top of `analysis.qmd` |
-| 3 | Render `analysis.qmd`; after changing data, covariates, or switches set `refit = TRUE` |
+| 3 | Render `analysis.qmd`; after changing data, covariates, or switches set `refit = TRUE`, then back to `FALSE` |
 
 ## Folders
 

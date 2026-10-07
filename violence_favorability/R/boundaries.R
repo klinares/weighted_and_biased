@@ -48,7 +48,7 @@ region_key <- function(x) {
 # Read one map layer: "adm0", "adm1", "adm2", or "adm3"
 read_mali_boundaries <- function(level) {
   if (!file.exists(bnd_gpkg)) {
-    stop(bnd_gpkg, " not found. See setup_done_do_not_rerun/README.md.")
+    stop(bnd_gpkg, " not found. See boundaries/SOURCE.md.")
   }
   sf::st_read(bnd_gpkg, layer = level, quiet = TRUE)
 }
