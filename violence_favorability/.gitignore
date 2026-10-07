@@ -1,0 +1,8 @@
+# Rebuilt by rendering analysis.qmd
+.quarto/
+models/
+analysis.pdf
+output/maps/*.pdf
+.Rhistory
+.Rproj.user/
+_to_delete/
