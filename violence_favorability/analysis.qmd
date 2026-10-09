@@ -135,8 +135,7 @@ $u_k$ is the cercle's lasting level; $v_{kw}$ is how that cercle departs from it
 $$\rho_{\text{cercle}} = \frac{\tau_k}{\tau_k + \tau_{kw} + \pi^2/3}, \qquad
 \rho_{\text{cercle-wave}} = \frac{\tau_k + \tau_{kw}}{\tau_k + \tau_{kw} + \pi^2/3}$$
 
-**M2a and M2b.**
-$$\operatorname{logit} \Pr(y = 1) = \gamma_0 + \beta V_{kw} + \sum_{w=2}^{3}\delta_w \text{Wave}_w + \sum_{r \ne \text{ref}} \alpha_r \text{Region}_r + \lambda\,\text{Urban} + \mathbf{x}_i'\boldsymbol\theta + u_k + v_{kw}$$
+**M2a and M2b.** $$\operatorname{logit} \Pr(y = 1) = \gamma_0 + \beta V_{kw} + \sum_{w=2}^{3}\delta_w \text{Wave}_w + \sum_{r \ne \text{ref}} \alpha_r \text{Region}_r + \lambda\,\text{Urban} + \mathbf{x}_i'\boldsymbol\theta + u_k + v_{kw}$$
 
 The reference region is `r levels(ad$region)[1]` and the reference wave is wave 1. Region and urban are the survey strata and enter as fixed effects, so violence is compared within region and area. Wave enters as fixed effects (the national shift between waves). M2a and M2b differ only in $\mathbf{x}_i$.
 
