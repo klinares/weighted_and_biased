@@ -6,3 +6,5 @@ output/maps/*.pdf
 .Rhistory
 .Rproj.user/
 _to_delete/
+analysis_files/
+output/tables/
