@@ -17,8 +17,13 @@ options(survey.lonely.psu = "adjust")   # a stratum left with one PSU
 
 stopifnot("cfg$final must be \"M2a\" or \"M2b\"" = cfg$final %in% c("M2a", "M2b"))
 
-# nloptwrap with tight tolerances: fast, same likelihood as bobyqa
-ctrl <- lme4::glmerControl(optimizer = "nloptwrap", optCtrl = list(xtol_abs = 1e-10, ftol_abs = 1e-10, maxeval = 1e5))
+# nloptwrap with tight tolerances: fast, same likelihood as bobyqa.
+# lme4 2.0 skips its convergence checks for models with more than 20 parameters (M3 has
+# about 27), which would leave the report with nothing to check. Ask for them. The setting
+# does not exist in lme4 1.1, which always runs the checks, so add it only when available.
+ctrl_args <- list(optimizer = "nloptwrap", optCtrl = list(xtol_abs = 1e-10, ftol_abs = 1e-10, maxeval = 1e5))
+if ("check.conv.nparmax" %in% names(formals(lme4::glmerControl))) ctrl_args$check.conv.nparmax <- Inf
+ctrl <- do.call(lme4::glmerControl, ctrl_args)
 
 # Load a saved model, or fit and save it.
 # Set cfg$refit = TRUE after changing the data, covariates, or model settings.
@@ -152,7 +157,8 @@ wt_slope <- summary(m_wt_slope)$coefficients["v:log_wt_c", ]
 # M3's convergence check: lme4 flags an absolute gradient above 0.002, which large samples
 # trip without a real problem. The relative gradient (the step the optimizer would still
 # take) is the better check; below about 0.001 the fit has converged.
-rel_gradient <- with(m3@optinfo$derivs, max(abs(solve(Hessian, gradient))))
+derivs <- m3@optinfo$derivs
+rel_gradient <- if (is.null(derivs)) NA_real_ else max(abs(solve(derivs$Hessian, derivs$gradient)))
 
 # Predicted favorability at set numbers of events per surveyed commune (typical cercle).
 # Levels above the largest value in the data would be extrapolation, so they are dropped.
