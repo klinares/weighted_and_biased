@@ -9,9 +9,23 @@
 
 if (!exists("cfg")) stop("Run the config chunk in analysis.qmd first.")
 
+# Text can carry UTF-8 bytes without being marked as UTF-8. On a computer whose native
+# encoding is not UTF-8 (common on Windows), names such as Segou with an accent then stop
+# matching the population file and the map boundaries. Mark valid UTF-8 text as UTF-8.
+as_utf8 <- function(x) {
+  if (is.factor(x)) {
+    levels(x) = as_utf8(levels(x))
+    return(x)
+  }
+  if (!is.character(x)) return(x)
+  Encoding(x)[validUTF8(x)] = "UTF-8"
+  x
+}
+
 # Missing values are dropped on both covariate sets, so M2a and M2b use the same
 # respondents and their AIC and BIC can be compared
 ad <- readRDS(cfg$data_file) |>
+  dplyr::mutate(dplyr::across(dplyr::everything(), as_utf8)) |>
   tidyr::drop_na(dplyr::all_of(c("fav", "wave", "region", "urban", "commune", "cercle",
                                  "weight", cfg$violence,
                                  union(cfg$covariates, cfg$covariates_m2b)))) |>

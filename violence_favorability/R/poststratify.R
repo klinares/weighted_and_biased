@@ -17,8 +17,13 @@ if (!exists("des_sample")) source("R/models.R")
 
 # ---- 1. Population counts, one row per wave x region x area cell --------------------------
 
-pop <- readr::read_csv(cfg$pop_file, show_col_types = FALSE) |>
-  dplyr::filter(population > 0)
+# A CSV saved from Excel on Windows is usually Windows-1252, not UTF-8. If the names are
+# not valid UTF-8, read the file again in that encoding so accented names still match.
+pop <- readr::read_csv(cfg$pop_file, show_col_types = FALSE)
+if (!all(validUTF8(c(pop$region, pop$urban)))) {
+  pop <- readr::read_csv(cfg$pop_file, show_col_types = FALSE, locale = readr::locale(encoding = "windows-1252"))
+}
+pop <- dplyr::filter(pop, population > 0)
 
 cells <- ad |>
   dplyr::distinct(wave, region, urban) |>

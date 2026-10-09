@@ -140,7 +140,7 @@ Binned residuals from `performance::binned_residuals()` were replaced: residuals
 | `No population count for: ...` | Region or area spelled differently in the population file | Match the survey file's spelling |
 | `Some populated region x area cells have no respondents` | A cell with people but no sample in some wave | Merge the cell with a neighbor in the population file, or report it as not covered |
 | `object 'Hessian' not found`, or no convergence messages at all | lme4 2.0 skips its convergence checks (and stores no derivatives) for models with more than 20 parameters | `R/models.R` sets `check.conv.nparmax = Inf` when the installed lme4 has that setting; tested on lme4 1.1.35 and 2.0.6 |
-| Region shows as `S..gou` | Non-UTF-8 locale | Render on Windows/RStudio (UTF-8) |
+| `No population count for: SC)gou ...`, or Segou shown as `S..gou` | Accented names stored as UTF-8 but not marked as UTF-8, read on a computer whose native encoding is not UTF-8; or a population CSV saved by Excel (Windows-1252) | `prep_data.R` marks valid UTF-8 text as UTF-8 and `poststratify.R` re-reads a non-UTF-8 population file as Windows-1252. Tested under UTF-8 and Latin-1 locales. Save new CSVs as "CSV UTF-8" in Excel when possible |
 | `could not find function "%||%"` | R older than 4.4 | Update R |
 | Quarto "juice ... deno.lock" messages | Quarto cannot write a lock file in RStudio's folder | Harmless; the PDF is created |
 
