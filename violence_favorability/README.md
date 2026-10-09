@@ -25,26 +25,27 @@ Two things make this harder than it looks:
   <img src="output/pipeline.png" width="380" alt="Pipeline: analysis.qmd config, prep_data.R, models.R, maps.R, report" />
 </p>
 
-All settings live in one **config list (`cfg`) at the top of `analysis.qmd`**: the data file, violence count, two covariate sets (M2a and M2b) and which one carries into the final model, whether to keep the cercle-by-wave intercept, and whether to refit models. The data file is prepared upstream with fixed column names (see `R/prep_data.R`). Rendering `analysis.qmd` runs everything. Nothing else needs editing to swap a covariate or the violence measure.
+All settings live in one **config list (`cfg`) at the top of `analysis.qmd`**: the data file, the population counts file, violence count, two covariate sets (M2a and M2b) and which one carries into the final model, and whether to refit models. The data file is prepared upstream with fixed column names (see `R/prep_data.R`). Rendering `analysis.qmd` runs everything. Nothing else needs editing to swap a covariate or the violence measure.
 
 | Script | What it does |
 |---|---|
 | `R/prep_data.R` | Builds the analysis file: IDs, violence as log(1 + events per surveyed commune), wave-specific design codes and weights |
-| `R/models.R` | Fits the model sequence, runs the tests, computes effects and predictions; each model is saved in `models/` and reloaded (set `refit = TRUE` after changes) |
+| `R/models.R` | Fits the model sequence, sensitivity models, and design-based checks; computes effects and predictions; each model is saved in `models/` and reloaded (set `refit = TRUE` after changes) |
+| `R/poststratify.R` | Poststratifies the survey design to region x area population counts (percent favorable in the adult population) |
 | `R/maps.R` | Violence by cercle, and predicted favorability by cercle and wave, built offline from the OCHA boundaries |
+| `R/export_tables.R` | Writes M3 results, predictions, and poststratified estimates to `output/tables/` as CSV |
 | `analysis.qmd` | Config, packages, and the report (PDF) |
 
 ### The models
 
 | Model | Adds | Compared by |
 |---|---|---|
-| M1a | cercle random intercept | |
-| M1b | cercle-by-wave random intercept | likelihood ratio test (boundary-corrected), AIC, BIC |
+| M1 | cercle and cercle-by-wave random intercepts (always both: violence takes one value per cercle and wave) | |
 | M2a | violence, wave, region, urban, covariate set A | |
-| M2b | the same with covariate set B | AIC, BIC; likelihood ratio test when one set contains the other |
-| M3 | the chosen M2 + log survey weight | final model; design-based check with `svyglm` |
+| M2b | the same with covariate set B | checks the violence estimate does not depend on the covariate choice |
+| M3 | the chosen M2 + log survey weight | final model; design-based check with `svyglm` clustered at the cercle |
 
-Effects are reported as log-odds, odds ratios, percentage points, and predicted favorability at a few event counts, with a minimum detectable effect so that a non-significant result can be explained honestly. A sensitivity model splits violence into the cercle's usual level and its change from wave to wave.
+Effects are reported as log-odds, odds ratios, percentage points, and predicted favorability at a few event counts, with a minimum detectable effect so that a non-significant result can be explained honestly. Sensitivity models add a commune intercept, use the full design strata, test whether the violence slope depends on the weights, and split violence into the cercle's usual level and its change from wave to wave. Percent favorable in the adult population is estimated by poststratifying the survey weights to region x area counts. M3's results and predictions are also written to CSV.
 
 <p float="left">
   <img src="output/maps/violence_by_cercle.png" width="70%" alt="Violence per surveyed commune by cercle" />
@@ -66,11 +67,11 @@ Effects are reported as log-odds, odds ratios, percentage points, and predicted 
 
 | Folder | Contents |
 |---|---|
-| `R/` | `prep_data.R`, `models.R`, `maps.R`, `boundaries.R` |
+| `R/` | `prep_data.R`, `models.R`, `poststratify.R`, `maps.R`, `export_tables.R`, `boundaries.R` |
 | `boundaries/` | OCHA layers and admin dictionary (do not edit) |
-| `data/` | The survey file |
+| `data/` | The survey file and the region x area population counts (`population_example.csv` is a placeholder) |
 | `models/` | Saved model fits (safe to delete; they are rebuilt) |
-| `output/` | Maps and the pipeline diagram |
+| `output/` | Maps, CSV tables (`output/tables/`), and the pipeline diagram |
 
 `MODELING_NOTES.md` explains every decision, how to read each result, and how an AI assistant should help with this code.
 
@@ -78,6 +79,7 @@ Effects are reported as log-odds, odds ratios, percentage points, and predicted 
 
 - **Boundaries:** OCHA. *Mali: Subnational administrative boundaries (COD-AB), levels 0 to 3.* Source: Direction Nationale des Collectivités Territoriales (DNCT), 2021. Humanitarian Data Exchange (HDX). 701 communes, 53 cercles, 10 regions, with official P-codes. Details in [`boundaries/SOURCE.md`](boundaries/SOURCE.md).
 - **Violence events:** Raleigh, C., Linke, A., Hegre, H., & Karlsen, J. (2010). Introducing ACLED: An armed conflict location and event dataset. *Journal of Peace Research, 47*(5), 651-660.
+- **Clustering for an aggregate exposure:** Moulton, B. R. (1990). *Review of Economics and Statistics, 72*(2), 334-338; Abadie, A., Athey, S., Imbens, G. W., & Wooldridge, J. M. (2023). *Quarterly Journal of Economics, 138*(1), 1-35.
 - **Survey variance estimation:** Binder, D. A. (1983). On the variances of asymptotically normal estimators from complex surveys. *International Statistical Review, 51*(3), 279-292.
 - **Complex survey analysis in R:** Lumley, T. (2010). *Complex surveys: A guide to analysis using R*. Wiley.
 - **Weighting in multilevel models:** Pfeffermann, D., Skinner, C. J., Holmes, D. J., Goldstein, H., & Rasbash, J. (1998). *JRSS-B, 60*(1), 23-40; Gelman, A. (2007). *Statistical Science, 22*(2), 153-164.

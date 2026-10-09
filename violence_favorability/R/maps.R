@@ -28,8 +28,10 @@ fav_values <- ad_map |>
 # Changing the violence variable changes the bins automatically.
 violence_bins <- function(x) {
   cuts = unique(signif(stats::quantile(x[x > 0], c(0, 0.25, 0.5, 0.75, 1), na.rm = TRUE), 2))
+  if (length(cuts) < 2) return(cut(x, c(-Inf, 0, Inf), labels = c("0", "More than 0")))
   labels = paste(utils::head(cuts, -1), "to", utils::tail(cuts, -1))
-  cut(x, c(-Inf, 0, cuts[-1]), labels = c("0", labels))
+  # Rounding can put the top cut just below the maximum; Inf keeps the largest values in the top bin
+  cut(x, c(-Inf, 0, utils::head(cuts[-1], -1), Inf), labels = c("0", labels))
 }
 
 # ---- 2. Join to the cercle polygons ------------------------------------------------

@@ -31,10 +31,10 @@ cfg <- list(
   violence_label = "Violence against civilians (ACLED)",
   covariates = c("female", "age", "ethnicity", "education"),   # M2a
   covariates_m2b = c("female", "age", "education"),            # M2b: an alternative set to compare
-  final = "M2a",                               # covariate set carried into M3 (read the M2 comparison)
-  event_levels = c(0, 1, 5, 20),               # events per surveyed commune shown in predictions
+  final = "M2a",                               # covariate set carried into M3: fix on substantive grounds
+  event_levels = c(0, 1, 2, 5),                # events per surveyed commune shown in predictions (above the data's maximum are dropped)
   model_dir = "models",                        # fitted models are saved here
-  refit = FALSE                                # set FALSE after the first run; TRUE after changes
+  refit = TRUE                                 # set FALSE after the first run; TRUE after changes
 )
 ```
 
@@ -61,13 +61,23 @@ se_wt <- sqrt(diag(as.matrix(stats::vcov(m3))))[["log_wt_c"]]
 b_wt <- lme4::fixef(m3)[["log_wt_c"]]
 n_cw <- dplyr::n_distinct(ad$cercle_wave)
 n_cercle <- dplyr::n_distinct(ad$cercle_id)
-svy_main <- dplyr::filter(violence_rows, model == "Design-based, cercle clusters")
-svy_commune <- dplyr::filter(violence_rows, model == "Design-based, commune clusters (comparison)")
+svy_main <- dplyr::filter(violence_rows, model == "Marginal, weighted, cercle clusters (design-based check)")
+svy_unweighted <- dplyr::filter(violence_rows, model == "Marginal, unweighted, cercle clusters")
+svy_commune <- dplyr::filter(violence_rows, model == "Marginal, weighted, commune clusters")
+tau_m3 <- sum(as.data.frame(lme4::VarCorr(m3))$vcov)   # total random-intercept variance
+zeger <- sqrt(1 + 0.346 * tau_m3)                       # expected conditional / marginal ratio
+pred_at <- function(k) predicted$estimate[which.min(abs(predicted$events - k))]
 ```
 
 # Question and data
 
-Is violence against civilians in a respondent's cercle associated with how favorably they view the national leader, comparing people in the same region, urban or rural area, and survey wave? Violence is the number of ACLED events in the cercle during each wave's survey window. About eight in ten respondents view the leader favorably, so any association is expected to be modest.
+Is violence against civilians in a respondent's cercle associated with how favorably they view the national leader, comparing people in the same region, urban or rural area, and survey wave? Violence is the number of ACLED events against civilians in the cercle during each wave's survey window, counted over the communes surveyed there and divided by their number (section 2.1). About eight in ten respondents view the leader favorably, so any association is expected to be modest.
+
+The analysis has three objectives, and each sets the method (West, 2025, following Hansen, Madow & Tepping, 1983):
+
+- **Association (primary):** how favorability differs with violence for people in the same cercle setting. This is a conditional effect, estimated with a multilevel model (M3).
+- **Check:** the same association averaged over the population, estimated design-based with the survey weights. It tests whether the design changes the conclusion.
+- **Description:** percent favorable in the adult population, from the survey weights poststratified to population counts by region and area.
 
 The analysis file has `r format(nrow(ad), big.mark = ",")` respondents in `r dplyr::n_distinct(ad$commune_id)` communes and `r n_cercle` cercles. Each wave is a separate sample: communes are drawn within strata (region by urban or rural), with eight respondents per commune. Violence takes one value per cercle and wave, so the violence effect rests on `r n_cw` cercle-waves in `r n_cercle` cercles, not on the number of respondents.
 
@@ -101,7 +111,7 @@ $$
 V_{kw} = \log\left(1 + \frac{E_{kw}}{n_{kw}}\right)
 $$
 
-Zero events gives 0; adding $\log 2 \approx 0.69$ doubles $(1 + E/n)$. Results are also given as predicted favorability at `r toString(cfg$event_levels)` events per surveyed commune. Respondent covariates $\mathbf{x}_i$: M2a uses `r toString(cfg$covariates)`; M2b uses `r toString(cfg$covariates_m2b)`. M3 carries the `r cfg$final` set.
+Zero events gives 0; adding $\log 2 \approx 0.69$ doubles $(1 + E/n)$. Results are also given as predicted favorability at `r toString(event_levels)` events per surveyed commune (the largest value in the data is `r f2(max_events)`). Respondent covariates $\mathbf{x}_i$: M2a uses `r toString(cfg$covariates)`; M2b uses `r toString(cfg$covariates_m2b)`. M3 carries the `r cfg$final` set.
 
 ## Model sequence
 
@@ -109,12 +119,12 @@ Zero events gives 0; adding $\log 2 \approx 0.69$ doubles $(1 + E/n)$. Results a
 |---|---|---|
 | M1 | cercle and cercle-by-wave random intercepts | how much favorability clusters |
 | M2a | M1 + violence, wave, region, urban, covariate set A | |
-| M2b | the same with covariate set B | choice of covariates: AIC, BIC; likelihood ratio test if one set contains the other |
-| M3 | the chosen M2 + centered log survey weight | **final model** for estimates, predictions, maps, and poststratification |
+| M2b | the same with covariate set B | checks that the violence estimate does not depend on the covariate choice; AIC, BIC, and a likelihood ratio test if one set contains the other |
+| M3 | the chosen M2 + centered log survey weight | **final model** for estimates, predictions, and maps |
 | Design-based | M3's fixed effects with survey weights, cercles as clusters | check on M3 |
-| Sensitivity | violence split into the cercle's usual level and its wave-to-wave change | |
+| Sensitivity | M3 plus a commune intercept; M3 with stratum-by-wave indicators; violence-by-weight interaction; violence split into the cercle's usual level and its wave-to-wave change | |
 
-The multilevel models are logistic (`lme4::glmer`, maximum likelihood with the Laplace approximation), unweighted, on the same respondents. Both random intercepts are part of every model by design, not chosen by a test: violence takes one value per cercle and wave, and the cercle-by-wave intercept is what accounts for respondents sharing that value. Dropping it understates the standard error of the violence effect, and testing whether to keep it would bias the analysis toward finding an effect. Communes are not a random effect: violence does not vary within a cercle-wave, and with eight respondents per commune the commune variance made models fail to converge.
+The multilevel models are logistic (`lme4::glmer`, maximum likelihood with the Laplace approximation), unweighted, on the same respondents. Both random intercepts are part of every model by design, not chosen by a test: violence takes one value per cercle and wave, and the cercle-by-wave intercept is what accounts for respondents sharing that value. Dropping it understates the standard error of the violence effect, and testing whether to keep it would bias the analysis toward finding an effect. Communes are not a random effect in M3: violence does not vary within a cercle-wave, and on the real data the commune variance made models fail to converge. M3 with a commune intercept is reported as a sensitivity check.
 
 ## Equations
 
@@ -136,17 +146,21 @@ $$
 
 The reference region is `r levels(ad$region)[1]` and the reference wave is wave 1. Region and urban are the survey strata and enter as fixed effects, so violence is compared within region and area. Wave enters as fixed effects (the national shift between waves). M2a and M2b differ only in $\mathbf{x}_i$.
 
-**M3 (final).** The chosen M2 plus $\phi \log \tilde w_i$, the centered log of the survey weight. `glmer` cannot use sampling weights, so the weight enters as a covariate; a clearly nonzero $\phi$ would mean people with larger weights differ in favorability beyond the predictors (informative sampling; Pfeffermann et al., 1998; Gelman, 2007).
+**M3 (final).** The chosen M2 plus $\phi \log \tilde w_i$, the centered log of the survey weight. A weighted multilevel model needs a weight at each level (the commune's selection probability and the respondent's weight given the commune; Pfeffermann et al., 1998; Rabe-Hesketh & Skrondal, 2006). Only the final respondent weight is available, and the commune frame needed to rebuild the commune weight (communes per stratum) is not, so the weight enters as a covariate instead (DuMouchel & Duncan, 1983; Little, 1991). A clearly nonzero $\phi$ would mean people with larger weights differ in favorability beyond the predictors (informative sampling). Communes were selected with equal probability within strata, so their selection depends only on region and area, which are in the model. Including the weight changes what the other coefficients are conditional on, so M2 (without it) is shown alongside M3.
 
-**Design-based check.** The same fixed effects fit with `survey::svyglm` and the survey weights (rescaled within wave), with cercles as the clusters and regions as strata, and Taylor-linearized standard errors (Binder, 1983). Cercles are the clusters because violence is measured per cercle: clustering at the commune, the unit that was sampled, would treat communes of the same cercle as independent information about violence and understate its standard error (Moulton, 1990). Urban cannot be a stratum here because a cercle can contain both urban and rural communes. With `r n_cercle` cercles in `r dplyr::n_distinct(ad$region)` regions the check has few degrees of freedom, so its interval is wide. Its coefficients are population-averaged and smaller than the multilevel ones by roughly $\sqrt{1 + 0.346\,\tau}$ (Zeger, Liang & Albert, 1988), so it is compared with M3 by its test statistic, not by size.
+**Design-based check.** The same fixed effects as a marginal logistic model (`survey::svyglm`) with the survey weights (rescaled within wave), cercles as clusters and regions as strata, and Taylor-linearized standard errors (Binder, 1983). Clustering at the cercle is a choice about the estimand, not a description of the sampling: communes were sampled, but violence is assigned per cercle and wave, and for an association meant to hold beyond these particular cercle shocks the uncertainty belongs where the exposure is assigned (Moulton, 1990; Abadie et al., 2023). Clustering at the commune, as the sampling alone would suggest, gives a smaller standard error; both are shown. Urban cannot be a stratum here because a cercle can contain urban and rural communes. With `r n_cercle` cercles in `r dplyr::n_distinct(ad$region)` regions the check has few degrees of freedom. Marginal coefficients are smaller than conditional ones by roughly $\sqrt{1 + 0.346\,\tau}$, where $\tau$ is the total random-intercept variance (Zeger, Liang & Albert, 1988); for M3 that is about `r f2(zeger)`. A larger gap comes from the weights, which an unweighted marginal fit with the same clustering separates out. The marginal rows are therefore compared with M3 on direction and precision, not on size.
 
-**Sensitivity (usual level and change).** $V_{kw}$ is replaced by $\bar V_{k}$, the cercle's mean over the waves it was surveyed, and $V_{kw} - \bar V_{k}$ (Mundlak, 1978). The change coefficient asks whether a cercle is less favorable in a wave when its violence is above its usual level, so stable cercle differences cannot explain it.
+**Sensitivity (commune intercept).** M3 plus a commune random intercept, $c_j \sim N(0, \tau_j)$, since communes are the sampled clusters.
 
-**Poststratification.** For region-by-area cell $c$ and wave $w$, $\hat p_{cw}$ is the mean M3 prediction among the cell's respondents, including each cercle's own effects. With population counts $N_c$,
+**Sensitivity (usual level and change).** $V_{kw}$ is replaced by $\bar V_{k}$, the cercle's mean over the waves it was surveyed, and $V_{kw} - \bar V_{k}$ (Mundlak, 1978). The change coefficient asks whether a cercle is less favorable in a wave when its violence is above its usual level, so differences between cercles that do not change over time cannot explain it. Two cautions: wave effects are national, so trends specific to a region are not removed; and the count covers only the communes surveyed in that wave, so a change can partly reflect which communes were sampled.
+
+**Poststratification.** Within each wave, the survey weights are scaled so that each region-by-area cell $c$ sums to its adult population $N_c$ (Lumley, 2010). Percent favorable and its standard error then come from the poststratified design:
 
 $$
-\hat\theta_w = \frac{\sum_c N_c\, \hat p_{cw}}{\sum_c N_c}
+\hat\theta_w = \sum_c \frac{N_c}{\sum_{c'} N_{c'}}\, \bar y^{\,w}_{cw}, \qquad \bar y^{\,w}_{cw} = \text{weighted percent favorable in cell } c \text{, wave } w
 $$
+
+This is design-based rather than model-based (MRP): with counts for region and area only, a model cannot adjust for anything the design does not already cover, and M3's predictions, which include each cercle's own effects, nearly reproduce the observed cell percentages.
 
 # Results
 
@@ -174,24 +188,25 @@ comparison |>
   kable(format = "pipe")
 ```
 
-M3 uses the `r cfg$final` covariates.
+M3 uses the `r cfg$final` covariates. The final set is fixed on substantive grounds (variables that could affect both exposure to violence and views of the leader), not by the fit statistics above; the other set is shown to check that the violence estimate does not depend on the choice.
 
 ## The violence effect
 
 ```{r}
 #| label: tbl-violence
-#| tbl-cap: "Violence coefficient (log-odds per unit of log(1 + events per commune)). Multilevel rows: z and normal p-value. Design-based rows: t with the design's residual degrees of freedom; their estimates are population-averaged, so compare the test statistic, not the estimate. The commune-cluster row is shown only to make the effect of the clustering choice visible."
+#| tbl-cap: "Violence coefficient (log-odds per unit of log(1 + events per commune)). Multilevel rows: z and normal p-value. Marginal rows: t with the design's residual degrees of freedom; their estimates are population-averaged, so compare direction and precision with M3, not size. The commune-cluster row shows the effect of the clustering choice."
 violence_rows |>
   dplyr::transmute(Model = model, Estimate = f3(estimate), SE = f3(std.error), `z or t` = f2(stat),
-                   df = dplyr::if_else(is.na(df), "", as.character(df)), p = sprintf("%.3f", p.value)) |>
+                   df = dplyr::if_else(is.na(df), "", as.character(df)),
+                   p = dplyr::if_else(p.value < 0.001, "< .001", sprintf("%.3f", p.value))) |>
   kable(format = "pipe")
 ```
 
-In M3, a one-unit increase in violence changes the log-odds of a favorable view by `r f3(b3$estimate)` (95% CI `r f3(ci3[1])` to `r f3(ci3[2])`, $p$ `r pv(b3$p.value)`), holding wave, region, urban, and respondent characteristics constant. The design-based check, with cercles as clusters, gives $t =$ `r f2(svy_main$stat)` on `r svy_main$df` degrees of freedom ($p$ `r pv(svy_main$p.value)`). Clustering at the commune instead would give $t =$ `r f2(svy_commune$stat)` on `r svy_commune$df` degrees of freedom ($p$ `r pv(svy_commune$p.value)`); the difference is the cost of treating communes in the same cercle as independent information about violence.
+In M3, a one-unit increase in violence changes the log-odds of a favorable view by `r f3(b3$estimate)` (95% CI `r f3(ci3[1])` to `r f3(ci3[2])`, $p$ `r pv(b3$p.value)`), holding wave, region, urban, and respondent characteristics constant. The design-based check (weighted, cercle clusters) estimates `r f3(svy_main$estimate)`, $t =$ `r f2(svy_main$stat)` on `r svy_main$df` degrees of freedom ($p$ `r pv(svy_main$p.value)`). M3's estimate is `r f2(b3$estimate / svy_main$estimate)` times as large, against about `r f2(zeger)` expected from the conditional-marginal difference alone; the unweighted marginal fit (`r f3(svy_unweighted$estimate)`) shows how much of the rest is due to the weights. Clustering at the commune gives $t =$ `r f2(svy_commune$stat)` on `r svy_commune$df` degrees of freedom; the difference is the cost of treating communes in the same cercle as independent information about violence.
 
 ```{r}
 #| label: tbl-predicted
-#| tbl-cap: "M3: predicted percent favorable if every cercle had the given number of events per surveyed commune, everything else as observed, typical cercle (95% CI)."
+#| tbl-cap: "M3: predicted percent favorable if every cercle had the given number of events per surveyed commune, everything else as observed, typical cercle (95% CI). Levels are limited to the range observed in the data."
 predicted |>
   dplyr::transmute(`Events per commune` = events, `Predicted % favorable` = pct(estimate),
                    `95% CI` = paste(pct(conf.low), "to", pct(conf.high))) |>
@@ -200,7 +215,7 @@ predicted |>
 
 **Size of the association and what the study can detect.** Going from 0 to 5 events per surveyed commune changes predicted favorability by `r pct(diff_0_5$estimate)` percentage points (95% CI `r pct(diff_0_5$conf.low)` to `r pct(diff_0_5$conf.high)`). Changes outside this interval are not well supported by the data. The smallest 0-to-5 change this design would detect with 80% power (two-sided, 5% level) is about `r pct(abs(mde_0_5))` percentage points; an estimate smaller than that is one the study was not designed to resolve, and an interval that includes zero means the data cannot distinguish the association from none, which is not the same as showing there is none.
 
-**Design.** The log-weight coefficient is `r f3(b_wt)` (SE `r f3(se_wt)`); a value more than about two standard errors from zero would suggest informative sampling that the unweighted model misses.
+**Design.** The log-weight coefficient is `r f3(b_wt)` (SE `r f3(se_wt)`), and the violence-by-log-weight interaction is `r f3(wt_slope[["Estimate"]])` (SE `r f3(wt_slope[["Std. Error"]])`). Values far from zero would suggest the weights carry information the unweighted model misses, about favorability or about the violence slope itself (DuMouchel & Duncan, 1983). Values near zero are consistent with sampling that is not informative for this association, but they cannot prove it.
 
 ```{r}
 #| label: fig-by-variable
@@ -227,24 +242,24 @@ summary(m_split)$coefficients[c("v_cercle", "v_change"), ] |>
   kable(format = "pipe")
 ```
 
-The change coefficient is the localized, over-time comparison; the usual-level coefficient compares cercles with persistently different violence.
+The change coefficient is the localized, over-time comparison; the usual-level coefficient compares cercles with persistently different violence. Their difference is `r f3(split_diff)` (SE `r f3(split_diff_se)`, $p$ `r pv(split_diff_p)`).
 
 ## Poststratified favorability
 
-M3's predictions are reweighted to the adult population of each region and area. The estimates use the respondents' own cercle and cercle-wave effects, so they describe the surveyed communes of each cell.
+The survey weights are poststratified to the adult population of each region and area, separately by wave. `r if (pop_is_example) "**The population counts used here are placeholder values for testing (data/population_example.csv); replace them with the real counts before reporting.** " else ""`If the weights had been calibrated to these counts, each cell's share of the weights would match its share of the population; the largest gap is `r worst_share$region` `r worst_share$urban` in wave `r worst_share$wave`, where the weights give `r pct(worst_share$weight_share)`% against `r pct(worst_share$population_share)`% of the population. Large gaps mean the weights and the counts describe different populations, and the estimate leans on the counts.
 
 ```{r}
 #| label: tbl-poststrat
-#| tbl-cap: "Percent favorable by wave: sample (unweighted) and poststratified to the region-by-area population (95% interval from 1,000 model draws)."
+#| tbl-cap: "Percent favorable by wave: sample (unweighted) and poststratified to the region-by-area population (95% CI from the poststratified design)."
 ps_national |>
   dplyr::transmute(Wave = wave, `Sample %` = pct(sample), `Poststratified %` = pct(estimate),
-                   `95% interval` = paste(pct(conf.low), "to", pct(conf.high))) |>
+                   `95% CI` = paste(pct(conf.low), "to", pct(conf.high))) |>
   kable(format = "pipe")
 ```
 
 ```{r}
 #| label: fig-poststrat
-#| fig-cap: "(A) Adult population by region and area (poststratification counts). (B) Poststratified percent favorable for each region and area by wave (95% interval); dashed line: national estimate."
+#| fig-cap: "(A) Adult population by region and area (poststratification counts). (B) Weighted percent favorable for each region and area by wave (95% CI); dashed line: poststratified national estimate. Cells with a single surveyed commune (Gao urban in the test data) have no design-based interval and are shown as points only."
 #| fig-height: 4.2
 ps_plot
 ```
@@ -260,7 +275,7 @@ performance::check_collinearity(m3) |>
   kable(format = "pipe")
 ```
 
-M3 is `r if (lme4::isSingular(m3)) "singular" else "not singular"`. Convergence messages from lme4: `r if (is.null(m3@optinfo$conv$lme4$messages)) "none" else toString(m3@optinfo$conv$lme4$messages)`.
+M3 is `r if (lme4::isSingular(m3)) "singular" else "not singular"`. Convergence messages from lme4: `r if (is.null(m3@optinfo$conv$lme4$messages)) "none" else toString(m3@optinfo$conv$lme4$messages)`. lme4 checks the absolute gradient, which large samples can trip without a real problem; the relative gradient, the step the optimizer would still take, is `r format(rel_gradient, digits = 2)` (below about 0.001 means the fit has converged).
 
 ```{r}
 #| label: fig-checks
@@ -300,7 +315,7 @@ map_predicted
 
 # How to explain the result
 
-> Among people surveyed in the same region, area, and survey round, predicted favorability toward the leader is about `r pct(predicted$estimate[1])`% where a cercle had no violence against civilians and about `r pct(predicted$estimate[predicted$events == 5])`% where it had 5 events per surveyed commune, a difference of `r pct(diff_0_5$estimate)` percentage points (95% CI `r pct(diff_0_5$conf.low)` to `r pct(diff_0_5$conf.high)`). This is an association, not proof that violence caused the change.
+> Among people surveyed in the same region, area, and survey round, predicted favorability toward the leader is about `r pct(pred_at(0))`% where a cercle had no violence against civilians and about `r pct(pred_at(5))`% where it had 5 events per surveyed commune, a difference of `r pct(diff_0_5$estimate)` percentage points (95% CI `r pct(diff_0_5$conf.low)` to `r pct(diff_0_5$conf.high)`). This is an association, not proof that violence caused the change.
 
 # Changes from the previous version
 
@@ -313,10 +328,12 @@ Two specification errors were corrected; both follow from the level at which vio
 
 - **Few violence values.** Violence varies across `r n_cw` cercle-waves in `r n_cercle` cercles, which limits precision however many people were interviewed.
 - **Surveyed communes only.** ACLED counts exist only where a commune was surveyed, and are scaled by the number surveyed; they describe the surveyed parts of each cercle, not the whole cercle.
-- **Commune clustering not modeled.** Communes are not a random effect; the cercle and cercle-wave intercepts absorb shared variation at the level where violence varies.
-- **Unweighted multilevel models.** The log-weight covariate and the design-based check guard against informative sampling but do not replace weighting.
-- **Poststratification.** The population counts cover region and area only, so within each cell the mix of age, sex, and education follows the sample. The intervals include uncertainty in the fixed effects and in each cercle's effects, but not in the variance parameters, so they are somewhat too narrow.
-- **Violence measure.** ACLED undercounts remote areas, which most likely weakens any association. Perpetrator is not available.
+- **Communes in M3.** Communes are not a random effect in M3; the sensitivity model with a commune intercept shows whether that matters.
+- **Unweighted multilevel models.** A weighted multilevel model needs commune selection weights, which are not available. The log-weight terms and the design-based check probe informative sampling but do not replace weighting, and M3 has region and area main effects rather than all stratum indicators (the stratum-by-wave sensitivity row shows the difference).
+- **Few clusters in the design-based check.** Bamako is a single cercle and Gao urban has one commune per wave, so both are single-cluster strata; their variance is approximated (`survey.lonely.psu = "adjust"`).
+- **Poststratification.** The counts cover region and area only, so within each cell the mix of age, sex, and education follows the weighted sample.
+- **Timing.** Events are counted over each wave's survey window, so some may occur after a respondent was interviewed. Counting only events before the interview date would fix this if interview dates are available.
+- **Violence measure.** ACLED undercounts remote areas. Because undercounting is tied to where violence happens, its effect on the association can go either way. Perpetrator is not available.
 - **Sensitive outcome.** Favorability toward the leader may be over-reported where people fear consequences.
 - **Coverage.** Insecure areas are harder to survey; estimates describe the population that could be reached.
 
@@ -326,11 +343,19 @@ M3's coefficients, random effects, and predicted probabilities are written to `o
 
 # References
 
+Abadie, A., Athey, S., Imbens, G. W., & Wooldridge, J. M. (2023). When should you adjust standard errors for clustering? *Quarterly Journal of Economics, 138*(1), 1-35. https://doi.org/10.1093/qje/qjac038
+
 Binder, D. A. (1983). On the variances of asymptotically normal estimators from complex surveys. *International Statistical Review, 51*(3), 279-292.
+
+DuMouchel, W. H., & Duncan, G. J. (1983). Using sample survey weights in multiple regression analyses of stratified samples. *Journal of the American Statistical Association, 78*(383), 535-543.
 
 Gelman, A. (2007). Struggles with survey weighting and regression modeling. *Statistical Science, 22*(2), 153-164.
 
+Hansen, M. H., Madow, W. G., & Tepping, B. J. (1983). An evaluation of model-dependent and probability-sampling inferences in sample surveys. *Journal of the American Statistical Association, 78*(384), 776-793.
+
 Kish, L. (1965). *Survey sampling*. Wiley.
+
+Little, R. J. A. (1991). Inference with survey weights. *Journal of Official Statistics, 7*, 405-424.
 
 Lumley, T. (2010). *Complex surveys: A guide to analysis using R*. Wiley. (R packages `survey` and, as its tidy interface, `srvyr`.)
 
@@ -342,8 +367,12 @@ OCHA (United Nations Office for the Coordination of Humanitarian Affairs). Mali 
 
 Pfeffermann, D., Skinner, C. J., Holmes, D. J., Goldstein, H., & Rasbash, J. (1998). Weighting for unequal selection probabilities in multilevel models. *Journal of the Royal Statistical Society: Series B, 60*(1), 23-40.
 
+Rabe-Hesketh, S., & Skrondal, A. (2006). Multilevel modelling of complex survey data. *Journal of the Royal Statistical Society: Series A, 169*(4), 805-827.
+
 Raleigh, C., Linke, A., Hegre, H., & Karlsen, J. (2010). Introducing ACLED: An armed conflict location and event dataset. *Journal of Peace Research, 47*(5), 651-660.
 
 Valliant, R., Dever, J. A., & Kreuter, F. (2018). *Practical tools for designing and weighting survey samples* (2nd ed.). Springer. (R package `PracTools`.)
+
+West, B. T. (2025). Accounting for complex sample designs when fitting multilevel and marginal models. Applications of Statistical Modeling, Module 1, Lecture 6 (course slides). University of Michigan.
 
 Zeger, S. L., Liang, K.-Y., & Albert, P. S. (1988). Models for longitudinal data: A generalized estimating equation approach. *Biometrics, 44*(4), 1049-1060.
