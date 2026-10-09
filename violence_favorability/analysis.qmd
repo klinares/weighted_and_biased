@@ -107,22 +107,20 @@ The Kish design effect, $1 + \text{relvar}(w)$, is the variance inflation from u
 
 The ACLED count for cercle $k$ in wave $w$ is a sum over the communes surveyed there, so a cercle with more surveyed communes would look more violent. It is divided by the number of surveyed communes, $n_{kw}$:
 
-$$
-V_{kw} = \log\left(1 + \frac{E_{kw}}{n_{kw}}\right)
-$$
+$$V_{kw} = \log\left(1 + \frac{E_{kw}}{n_{kw}}\right)$$
 
 Zero events gives 0; adding $\log 2 \approx 0.69$ doubles $(1 + E/n)$. Results are also given as predicted favorability at `r toString(event_levels)` events per surveyed commune (the largest value in the data is `r f2(max_events)`). Respondent covariates $\mathbf{x}_i$: M2a uses `r toString(cfg$covariates)`; M2b uses `r toString(cfg$covariates_m2b)`. M3 carries the `r cfg$final` set.
 
 ## Model sequence
 
 | Model | Contents | Role |
-|---|---|---|
+|----|----|----|
 | M1 | cercle and cercle-by-wave random intercepts | how much favorability clusters |
-| M2a | M1 + violence, wave, region, urban, covariate set A | |
+| M2a | M1 + violence, wave, region, urban, covariate set A |  |
 | M2b | the same with covariate set B | checks that the violence estimate does not depend on the covariate choice; AIC, BIC, and a likelihood ratio test if one set contains the other |
 | M3 | the chosen M2 + centered log survey weight | **final model** for estimates, predictions, and maps |
 | Design-based | M3's fixed effects with survey weights, cercles as clusters | check on M3 |
-| Sensitivity | M3 plus a commune intercept; M3 with stratum-by-wave indicators; violence-by-weight interaction; violence split into the cercle's usual level and its wave-to-wave change | |
+| Sensitivity | M3 plus a commune intercept; M3 with stratum-by-wave indicators; violence-by-weight interaction; violence split into the cercle's usual level and its wave-to-wave change |  |
 
 The multilevel models are logistic (`lme4::glmer`, maximum likelihood with the Laplace approximation), unweighted, on the same respondents. Both random intercepts are part of every model by design, not chosen by a test: violence takes one value per cercle and wave, and the cercle-by-wave intercept is what accounts for respondents sharing that value. Dropping it understates the standard error of the violence effect, and testing whether to keep it would bias the analysis toward finding an effect. Communes are not a random effect in M3: violence does not vary within a cercle-wave, and on the real data the commune variance made models fail to converge. M3 with a commune intercept is reported as a sensitivity check.
 
@@ -134,15 +132,11 @@ Respondent $i$ in cercle $k$, wave $w$; $y_{ikw} = 1$ for a favorable view.
 
 $u_k$ is the cercle's lasting level; $v_{kw}$ is how that cercle departs from it in one wave. On the latent scale the individual variance is $\pi^2/3 \approx 3.29$, so
 
-$$
-\rho_{\text{cercle}} = \frac{\tau_k}{\tau_k + \tau_{kw} + \pi^2/3}, \qquad
-\rho_{\text{cercle-wave}} = \frac{\tau_k + \tau_{kw}}{\tau_k + \tau_{kw} + \pi^2/3}
-$$
+$$\rho_{\text{cercle}} = \frac{\tau_k}{\tau_k + \tau_{kw} + \pi^2/3}, \qquad
+\rho_{\text{cercle-wave}} = \frac{\tau_k + \tau_{kw}}{\tau_k + \tau_{kw} + \pi^2/3}$$
 
 **M2a and M2b.**
-$$
-\operatorname{logit} \Pr(y = 1) = \gamma_0 + \beta V_{kw} + \sum_{w=2}^{3}\delta_w \text{Wave}_w + \sum_{r \ne \text{ref}} \alpha_r \text{Region}_r + \lambda\,\text{Urban} + \mathbf{x}_i'\boldsymbol\theta + u_k + v_{kw}
-$$
+$$\operatorname{logit} \Pr(y = 1) = \gamma_0 + \beta V_{kw} + \sum_{w=2}^{3}\delta_w \text{Wave}_w + \sum_{r \ne \text{ref}} \alpha_r \text{Region}_r + \lambda\,\text{Urban} + \mathbf{x}_i'\boldsymbol\theta + u_k + v_{kw}$$
 
 The reference region is `r levels(ad$region)[1]` and the reference wave is wave 1. Region and urban are the survey strata and enter as fixed effects, so violence is compared within region and area. Wave enters as fixed effects (the national shift between waves). M2a and M2b differ only in $\mathbf{x}_i$.
 
@@ -156,9 +150,7 @@ The reference region is `r levels(ad$region)[1]` and the reference wave is wave 
 
 **Poststratification.** Within each wave, the survey weights are scaled so that each region-by-area cell $c$ sums to its adult population $N_c$ (Lumley, 2010). Percent favorable and its standard error then come from the poststratified design:
 
-$$
-\hat\theta_w = \sum_c \frac{N_c}{\sum_{c'} N_{c'}}\, \bar y^{\,w}_{cw}, \qquad \bar y^{\,w}_{cw} = \text{weighted percent favorable in cell } c \text{, wave } w
-$$
+$$\hat\theta_w = \sum_c \frac{N_c}{\sum_{c'} N_{c'}}\, \bar y^{\,w}_{cw}, \qquad \bar y^{\,w}_{cw} = \text{weighted percent favorable in cell } c \text{, wave } w$$
 
 This is design-based rather than model-based (MRP): with counts for region and area only, a model cannot adjust for anything the design does not already cover, and M3's predictions, which include each cercle's own effects, nearly reproduce the observed cell percentages.
 
