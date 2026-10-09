@@ -275,7 +275,7 @@ performance::check_collinearity(m3) |>
   kable(format = "pipe")
 ```
 
-M3 is `r if (lme4::isSingular(m3)) "singular" else "not singular"`. Convergence messages from lme4: `r if (is.null(m3@optinfo$conv$lme4$messages)) "none" else toString(m3@optinfo$conv$lme4$messages)`. lme4 checks the absolute gradient, which large samples can trip without a real problem; the relative gradient, the step the optimizer would still take, is `r format(rel_gradient, digits = 2)` (below about 0.001 means the fit has converged).
+M3 is `r if (lme4::isSingular(m3)) "singular" else "not singular"`. Convergence messages from lme4: `r if (is.null(m3@optinfo$conv$lme4$messages)) "none" else sub("[.[:space:]]+$", "", gsub("\\s+", " ", toString(m3@optinfo$conv$lme4$messages)))`. lme4 checks the absolute gradient, which large samples can trip without a real problem; the relative gradient, the step the optimizer would still take, is `r if (is.na(rel_gradient)) "not available (lme4 did not store the derivatives)" else format(rel_gradient, digits = 2)` (below about 0.001 means the fit has converged).
 
 ```{r}
 #| label: fig-checks

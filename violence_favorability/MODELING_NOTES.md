@@ -139,7 +139,7 @@ Binned residuals from `performance::binned_residuals()` were replaced: residuals
 | Gradient convergence warning | Absolute gradient above 0.002 | Check the relative gradient in the report; below about 0.001 it is a false alarm |
 | `No population count for: ...` | Region or area spelled differently in the population file | Match the survey file's spelling |
 | `Some populated region x area cells have no respondents` | A cell with people but no sample in some wave | Merge the cell with a neighbor in the population file, or report it as not covered |
-| `performance::check_convergence()` FALSE with gradient NA | lme4 2.0 does not store derivatives | Use lme4 messages (as the report does) |
+| `object 'Hessian' not found`, or no convergence messages at all | lme4 2.0 skips its convergence checks (and stores no derivatives) for models with more than 20 parameters | `R/models.R` sets `check.conv.nparmax = Inf` when the installed lme4 has that setting; tested on lme4 1.1.35 and 2.0.6 |
 | Region shows as `S..gou` | Non-UTF-8 locale | Render on Windows/RStudio (UTF-8) |
 | `could not find function "%||%"` | R older than 4.4 | Update R |
 | Quarto "juice ... deno.lock" messages | Quarto cannot write a lock file in RStudio's folder | Harmless; the PDF is created |
